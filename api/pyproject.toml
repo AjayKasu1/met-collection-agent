@@ -1,0 +1,74 @@
+[project]
+name = "met-collection-agent-api"
+version = "0.1.0"
+description = "Grounded, non-interpretive access to The Met's Open Access collection"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "langfuse==4.15.1",
+    "litellm==1.99.0",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.15.0",
+    "qdrant-client==1.19.0",
+    "structlog==26.1.0",
+    "uvicorn==0.52.4",
+]
+
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/met_agent"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers --strict-config"
+markers = ["integration: requires explicitly configured external services"]
+filterwarnings = [
+    "error",
+    # Starlette 1.6 imports this deprecated alias at module scope with AnyIO 4.15.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning:starlette.testclient",
+]
+
+[tool.coverage.run]
+source = ["met_agent"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90
+
+[dependency-groups]
+dev = [
+    "httpx2==2.12.0",
+    "mypy==2.3.1",
+    "pre-commit==4.6.2",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.6",
+]
