@@ -1,0 +1,50 @@
+# Local instructions and the original, duplicate evaluation input.
+/*PROMPT*
+/golden.jsonl
+# Private tool directories stay local; CI configuration remains publishable.
+/.*/
+!/.github/
+
+# Secrets: only the documented, unpopulated example belongs in Git.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+service-account*.json
+
+# Downloaded collection data, snapshots, and local model caches.
+/data/
+.cache/
+*.snapshot
+
+# Python environments, build output, and verification artifacts.
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+coverage.xml
+htmlcov/
+dist/
+build/
+
+# Frontend and deployment output.
+node_modules/
+.next/
+.open-next/
+.wrangler/
+*.tsbuildinfo
+
+# Local editor, runtime, and operating-system files.
+.DS_Store
+.idea/
+.vscode/
+*.log
+*.sqlite*
+*.db
+*.swp
