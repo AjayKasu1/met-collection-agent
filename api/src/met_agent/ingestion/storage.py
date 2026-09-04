@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
@@ -19,6 +20,7 @@ def atomic_write(path: Path, content: bytes) -> None:
         try:
             handle.write(content)
             handle.flush()
+            os.fsync(handle.fileno())
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
