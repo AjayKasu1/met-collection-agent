@@ -71,13 +71,14 @@ def test_verified_sse_audit_and_live_proxy(settings: Settings, tmp_path: Path) -
     with TestClient(app) as client:
         response = client.post("/chat", json={"message": "Temple"})
         assert response.headers["content-type"].startswith("text/event-stream")
-        assert "999" not in response.text
         answer = parse_answer(response.text)
+        assert all(citation.object_id != 999 for citation in answer.citations)
         pieces = [
             json.loads(block.split("data: ", 1)[1])["text"]
             for block in response.text.split("\n\n")
             if block.startswith("event: token")
         ]
+        assert "999" not in "".join(pieces)
         assert "".join(pieces) == answer.text
         events = client.get(f"/sessions/{answer.session_id}/events").json()
         assert events[-1]["kind"] == "final_answer"
