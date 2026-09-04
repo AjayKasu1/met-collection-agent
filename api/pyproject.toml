@@ -30,6 +30,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/met_agent"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"prompts" = "met_agent/prompts"
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
