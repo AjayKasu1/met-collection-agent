@@ -125,6 +125,87 @@ def test_live_enrichment_is_explicit(
     assert load_objects(configured_commands.data_dir / "objects.parquet")[0].gallery_number == "202"
 
 
+def test_checkpoint_command_owns_retries_and_passes_quota_overrides(
+    configured_commands: Settings, stub_index: list[IndexDocument], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    obj = CollectionObject(
+        object_id=1, title="Vessel", source_url="https://www.metmuseum.org/item/1", raw_fields={}
+    )
+    monkeypatch.setattr(
+        commands,
+        "reuse_selection",
+        lambda *a, **kw: CollectionSelection(
+            objects=[obj], report=SelectionReport(required_ids=[], included_ids=[], excluded_ids={})
+        ),
+    )
+    checkpoint = configured_commands.data_dir / "ingest.checkpoint.json"
+    routes: list[Settings] = []
+    monkeypatch.setattr(commands, "create_embedding_router", routes.append)
+
+    class Runner:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            limits, path = args[4:]
+            assert path == checkpoint
+            assert limits.model_dump() == {
+                "requests_per_minute": 80,
+                "tokens_per_minute": 25000,
+                "requests_per_day": 900,
+            }
+            assert kwargs == {"batch_size": 100, "max_retries": configured_commands.llm_max_retries}
+
+        def run(self, documents: Sequence[IndexDocument], **kwargs: Any) -> int:
+            assert kwargs == {
+                "destination": str(configured_commands.qdrant_url),
+                "initial_daily_requests": 202,
+            }
+            stub_index.extend(documents)
+            return len(documents)
+
+    monkeypatch.setattr(commands, "ResumableIngestor", Runner)
+    assert (
+        commands.ingest_collection(
+            [
+                "--reuse-prepared",
+                "--checkpoint",
+                str(checkpoint),
+                "--batch-size",
+                "100",
+                "--requests-per-minute",
+                "80",
+                "--tokens-per-minute",
+                "25000",
+                "--requests-per-day",
+                "900",
+                "--initial-daily-requests",
+                "202",
+            ]
+        )
+        == 0
+    )
+    assert len(routes) == 1 and routes[0].llm_max_retries == 0
+    assert [document.point_id for document in stub_index] == [1]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--batch-size", "101"],
+        ["--initial-daily-requests", "-1"],
+        ["--tokens-per-minute", "0"],
+        ["--checkpoint", "checkpoint.json", "--batch-delay-seconds", "30"],
+    ],
+)
+def test_invalid_checkpoint_options_fail_before_source_access(
+    configured_commands: Settings, arguments: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_sources(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("Invalid options must not reach preparation")
+
+    monkeypatch.setattr(commands, "read_golden", no_sources)
+    with pytest.raises(ValueError):
+        commands.ingest_collection(arguments)
+
+
 def test_collection_passes_deduplicated_golden_ids_and_reports_eligibility_exceptions(
     configured_commands: Settings,
     monkeypatch: pytest.MonkeyPatch,

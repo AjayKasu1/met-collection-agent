@@ -23,6 +23,8 @@ from met_agent.ingestion.collection import (
 )
 from met_agent.ingestion.http import SourceClient, SourceError, download_csv
 from met_agent.ingestion.models import VisitorChunk
+from met_agent.ingestion.quota import QuotaLimits
+from met_agent.ingestion.resumable import ResumableIngestor
 from met_agent.ingestion.saved_pages import VisitorPageContent, load_saved_pages
 from met_agent.ingestion.storage import (
     atomic_write,
@@ -32,6 +34,7 @@ from met_agent.ingestion.storage import (
     sha256_file,
     write_json,
 )
+from met_agent.ingestion.token_counting import GeminiTokenCounter
 from met_agent.ingestion.verify import read_golden, verification_markdown, verify_golden
 from met_agent.ingestion.visitors import VisitorCrawler, chunk_markdown, html_to_markdown
 from met_agent.llm.router import create_embedding_router
@@ -79,6 +82,19 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     parser = _base_parser("Prepare and ingest public-domain Met collection records")
     _add_batch_pacing(parser)
     parser.add_argument("--limit", type=int, help="Maximum records, overriding INGEST_MAX_OBJECTS")
+    parser.add_argument("--batch-size", type=int, help="Override EMBEDDING_BATCH_SIZE; maximum 100")
+    parser.add_argument(
+        "--checkpoint", type=Path, help="Persist progress and automatically resume this run"
+    )
+    parser.add_argument("--requests-per-minute", type=int, default=100)
+    parser.add_argument("--tokens-per-minute", type=int, default=30_000)
+    parser.add_argument("--requests-per-day", type=int, default=1000)
+    parser.add_argument(
+        "--initial-daily-requests",
+        type=int,
+        default=0,
+        help="Already-used quota for a new checkpoint; ignored on resume",
+    )
     parser.add_argument(
         "--golden",
         type=Path,
@@ -103,6 +119,16 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     settings = load_settings()
     configure_logging(settings.log_level)
+    batch_size = args.batch_size if args.batch_size is not None else settings.embedding_batch_size
+    if not 1 <= batch_size <= 100 or args.initial_daily_requests < 0:
+        raise ValueError("Batch size must be 1-100 and initial quota usage nonnegative")
+    limits = QuotaLimits(
+        requests_per_minute=args.requests_per_minute,
+        tokens_per_minute=args.tokens_per_minute,
+        requests_per_day=args.requests_per_day,
+    )
+    if args.checkpoint is not None and args.batch_delay_seconds:
+        raise ValueError("Checkpoint mode uses token/request quotas; omit --batch-delay-seconds")
     output: Path = args.data_dir or settings.data_dir
     limit: int = args.limit or settings.ingest_max_objects
     if limit <= 0 or (args.limit is not None and args.limit <= 0):
@@ -149,7 +175,10 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     )
     if not args.prepare_only:
         dense = GeminiEmbedder(
-            create_embedding_router(settings), output_dimensionality=settings.embedding_dimensions
+            create_embedding_router(
+                settings.model_copy(update={"llm_max_retries": 0}) if args.checkpoint else settings
+            ),
+            output_dimensionality=settings.embedding_dimensions,
         )
         sparse = BM25Embedder(settings.data_dir / "models")
         with closing(qdrant_client(settings)) as client:
@@ -159,13 +188,31 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
                 settings.embedding_model,
                 settings.embedding_dimensions,
             )
-            count = store.ingest(
-                [obj.document() for obj in objects],
-                dense,
-                sparse,
-                batch_size=settings.embedding_batch_size,
-                batch_delay_seconds=args.batch_delay_seconds,
-            )
+            documents = [obj.document() for obj in objects]
+            if args.checkpoint is not None:
+                with httpx.Client(timeout=settings.llm_timeout_seconds) as token_http:
+                    count = ResumableIngestor(
+                        store,
+                        dense,
+                        sparse,
+                        GeminiTokenCounter(settings, token_http),
+                        limits,
+                        args.checkpoint,
+                        batch_size=batch_size,
+                        max_retries=settings.llm_max_retries,
+                    ).run(
+                        documents,
+                        destination=str(settings.qdrant_url),
+                        initial_daily_requests=args.initial_daily_requests,
+                    )
+            else:
+                count = store.ingest(
+                    documents,
+                    dense,
+                    sparse,
+                    batch_size=batch_size,
+                    batch_delay_seconds=args.batch_delay_seconds,
+                )
         logger.info("collection_indexed", objects=count)
     return 0
 

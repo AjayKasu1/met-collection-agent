@@ -58,6 +58,8 @@ Preparation makes no model calls. The final command uses the configured embeddin
 
 The bounded sample reserves eligible golden IDs before filling its remaining slots. `selection.json` records exclusions such as non-public-domain objects. To prepare browser-saved visitor HTML without crawling, use `make ingest-visitors ARGS="--html-dir data/visitor_pages --prepare-only"` with the local source manifest described in the ingestion guide.
 
+The [full ingestion guide](docs/full-ingestion.md) covers 768-dimensional vectors, token-aware batching, daily quota waits, durable checkpoints, and detached execution with `nohup`. The verified free-tier daily allowance makes a 20,000-object run take about 20 days; the progress log reports a quota-based completion estimate.
+
 ## Project layout
 
 ```text
