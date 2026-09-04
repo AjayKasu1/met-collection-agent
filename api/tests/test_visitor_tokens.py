@@ -84,3 +84,14 @@ def test_counter_uses_full_pinned_passages_without_padding_or_truncation(
     monkeypatch.setattr(visitor_tokens, "hf_hub_download", lambda *a, **kw: "missing")
     with pytest.raises(EmbeddingError, match="tokenizer initialization"):
         visitor_tokens.local_passage_counter(tmp_path)
+
+
+def test_saved_hours_table_in_aside_survives_extraction() -> None:
+    from met_agent.ingestion.visitors import html_to_markdown
+
+    _, text = html_to_markdown(
+        "<main><h2>Fifth Avenue</h2><aside><table><tr><th>Wednesday</th>"
+        "<td>Closed</td></tr></table></aside><aside>Newsletter navigation</aside></main>"
+    )
+    assert "Wednesday" in text and "Closed" in text
+    assert "Newsletter navigation" not in text

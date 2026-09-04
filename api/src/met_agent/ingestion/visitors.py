@@ -86,6 +86,12 @@ def html_to_markdown(html: str) -> tuple[str, str]:
         picture.unwrap()
     for image in content.find_all("img"):
         image.replace_with(str(image.get("alt") or ""))
+    # Complementary sections can contain factual hours/admission tables.
+    for aside in content.find_all("aside"):
+        if aside.find("table") is not None:
+            aside.unwrap()
+        else:
+            aside.decompose()
     for element in content.find_all(
         [
             "script",
@@ -93,7 +99,6 @@ def html_to_markdown(html: str) -> tuple[str, str]:
             "nav",
             "footer",
             "header",
-            "aside",
             "noscript",
             "iframe",
             "svg",
