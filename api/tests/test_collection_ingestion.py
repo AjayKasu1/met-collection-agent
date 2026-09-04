@@ -10,10 +10,11 @@ from met_agent.ingestion.collection import (
     enrich_object,
     image_inventory,
     object_from_row,
+    reuse_selection,
     select_objects,
 )
 from met_agent.ingestion.http import SourceClient, SourceError, download_csv
-from met_agent.ingestion.storage import load_objects, save_objects, sha256_file
+from met_agent.ingestion.storage import load_objects, save_objects, sha256_file, write_json
 
 
 @pytest.fixture
@@ -95,7 +96,11 @@ def test_selection_prefers_highlights_then_images_and_excludes_ineligible(
         )
     path = tmp_path / "objects.csv"
     write_csv(path, rows)
-    assert [o.object_id for o in select_objects(path, limit=3, image_ids={103})] == [102, 103, 101]
+    assert [o.object_id for o in select_objects(path, limit=3, image_ids={103}).objects] == [
+        102,
+        103,
+        101,
+    ]
     with pytest.raises(ValueError):
         select_objects(path, limit=0, image_ids=set())
 
@@ -115,6 +120,68 @@ def test_invalid_source_rows_fail_closed(tmp_path: Path, raw_record: dict[str, s
     write_csv(path, [raw_record, raw_record])
     with pytest.raises(SourceError, match="duplicate"):
         select_objects(path, limit=2, image_ids=set())
+
+
+def test_golden_reservations_precede_ranking_without_exceeding_limit(
+    tmp_path: Path, raw_record: dict[str, str]
+) -> None:
+    path = tmp_path / "objects.csv"
+    rows = [
+        {**raw_record, "Object ID": str(i), "Is Highlight": "False" if i == 105 else "True"}
+        for i in range(101, 106)
+    ]
+    rows.extend(
+        [
+            {**raw_record, "Object ID": "106", "Is Public Domain": "False"},
+            {**raw_record, "Object ID": "107", "Link Resource": ""},
+        ]
+    )
+    write_csv(path, rows)
+    selected = select_objects(
+        path, limit=2, image_ids={101}, must_include_ids=frozenset({105, 106, 107})
+    )
+    assert [obj.object_id for obj in selected.objects] == [105, 101]
+    assert selected.report.included_ids == [105]
+    assert selected.report.excluded_ids == {106: "not_public_domain", 107: "missing_source_url"}
+    assert all(obj.is_public_domain for obj in selected.objects)
+    with pytest.raises(SourceError, match="accommodate 3"):
+        select_objects(path, limit=2, image_ids=set(), must_include_ids=frozenset({101, 102, 103}))
+    with pytest.raises(SourceError, match="absent from the CSV"):
+        select_objects(path, limit=2, image_ids=set(), must_include_ids=frozenset({999}))
+    with pytest.raises(ValueError, match="positive"):
+        select_objects(path, limit=2, image_ids=set(), must_include_ids=frozenset({0}))
+    write_csv(path, [raw_record, raw_record])
+    with pytest.raises(SourceError, match="duplicate required"):
+        select_objects(path, limit=1, image_ids=set(), must_include_ids=frozenset({101}))
+
+
+def test_reuse_rejects_changed_golden_ids_artifacts_and_omitted_reservations(
+    tmp_path: Path, raw_record: dict[str, str]
+) -> None:
+    path = tmp_path / "objects.csv"
+    required = frozenset({101, 102})
+    with pytest.raises(SourceError, match="report is missing"):
+        reuse_selection(tmp_path, limit=2, must_include_ids=required)
+    write_csv(path, [raw_record, {**raw_record, "Object ID": "102"}])
+    selected = select_objects(path, limit=2, image_ids=set(), must_include_ids=required)
+    artifact = tmp_path / "objects.parquet"
+    save_objects(artifact, selected.objects)
+    selected.report.artifact_sha256 = sha256_file(artifact)
+    report = tmp_path / "selection.json"
+    write_json(report, selected.report.model_dump(mode="json"))
+    assert reuse_selection(tmp_path, limit=2, must_include_ids=required) == selected
+    with pytest.raises(SourceError, match="Golden IDs changed"):
+        reuse_selection(tmp_path, limit=2, must_include_ids=frozenset({101}))
+    with pytest.raises(SourceError, match="omits required"):
+        reuse_selection(tmp_path, limit=1, must_include_ids=required)
+    inconsistent = selected.report.model_copy(update={"included_ids": [101]})
+    write_json(report, inconsistent.model_dump(mode="json"))
+    with pytest.raises(SourceError, match="inconsistent"):
+        reuse_selection(tmp_path, limit=2, must_include_ids=required)
+    write_json(report, selected.report.model_dump(mode="json"))
+    save_objects(artifact, selected.objects[:1])
+    with pytest.raises(SourceError, match="does not match"):
+        reuse_selection(tmp_path, limit=2, must_include_ids=required)
 
 
 def test_parquet_round_trip_retains_raw_and_live_fields(

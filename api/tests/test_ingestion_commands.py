@@ -11,9 +11,11 @@ import pytest
 
 from met_agent.config import ConfigurationError, Settings
 from met_agent.ingestion import commands
+from met_agent.ingestion.collection import CollectionSelection, SelectionReport
 from met_agent.ingestion.http import SourceError
 from met_agent.ingestion.models import CollectionObject, IndexDocument
 from met_agent.ingestion.storage import load_objects, save_objects
+from met_agent.ingestion.verify import GoldenRow
 from met_agent.retrieval.embeddings import EmbeddingError
 
 
@@ -23,6 +25,7 @@ def configured_commands(
 ) -> Settings:
     configured = settings.model_copy(update={"data_dir": tmp_path, "ingest_max_objects": 2})
     monkeypatch.setattr(commands, "load_settings", lambda: configured)
+    monkeypatch.setattr(commands, "read_golden", lambda _: [])
     return configured
 
 
@@ -82,7 +85,13 @@ def test_prepare_and_reuse_sample_without_repeating_source_calls(
     assert [doc.point_id for doc in stub_index] == [1]
     with pytest.raises(ValueError, match="positive"):
         commands.ingest_collection(["--limit", "0"])
-    monkeypatch.setattr(commands, "load_objects", lambda _: [])
+    monkeypatch.setattr(
+        commands,
+        "reuse_selection",
+        lambda *a, **kw: CollectionSelection(
+            objects=[], report=SelectionReport(required_ids=[], included_ids=[], excluded_ids={})
+        ),
+    )
     with pytest.raises(SourceError, match="empty"):
         commands.ingest_collection(["--reuse-prepared"])
 
@@ -95,12 +104,55 @@ def test_live_enrichment_is_explicit(
     )
     monkeypatch.setattr(commands, "download_csv", lambda *a, **kw: Path("unused"))
     monkeypatch.setattr(commands, "image_inventory", lambda *a, **kw: {1})
-    monkeypatch.setattr(commands, "select_objects", lambda *a, **kw: [obj])
+    monkeypatch.setattr(
+        commands,
+        "select_objects",
+        lambda *a, **kw: CollectionSelection(
+            objects=[obj], report=SelectionReport(required_ids=[], included_ids=[], excluded_ids={})
+        ),
+    )
     monkeypatch.setattr(
         commands, "enrich_object", lambda *a: obj.model_copy(update={"gallery_number": "202"})
     )
     assert commands.ingest_collection(["--enrich-live", "--prepare-only"]) == 0
     assert load_objects(configured_commands.data_dir / "objects.parquet")[0].gallery_number == "202"
+
+
+def test_collection_passes_deduplicated_golden_ids_and_reports_eligibility_exceptions(
+    configured_commands: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    obj = CollectionObject(
+        object_id=101,
+        title="Vessel",
+        source_url="https://www.metmuseum.org/item/101",
+        raw_fields={},
+    )
+
+    def select(*args: Any, **kwargs: Any) -> CollectionSelection:
+        assert kwargs["must_include_ids"] == frozenset({101, 102})
+        return CollectionSelection(
+            objects=[obj],
+            report=SelectionReport(
+                required_ids=[101, 102], included_ids=[101], excluded_ids={102: "not_public_domain"}
+            ),
+        )
+
+    monkeypatch.setattr(
+        commands,
+        "read_golden",
+        lambda _: [
+            GoldenRow(id="lookup", question="Find objects", expected_object_ids=[101, 102, 101])
+        ],
+    )
+    monkeypatch.setattr(commands, "download_csv", lambda *a, **kw: Path("unused"))
+    monkeypatch.setattr(commands, "image_inventory", lambda *a, **kw: {101})
+    monkeypatch.setattr(commands, "select_objects", select)
+    assert commands.ingest_collection(["--prepare-only"]) == 0
+    assert commands.ingest_collection(["--reuse-prepared", "--prepare-only"]) == 0
+    assert "not_public_domain" in capsys.readouterr().out
+    assert (configured_commands.data_dir / "selection.json").exists()
 
 
 def test_visitor_prepare_and_index_preserves_provenance(
@@ -130,6 +182,9 @@ def test_verify_writes_report_and_returns_nonzero_for_upstream_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from met_agent.ingestion.verify import read_golden
+
+    monkeypatch.setattr(commands, "read_golden", read_golden)
     root = configured_commands.data_dir
     save_objects(
         root / "objects.parquet",

@@ -13,10 +13,23 @@ from pydantic import BaseModel, ValidationError
 from qdrant_client import QdrantClient
 
 from met_agent.config import ConfigurationError, Settings, load_settings
-from met_agent.ingestion.collection import CSV_URL, enrich_object, image_inventory, select_objects
+from met_agent.ingestion.collection import (
+    CSV_URL,
+    enrich_object,
+    image_inventory,
+    reuse_selection,
+    select_objects,
+)
 from met_agent.ingestion.http import SourceClient, SourceError, download_csv
 from met_agent.ingestion.models import VisitorChunk
-from met_agent.ingestion.storage import atomic_write, load_objects, save_chunks, save_objects
+from met_agent.ingestion.storage import (
+    atomic_write,
+    load_objects,
+    save_chunks,
+    save_objects,
+    sha256_file,
+    write_json,
+)
 from met_agent.ingestion.verify import read_golden, verification_markdown, verify_golden
 from met_agent.ingestion.visitors import VisitorCrawler, chunk_markdown, html_to_markdown
 from met_agent.llm.router import create_embedding_router
@@ -47,6 +60,12 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     parser = _base_parser("Prepare and ingest public-domain Met collection records")
     parser.add_argument("--limit", type=int, help="Maximum records, overriding INGEST_MAX_OBJECTS")
     parser.add_argument(
+        "--golden",
+        type=Path,
+        default=Path("evals/golden.jsonl"),
+        help="Reserve every eligible expected object ID from this evaluation file",
+    )
+    parser.add_argument(
         "--enrich-live",
         action="store_true",
         help="Refresh every selected record through the live Met API",
@@ -68,8 +87,12 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     limit: int = args.limit or settings.ingest_max_objects
     if limit <= 0 or (args.limit is not None and args.limit <= 0):
         raise ValueError("Object limit must be positive")
+    required_ids = frozenset(
+        object_id for row in read_golden(args.golden) for object_id in row.expected_object_ids
+    )
     if args.reuse_prepared:
-        objects = load_objects(output / "objects.parquet")[:limit]
+        selection = reuse_selection(output, limit=limit, must_include_ids=required_ids)
+        objects = selection.objects
     else:
         cache = settings.data_dir / "sources"
         with httpx.Client(timeout=60, follow_redirects=False) as client:
@@ -81,17 +104,26 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
                 cache / "image_ids.json",
                 refresh=args.refresh,
             )
-            selected = select_objects(csv_path, limit=limit, image_ids=image_ids)
-            objects = selected
+            selection = select_objects(
+                csv_path, limit=limit, image_ids=image_ids, must_include_ids=required_ids
+            )
+            objects = selection.objects
             if args.enrich_live:
                 objects = []
-                for index, obj in enumerate(selected, 1):
+                for index, obj in enumerate(selection.objects, 1):
                     objects.append(enrich_object(obj, source, str(settings.met_api_base)))
-                    if index % 20 == 0 or index == len(selected):
-                        logger.info("objects_prepared", count=index, total=len(selected))
+                    if index % 20 == 0 or index == len(selection.objects):
+                        logger.info("objects_prepared", count=index, total=len(selection.objects))
         save_objects(output / "objects.parquet", objects)
+        selection.report.artifact_sha256 = sha256_file(output / "objects.parquet")
+        write_json(output / "selection.json", selection.report.model_dump(mode="json"))
     if not objects:
         raise SourceError("Prepared collection is empty")
+    for object_id, reason in sorted(selection.report.excluded_ids.items()):
+        logger.warning("golden_object_excluded", object_id=object_id, reason=reason)
+    logger.info(
+        "golden_coverage", included=len(selection.report.included_ids), required=len(required_ids)
+    )
     logger.info(
         "collection_prepared", objects=len(objects), images=sum(obj.has_image for obj in objects)
     )
