@@ -98,6 +98,22 @@ def test_all_strings_and_unchanged_grounding() -> None:
     assert "grounding failed" in r.reason
 
 
+def test_deadline_validation_and_baseline_comparability() -> None:
+    import argparse
+
+    from met_agent.evaluation.cli import deadline
+
+    assert deadline("300") == 300
+    for value in ("0", "-1", "601", "nan", "inf"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            deadline(value)
+    previous = report([result()])
+    current = previous.model_copy(deep=True)
+    current.execution["chat_deadline_seconds"] = "300"
+    with pytest.raises(ValueError, match="deadlines differ"):
+        regression(current, previous)
+
+
 def test_refusal_requires_event_and_independent_no_opinion() -> None:
     r = result(expect="refuse_interpretive")
     assert r.answer and r.judgment

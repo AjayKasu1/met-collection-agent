@@ -89,5 +89,9 @@ def regression(report: Report, baseline: Report) -> bool:
         raise ValueError("Regression suites differ")
     if report.golden_sha256 != baseline.golden_sha256:
         raise ValueError("Golden labels changed; explicitly review a new baseline")
+    if report.execution.get("chat_deadline_seconds") != baseline.execution.get(
+        "chat_deadline_seconds"
+    ):
+        raise ValueError("Chat deadlines differ; explicitly review a new baseline")
     drop = float(summarize(baseline)["pass_rate"]) - float(summarize(report)["pass_rate"])
     return drop > 0.05 + 1e-12

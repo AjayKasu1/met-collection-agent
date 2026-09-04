@@ -34,6 +34,13 @@ def read_rows(path: Path, *, quick: bool) -> list[EvalRow]:
     return selected
 
 
+def deadline(value: str) -> float:
+    seconds = float(value)
+    if not 0 < seconds <= 600:
+        raise argparse.ArgumentTypeError("Deadline must be between 0 and 600 seconds")
+    return seconds
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true")
@@ -41,9 +48,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, default=Path("evals/reports"))
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument(
+        "--chat-deadline-seconds",
+        type=deadline,
+        help="Explicit batch deadline override; recorded in report, never written to .env",
+    )
     args = parser.parse_args(argv)
     rows = read_rows(args.golden, quick=args.quick)
     settings = load_settings()
+    configured_deadline = settings.chat_deadline_seconds
+    if args.chat_deadline_seconds is not None:
+        settings = settings.model_copy(update={"chat_deadline_seconds": args.chat_deadline_seconds})
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()  # noqa: S607
     now = datetime.now(UTC)
     report = Report(
@@ -73,6 +88,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             "visitor_collection": settings.qdrant_visitor_collection,
         },
         models=configured_models(settings),
+        execution={
+            "chat_deadline_seconds": str(settings.chat_deadline_seconds),
+            "configured_chat_deadline_seconds": str(configured_deadline),
+            "pacing_enabled": str(settings.llm_pacing_enabled),
+            "rate_limits": json.dumps(
+                {k: v.model_dump() for k, v in settings.llm_rate_limits.items()}, sort_keys=True
+            ),
+            "fallback_enabled": str(settings.llm_fallback_enabled),
+            "gateway_enabled": str(settings.use_ai_gateway),
+        },
+        execution_notes=[
+            f"Chat deadline: {settings.chat_deadline_seconds:g} seconds. "
+            f"Saved interactive deadline: {configured_deadline:g} seconds. "
+            "An explicit batch override does not establish interactive latency acceptance."
+        ],
         expected_ids=[r.id for r in rows],
     )
     path = args.output_dir / (report.run_id + ".json")
@@ -86,6 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "models",
             "expected_ids",
             "retrieval",
+            "execution",
         ):
             if getattr(previous, field) != getattr(report, field):
                 raise ValueError("Resume identity mismatch: " + field)

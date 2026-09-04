@@ -63,6 +63,7 @@ class Report(BaseModel):
     expected_ids: list[str]
     retrieval: dict[str, str] = Field(default_factory=dict)
     execution_notes: list[str] = Field(default_factory=list)
+    execution: dict[str, str] = Field(default_factory=dict)
     results: list[RowResult] = Field(default_factory=list)
     complete: bool = False
 
