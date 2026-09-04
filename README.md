@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, visitor-page ingestion, hybrid Gemini/BM25 indexes, golden-ID verification, and portable Qdrant snapshots. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
+The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, live or saved visitor-page ingestion, hybrid Gemini/BM25 indexes, golden-ID verification, and portable Qdrant snapshots. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
 
 ## Run locally
 
@@ -51,10 +51,12 @@ Tests supply synthetic settings and never load the developer's `.env` or call an
 make qdrant
 make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --prepare-only"
 make verify-golden ARGS="--data-dir data/pilot"
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared --batch-delay-seconds 30"
 ```
 
 Preparation makes no model calls. The final command uses the configured embedding provider and Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md) and [snapshot publication and seeding](docs/index-artifacts.md).
+
+The bounded sample reserves eligible golden IDs before filling its remaining slots. `selection.json` records exclusions such as non-public-domain objects. To prepare browser-saved visitor HTML without crawling, use `make ingest-visitors ARGS="--html-dir data/visitor_pages --prepare-only"` with the local source manifest described in the ingestion guide.
 
 ## Project layout
 

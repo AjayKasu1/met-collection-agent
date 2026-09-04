@@ -184,6 +184,39 @@ def test_visitor_prepare_and_index_preserves_provenance(
         commands.ingest_visitor_info(["--sources", str(sources)])
 
 
+def test_saved_html_command_prepares_and_indexes_without_visitor_http(
+    configured_commands: Settings, stub_index: list[IndexDocument], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = configured_commands.data_dir
+    directory = root / "data" / "visitor_pages"
+    directory.mkdir(parents=True)
+    (directory / "sources.yaml").write_text(
+        "pages:\n  - label: Hours\n    url: https://www.metmuseum.org/plan-your-visit\n"
+        "    html_file: hours.html\n    fetched_at: '2026-09-03T18:00:00-04:00'\n"
+    )
+    html = directory / "hours.html"
+    html.write_text("<main><h1>Hours</h1><p>Closed Wednesday.</p></main>")
+
+    def no_http(*args: Any, **kwargs: Any) -> httpx.Client:
+        pytest.fail("Saved HTML mode must not construct a visitor HTTP client")
+
+    monkeypatch.setattr(httpx, "Client", no_http)
+    monkeypatch.chdir(root)
+    assert commands.ingest_visitor_info(["--html-dir", "--prepare-only"]) == 0
+    artifact = root / "visitor_chunks.jsonl"
+    prepared = artifact.read_bytes()
+    assert stub_index == []
+    assert commands.ingest_visitor_info(["--html-dir", str(directory)]) == 0
+    assert stub_index[0].payload["source_url"] == "https://www.metmuseum.org/plan-your-visit"
+    assert stub_index[0].payload["fetched_at"] == "2026-09-03T18:00:00-04:00"
+    assert stub_index[0].payload["section_heading"] == "Hours"
+    assert artifact.read_bytes() == prepared
+    html.write_text("<main><script>no visitor content</script></main>")
+    with pytest.raises(SourceError, match="no usable main text"):
+        commands.ingest_visitor_info(["--html-dir", str(directory), "--prepare-only"])
+    assert artifact.read_bytes() == prepared
+
+
 def test_verify_writes_report_and_returns_nonzero_for_upstream_failure(
     configured_commands: Settings,
     monkeypatch: pytest.MonkeyPatch,

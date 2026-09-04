@@ -9,7 +9,7 @@ Use a separate directory and collection so a small sample cannot be confused wit
 ```sh
 make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --prepare-only"
 make verify-golden ARGS="--data-dir data/pilot"
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared --batch-delay-seconds 30"
 ```
 
 `--prepare-only` downloads and validates public sources without calling an embedding model or Qdrant. `--reuse-prepared` indexes the existing Parquet artifact and makes no Met requests. The default limit comes from `INGEST_MAX_OBJECTS`; a positive `--limit` overrides it. Use a distinct collection for each differently sized sample. An upsert does not delete objects outside the current sample.
@@ -46,6 +46,23 @@ make ingest-visitors ARGS="--data-dir data/pilot --collection met_visitor_info_p
 ```
 
 The curated YAML covers hours, admission, directions, accessibility, bag/stroller policies, map guidance, gallery closures, and contact information. Requests identify this project, run at most once per second, honor stricter robots crawl rules, and recheck permission after redirects. A failed robots request stops the crawl. HTTP 404 for `robots.txt` permits crawling; access failures and exhausted rate limits do not.
+
+To ingest pages already saved in your browser, put UTF-8 `.html` or `.htm` files under `data/visitor_pages/` and create `data/visitor_pages/sources.yaml`. Each entry requires a label, original Met HTTPS URL, relative HTML filename, and the actual capture time with a timezone. This example illustrates the format; use the time you captured your page:
+
+```yaml
+pages:
+  - label: Hours, admission, directions, and planning
+    url: https://www.metmuseum.org/plan-your-visit
+    html_file: plan-your-visit.html
+    fetched_at: "2026-09-03T18:00:00-04:00"
+```
+
+```sh
+make ingest-visitors ARGS="--html-dir data/visitor_pages --data-dir data/pilot --prepare-only"
+make ingest-visitors ARGS="--html-dir data/visitor_pages --data-dir data/pilot --collection met_visitor_info_pilot --batch-delay-seconds 30"
+```
+
+`--html-dir` without a value defaults to `data/visitor_pages`. `--sources PATH` overrides the local manifest location. Saved mode makes no visitor HTTP or robots requests; it reads only listed files and never falls back to crawling when a file or manifest is missing. Indexing still contacts the configured embedding provider and Qdrant. Source URLs, capture timestamps, headings, and stable chunk IDs flow through the same pipeline as live pages. The loader rejects missing timezones, duplicate URLs, paths or symlinks outside the HTML directory, non-HTML filenames, non-UTF-8 text, and files larger than 20 MiB. It does not infer capture times from modification times or the current clock. Files, manifests, and generated chunks remain under ignored `data/`.
 
 Main content becomes Markdown with headings, tables, lists, and links retained. Each section is divided into approximately 500-token windows with 50-token overlap. The deterministic Unicode-safe counter estimates tokens locally and is not a Gemini billing measure. Each chunk records its source URL, fetch timestamp, heading, and stable ID. Stale chunks for a page are removed only after all replacement chunks have been acknowledged.
 

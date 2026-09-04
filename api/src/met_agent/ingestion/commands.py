@@ -23,6 +23,7 @@ from met_agent.ingestion.collection import (
 )
 from met_agent.ingestion.http import SourceClient, SourceError, download_csv
 from met_agent.ingestion.models import VisitorChunk
+from met_agent.ingestion.saved_pages import VisitorPageContent, load_saved_pages
 from met_agent.ingestion.storage import (
     atomic_write,
     load_objects,
@@ -174,10 +175,21 @@ class _VisitorSources(BaseModel):
 
 
 def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
-    """Fetch the explicit visitor source list, persist provenance, and replace stale page chunks."""
+    """Prepare live or saved visitor pages, then replace stale chunks after successful indexing."""
     parser = _base_parser("Ingest curated public visitor-information pages")
     _add_batch_pacing(parser)
-    parser.add_argument("--sources", type=Path, default=Path("api/data_sources/visitor_pages.yaml"))
+    parser.add_argument(
+        "--sources",
+        type=Path,
+        help="Source YAML; defaults to --html-dir/sources.yaml or the curated live source list",
+    )
+    parser.add_argument(
+        "--html-dir",
+        type=Path,
+        nargs="?",
+        const=Path("data/visitor_pages"),
+        help="Read saved HTML without visitor HTTP requests; defaults to data/visitor_pages",
+    )
     parser.add_argument(
         "--collection", help="Override the visitor collection for an isolated pilot"
     )
@@ -185,24 +197,39 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     settings = load_settings()
     configure_logging(settings.log_level)
-    sources = _VisitorSources.model_validate(yaml.safe_load(args.sources.read_text()))
     output: Path = args.data_dir or settings.data_dir
     chunks: list[VisitorChunk] = []
-    with httpx.Client(timeout=30, follow_redirects=False) as client:
-        crawler = VisitorCrawler(SourceClient(client, interval=1))
-        for page in sources.pages:
-            url, html = crawler.fetch(page.url)
-            title, markdown = html_to_markdown(html)
-            fetched_at = datetime.now(UTC)
-            chunks.extend(
-                chunk_markdown(
-                    markdown,
-                    source_url=url,
-                    page_title=title or page.label,
-                    fetched_at=fetched_at,
+    if args.html_dir is not None:
+        pages = load_saved_pages(args.html_dir, manifest=args.sources)
+    else:
+        sources_path = args.sources or Path("api/data_sources/visitor_pages.yaml")
+        sources = _VisitorSources.model_validate(yaml.safe_load(sources_path.read_text()))
+        pages = []
+        with httpx.Client(timeout=30, follow_redirects=False) as client:
+            crawler = VisitorCrawler(SourceClient(client, interval=1))
+            for page in sources.pages:
+                url, html = crawler.fetch(page.url)
+                pages.append(
+                    VisitorPageContent(
+                        label=page.label,
+                        url=url,
+                        html=html,
+                        fetched_at=datetime.now(UTC),
+                    )
                 )
+    for content in pages:
+        title, markdown = html_to_markdown(content.html)
+        chunks.extend(
+            chunk_markdown(
+                markdown,
+                source_url=content.url,
+                page_title=title or content.label,
+                fetched_at=content.fetched_at,
             )
-            logger.info("visitor_page_prepared", source_url=url)
+        )
+        logger.info(
+            "visitor_page_prepared", source_url=content.url, saved_html=args.html_dir is not None
+        )
     if not chunks:
         raise SourceError("No visitor chunks were produced")
     save_chunks(output / "visitor_chunks.jsonl", chunks)
@@ -226,7 +253,7 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
                 store.remove_stale_page_chunks(
                     url, [c.point_id for c in chunks if c.source_url == url]
                 )
-    logger.info("visitor_ingestion_completed", pages=len(sources.pages), chunks=len(chunks))
+    logger.info("visitor_ingestion_completed", pages=len(pages), chunks=len(chunks))
     return 0
 
 
