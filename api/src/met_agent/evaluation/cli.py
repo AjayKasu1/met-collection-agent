@@ -17,6 +17,8 @@ from met_agent.evaluation.runner import run
 from met_agent.evaluation.scoring import regression, summarize
 from met_agent.llm.prompts import prompt_hash
 from met_agent.llm.providers import configured_models
+from met_agent.retrieval.rerank import MODEL as RERANKER_MODEL
+from met_agent.retrieval.rerank import REVISION as RERANKER_REVISION
 from met_agent.runtime import Runtime
 
 
@@ -52,7 +54,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         golden_sha256=hashlib.sha256(args.golden.read_bytes()).hexdigest(),
         prompt_sha256={
             name: prompt_hash(name)
-            for name in ("system_v1", "tools_v1", "intent_v1", "grounding_v1", "evaluation_v1")
+            for name in ("system_v2", "tools_v1", "intent_v2", "grounding_v1", "evaluation_v1")
+        },
+        retrieval={
+            "embedding_provider": settings.embedding_provider,
+            "embedding_model": settings.embedding_model,
+            "dimensions": str(settings.embedding_dimensions),
+            "reranker_model": RERANKER_MODEL,
+            "reranker_revision": RERANKER_REVISION,
+            "collection": settings.qdrant_collection,
+            "visitor_collection": settings.qdrant_visitor_collection,
         },
         models=configured_models(settings),
         expected_ids=[r.id for r in rows],
@@ -67,6 +78,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "prompt_sha256",
             "models",
             "expected_ids",
+            "retrieval",
         ):
             if getattr(previous, field) != getattr(report, field):
                 raise ValueError("Resume identity mismatch: " + field)

@@ -61,6 +61,8 @@ class Report(BaseModel):
     prompt_sha256: dict[str, str]
     models: dict[str, str]
     expected_ids: list[str]
+    retrieval: dict[str, str] = Field(default_factory=dict)
+    execution_notes: list[str] = Field(default_factory=list)
     results: list[RowResult] = Field(default_factory=list)
     complete: bool = False
 

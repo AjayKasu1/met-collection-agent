@@ -132,7 +132,7 @@ class LiteLLMChat:
             and any(item.get("role") == "tool" for item in messages)
         ):
             messages = [
-                {"role": "system", "content": load_prompt("system_v1")},
+                {"role": "system", "content": load_prompt("system_v2")},
                 {
                     "role": "user",
                     "content": json.dumps(
@@ -305,7 +305,7 @@ class LiteLLMChat:
         if tools and response_schema is not None and not message.get("tool_calls"):
             # Groq forbids tools with structured output. Start a separate final-answer call.
             final_messages = [
-                {"role": "system", "content": load_prompt("system_v1")},
+                {"role": "system", "content": load_prompt("system_v2")},
                 {
                     "role": "user",
                     "content": json.dumps(

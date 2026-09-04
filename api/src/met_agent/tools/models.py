@@ -95,7 +95,7 @@ class Evidence(BaseModel):
     object_id: int | None = None
     source_url: str | None = None
     text: str
-    kind: Literal["collection", "visitor_info", "live_object", "image_similarity"]
+    kind: Literal["collection", "visitor_info", "live_object", "image_similarity", "lookup_status"]
 
 
 class ToolError(BaseModel):
@@ -133,14 +133,16 @@ class ToolResult(BaseModel):
         """Send citation evidence once; retain full records only in tool APIs and audit logs."""
         import json
 
-        if self.error or not self.evidence:
+        if not self.evidence:
             return self.model_dump_json(exclude={"evidence"})
-        payload = {
+        payload: dict[str, object] = {
             "name": self.name,
             "evidence": [
                 item.model_dump(mode="json", exclude_none=True) for item in self.model_evidence()
             ],
         }
+        if self.error:
+            payload["error"] = self.error.model_dump(mode="json")
         if isinstance(self.output, CollectionSearchResult):
             payload["freshness"] = self.output.freshness
         return json.dumps(payload, ensure_ascii=False)

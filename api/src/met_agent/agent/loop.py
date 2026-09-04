@@ -55,14 +55,14 @@ class Agent:
             "prompt_versions",
             {
                 name: prompt_hash(name)
-                for name in ("system_v1", "tools_v1", "intent_v1", "grounding_v1")
+                for name in ("system_v2", "tools_v1", "intent_v2", "grounding_v1")
             },
         )
         try:
             intent = await structured(
                 self.model,
                 "lite",
-                load_prompt("intent_v1"),
+                load_prompt("intent_v2"),
                 {
                     "message": request.message,
                     "history": json.loads(json.dumps(history)),
@@ -95,7 +95,7 @@ class Agent:
                                 "outside the "
                                 "collection and visitor workspace."
                             ),
-                            "suggested_contact": "info@metmuseum.org",
+                            "suggested_contact": intent.handoff_contact,
                         }
                     ),
                 )

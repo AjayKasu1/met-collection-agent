@@ -10,11 +10,15 @@ import httpx
 
 from met_agent.ingestion.http import USER_AGENT, SourceError
 from met_agent.ingestion.visitors import validate_visitor_url
-from met_agent.tools.models import GetObjectArguments, LiveObject
+from met_agent.tools.models import Evidence, GetObjectArguments, LiveObject
 
 
 class ObjectNotFound(SourceError):
-    """Distinguish an absent object from an unavailable upstream service."""
+    """Distinguish confirmed HTTP 404 evidence from an unavailable upstream service."""
+
+    def __init__(self, message: str, *, evidence: Evidence | None = None) -> None:
+        super().__init__(message)
+        self.evidence = evidence
 
 
 class LiveObjectClient:
@@ -36,7 +40,19 @@ class LiveObjectClient:
                 f"{self.base_url}/objects/{object_id}", headers={"User-Agent": USER_AGENT}
             )
             if response.status_code == 404:
-                raise ObjectNotFound("Object not found in the Met API")
+                raise ObjectNotFound(
+                    "Object not found in the Met API",
+                    evidence=Evidence(
+                        key=f"lookup:{object_id}",
+                        source_url=f"{self.base_url}/objects/{object_id}",
+                        kind="lookup_status",
+                        text=(
+                            f"Met API lookup for Object ID {object_id}: not found (HTTP 404).\n"
+                            "No object record was returned for this requested ID.\n"
+                            f"Fetched at: {datetime.now(UTC).isoformat()}"
+                        ),
+                    ),
+                )
             if response.status_code != 200:
                 raise SourceError(f"Met object service returned HTTP {response.status_code}")
             data = response.json()

@@ -14,6 +14,10 @@ class Intent(BaseModel):
     language: Language
     search_query: str = Field(min_length=1, max_length=2000)
 
+    handoff_contact: Literal["info@metmuseum.org", "store.support@metmuseum.org"] = (
+        "info@metmuseum.org"
+    )
+
     @property
     def route(self) -> Route:
         return "lite" if self.category == "collection" and self.difficulty == "simple" else "main"

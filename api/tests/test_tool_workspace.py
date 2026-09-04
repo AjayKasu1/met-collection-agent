@@ -1,6 +1,7 @@
 """Exercise the shared tool boundary, live cache, and published image-only neighbors."""
 
 import asyncio
+import json
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -259,3 +260,34 @@ def test_search_service_loads_models_once(
         service.search("objects", "vase")
         service.search("objects", "vase")
         assert created == ["dense", "sparse", "rerank"]
+
+
+def test_only_confirmed_404_produces_citable_lookup_status() -> None:
+    from met_agent.agent.models import AgentDraft, Citation
+    from met_agent.guardrails.grounding import valid_citations
+    from met_agent.tools.models import LiveObject
+
+    mode = [404]
+    with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(mode[0]))) as http:
+        live = LiveObjectClient(http, "https://collectionapi.metmuseum.org/public/collection/v1")
+        registry = ToolRegistry()
+        registry.register("get_object", "Lookup", GetObjectArguments, LiveObject, live.get)
+        result = asyncio.run(registry.execute("get_object", '{"object_id":800}'))
+        assert result.error and result.error.code == "not_found"
+        assert len(result.evidence) == 1
+        evidence = result.evidence[0]
+        assert evidence.object_id is None and evidence.source_url
+        assert "HTTP 404" in evidence.text and "Fetched at:" in evidence.text
+        assert evidence.text in json.loads(result.model_context())["evidence"][0]["text"]
+        draft = AgentDraft(
+            text="No object record was returned.",
+            language="en",
+            citations=[Citation(source_url=evidence.source_url, quote=evidence.text)],
+        )
+        assert valid_citations(draft, result.evidence)
+        draft.citations = [Citation(object_id=800, quote=evidence.text)]
+        assert not valid_citations(draft, result.evidence)
+        mode[0] = 403
+        unavailable = asyncio.run(registry.execute("get_object", '{"object_id":800}'))
+        assert unavailable.error and unavailable.error.code == "upstream_unavailable"
+        assert not unavailable.evidence

@@ -108,12 +108,13 @@ class ToolRegistry:
             validated = tool.output.model_validate(raw)
             output = cast(ToolPayload, validated)
             return ToolResult(name=name, output=output, evidence=evidence_from(output))
-        except ObjectNotFound:
+        except ObjectNotFound as error:
             return ToolResult(
                 name=name,
                 error=ToolError(
-                    code="not_found", message="The requested Met object does not exist"
+                    code="not_found", message="The Met API returned no object record for this ID"
                 ),
+                evidence=[error.evidence] if error.evidence else [],
             )
         except Exception as error:
             return ToolResult(

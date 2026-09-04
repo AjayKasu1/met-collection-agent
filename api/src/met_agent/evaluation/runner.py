@@ -21,7 +21,7 @@ from met_agent.tools.models import CollectionSearchResult, ToolResult
 def evidence(events: list[Event]) -> list[dict[str, object]]:
     records: dict[str, dict[str, object]] = {}
     for event in events:
-        if event.kind == "tool_result":
+        if event.kind in {"tool_result", "validation_error"}:
             result = ToolResult.model_validate(event.data)
             for item in result.model_evidence():
                 records[item.key] = item.model_dump(mode="json", exclude_none=True)

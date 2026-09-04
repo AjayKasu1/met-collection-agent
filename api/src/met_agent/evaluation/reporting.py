@@ -26,6 +26,8 @@ def save(report: Report, path: Path) -> None:
         "Agent latency excludes the independent judge and the retrieval-only top-10 probe. "
         "Provider pacing is included. Costs are standard-rate token estimates, not invoices.",
         "",
+        *report.execution_notes,
+        "",
         "| Metric | Value |",
         "| --- | --- |",
         *[f"| {key} | {cell(value)} |" for key, value in summarize(report).items()],

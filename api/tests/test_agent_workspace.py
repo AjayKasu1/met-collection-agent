@@ -356,3 +356,17 @@ def test_quote_identity_and_append_only_redacted_audit(tmp_path: Path) -> None:
     assert len(prompt_hash("system_v1")) == 64
     with pytest.raises(ValueError):
         load_prompt("../../private")  # type: ignore[arg-type]
+
+
+def test_out_of_scope_uses_bounded_retail_contact(tmp_path: Path) -> None:
+    decision = {**intent(category="out_of_scope"), "handoff_contact": "store.support@metmuseum.org"}
+    model = ScriptedModel([decision])
+    store = EventStore(tmp_path / "audit.sqlite3")
+    answer = asyncio.run(
+        Agent(model, registry_with_calls([]), store).run(
+            ChatRequest(message="An order delivery question")
+        )
+    )
+    assert answer.handoff and answer.handoff.suggested_contact == "store.support@metmuseum.org"
+    assert any(e.kind == "tool_call" for e in store.read(answer.session_id))
+    assert len(model.calls) == 1
