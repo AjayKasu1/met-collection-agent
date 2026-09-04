@@ -219,7 +219,13 @@ def test_demo_prints_required_fields_and_returns_failure(
             "estimated cost USD:",
         )
     )
-    assert len(json.loads((tmp_path / "demo-check.json").read_text())) == 3
+    records = json.loads((tmp_path / "demo-check.json").read_text())
+    assert len(records) == 3
+    assert all(record["events"][-1]["kind"] == "final_answer" for record in records)
     app.state.runtime.failure = ModelError("access_denied", "Provider denied")
     assert asyncio.run(demo_run(settings.model_copy(update={"data_dir": tmp_path}), app=app)) == 1
-    assert "FAILED: access_denied" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "FAILED: access_denied" in printed
+    assert "Session events (" in printed
+    failed_records = json.loads((tmp_path / "demo-check.json").read_text())
+    assert all(record["session_id"] and record["latency_ms"] >= 0 for record in failed_records)

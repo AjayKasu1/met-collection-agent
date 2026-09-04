@@ -8,11 +8,11 @@ Run development commands from the repository root. The loader reads `.env` in th
 
 | Key | Meaning |
 | --- | --- |
-| `GEMINI_API_KEY` | Provider key, represented internally as `SecretStr` |
+| Provider API key | `GROQ_API_KEY`, `GEMINI_API_KEY`, or `CEREBRAS_API_KEY` according to the selected models, represented as `SecretStr` |
 | `LLM_MODEL` | Exact LiteLLM identifier for the main model |
 | `LLM_MODEL_LITE` | Exact LiteLLM identifier for lightweight tasks |
 
-Required strings cannot be empty or whitespace. Chat model names have no defaults. Configuration validation does not call Google to check model availability. A later model-not-found response must be resolved by checking the configured provider model.
+Required strings cannot be empty or whitespace. Chat model names have no defaults. Configuration validation does not call providers to check model availability. A later model-not-found response must be resolved by checking the configured provider model.
 
 `.env.example` lists every supported setting and documents defaults. A test checks the set of keys against the settings schema. Blank optional environment values are ignored. `LOG_LEVEL` accepts upper or lower case and is normalized before logging setup. Settings are immutable after loading; restart the process after changing configuration.
 
@@ -63,3 +63,7 @@ Middleware is ordered as request context, CORS, then error boundary. It is imple
 Application versions come from package metadata. Direct dependencies and the build backend are pinned in `api/pyproject.toml`; transitive versions and hashes live in `api/uv.lock`. Update dependencies deliberately, regenerate the lockfile, and run all checks before committing.
 
 The original build instructions, root-level duplicate golden file, credentials, raw data, virtual environments, and generated output are ignored. Versioned runtime prompts will live in `api/prompts/` and are intentionally not covered by the build-prompt exclusion.
+
+## Chat providers
+
+Main and lite models require their selected provider keys. Gemini credentials are optional when chat and embeddings use other providers. Missing fallback keys disable only their own routes, and startup logs list active fallbacks. See [provider routing](provider-routing.md) for model prefixes, minute budgets, and verified availability.

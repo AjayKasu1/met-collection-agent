@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API now provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. Live retrieval works; the three-question chat demo is currently blocked by Google project access (HTTP 403). Evaluation scoring, the web client, and deployment remain later phases. No retrieval-quality or faithfulness scores are claimed yet.
+The API now provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. Live retrieval and all three golden demo questions pass through Groq and AI Gateway, with native structured final answers and unchanged citation/grounding checks. See [provider routing](docs/provider-routing.md). Evaluation scoring, the web client, and deployment remain later phases. No retrieval-quality or faithfulness scores are claimed yet.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ make setup
 cp .env.example .env
 ```
 
-Edit `.env` locally and supply `GEMINI_API_KEY`, `LLM_MODEL`, and `LLM_MODEL_LITE` for chat configuration. Text embeddings default to local FastEmbed with `EMBEDDING_MODEL=intfloat/multilingual-e5-large` and `EMBEDDING_DIMENSIONS=1024`. The optional Gemini embedding path requires an explicit provider, model, and dimension change. Keep `USE_AI_GATEWAY=false` for direct Google access, or configure the gateway as described in the configuration guide.
+Edit `.env` locally and supply `LLM_MODEL`, `LLM_MODEL_LITE`, and the corresponding provider key (`GROQ_API_KEY`, `GEMINI_API_KEY`, or optional `CEREBRAS_API_KEY`) for chat configuration. Text embeddings default to local FastEmbed with `EMBEDDING_MODEL=intfloat/multilingual-e5-large` and `EMBEDDING_DIMENSIONS=1024`. The optional Gemini embedding path requires an explicit provider, model, and dimension change. Keep `USE_AI_GATEWAY=false` for direct provider access, or configure the gateway as described in the configuration guide.
 
 ```sh
 make dev
@@ -117,3 +117,15 @@ Image embeddings are provided by The Metropolitan Museum of Art through [metmuse
 This is a modified derivative: 20,000 public-domain records are selected, metadata is normalized, retrieval text is assembled, local text embeddings are generated, and published image vectors are joined by Object ID into a Qdrant index. Raw metadata fields and source URLs are retained. Text uses `intfloat/multilingual-e5-large` with 1,024 dimensions; model weights have their own MIT license. Snapshot manifests record the provider, model, dimensions, image source revision, coverage, and artifact hashes.
 
 This project is not affiliated with or endorsed by The Metropolitan Museum of Art. Museum logos and trademarks are not used as project branding. The source code is MIT licensed. Visitor website extracts retain their original ownership and are not covered by the collection dataset's CC0 license.
+
+## Phase 2 demo measurement
+
+Measured September 4, 2026 with GPT-OSS 120B main, GPT-OSS 20B lite, local E5 retrieval, and free-tier pacing:
+
+| Question | Verified result | Route | End-to-end latency | Standard-price estimate |
+| --- | --- | --- | --- | --- |
+| Temple of Dendur gallery | Gallery 131, Object 547802 | lite | 75.125 s | $0.000766275 |
+| Fifth Avenue on Wednesdays | Closed, captured Plan Your Visit hours table | main | 8.332 s | $0.001025700 |
+| Meaning of Wheat Field with Cypresses | Non-interpretive policy refusal | main policy, lite classification | 0.320 s | $0.000061200 |
+
+Dendur spent 58.311 s waiting for the 8,000-TPM model budget, 2.733 s in provider calls, and 14.077 s in tools/service overhead including cold model startup. No retries or fallback occurred. These results do not imply sub-second end-to-end retrieval or unlimited free throughput. The checked-in [price table](api/src/met_agent/llm/cost.py) uses Groq's published standard input/output rates and reported tokens for every model call, including guardrails; it estimates equivalent inference cost, not a charge on the free tier. Local CPU and infrastructure costs are excluded.

@@ -2,9 +2,11 @@
 
 import asyncio
 import json
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from pydantic import ValidationError
@@ -44,8 +46,12 @@ async def run(settings: Settings, *, app: Any = None) -> int:
         for question_id in DEMO_IDS:
             row = questions[question_id]
             print(f"\n{question_id}: {row.question}", flush=True)
+            session_id = str(uuid4())
+            started = time.monotonic()
             try:
-                response = await client.post("/chat", json={"message": row.question})
+                response = await client.post(
+                    "/chat", json={"message": row.question, "session_id": session_id}
+                )
                 response.raise_for_status()
                 answer = parse_answer(response.text)
                 print(f"Answer: {answer.text}")
@@ -61,6 +67,26 @@ async def run(settings: Settings, *, app: Any = None) -> int:
                     "estimated cost USD: "
                     f"{answer.cost_usd if answer.cost_usd is not None else 'unavailable'}"
                 )
+                print(
+                    "Timing ms: "
+                    + json.dumps(
+                        {
+                            "pacing": round(sum(call.pacing_ms for call in answer.model_calls), 1),
+                            "provider": round(
+                                sum(call.provider_ms for call in answer.model_calls), 1
+                            ),
+                            "retry": round(sum(call.retry_ms for call in answer.model_calls), 1),
+                            "tools_and_service": round(
+                                max(
+                                    0,
+                                    answer.latency_ms
+                                    - sum(call.latency_ms for call in answer.model_calls),
+                                ),
+                                1,
+                            ),
+                        }
+                    )
+                )
                 print("Model paths: " + ", ".join(call.path for call in answer.model_calls))
                 records.append({"id": question_id, "answer": answer.model_dump(mode="json")})
                 if (
@@ -71,8 +97,26 @@ async def run(settings: Settings, *, app: Any = None) -> int:
                     failed = True
             except (RuntimeError, ValueError, ValidationError, httpx.HTTPError) as error:
                 print(f"FAILED: {error}", flush=True)
-                records.append({"id": question_id, "error": str(error)})
+                records.append(
+                    {
+                        "id": question_id,
+                        "session_id": session_id,
+                        "error": str(error),
+                        "latency_ms": (time.monotonic() - started) * 1000,
+                    }
+                )
                 failed = True
+            events_response = await client.get(
+                f"/sessions/{session_id}/events", params={"limit": 500}
+            )
+            events = events_response.json() if events_response.is_success else []
+            records[-1]["events"] = events
+            if "error" in records[-1] or any(
+                item["kind"] in {"repair", "validation_error"}
+                or (item["kind"] == "guardrail" and item["data"].get("score", 1) < 1)
+                for item in events
+            ):
+                print(f"Session events ({session_id}): " + json.dumps(events, ensure_ascii=False))
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     (settings.data_dir / "demo-check.json").write_text(
         json.dumps(records, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

@@ -16,7 +16,7 @@ Department filters use exact values. Date filters select overlapping object date
 
 ## Visitor capture
 
-The supplied Chrome save was ingested into `met_visitor_info` as 28 chunks. The source is `https://www.metmuseum.org/plan-your-visit`, captured at `2026-09-04T08:49:28.645305+00:00` from file mtime. The document has no canonical link, so discovery used Chrome's original-URL comment and persisted that provenance in the local manifest. No manual manifest was required. Browser asset folders were excluded; meaningful image alt text was retained, without inferring floor-plan details.
+Nine supplied Chrome pages were ingested into `met_visitor_info` as 191 chunks and verified against all prepared IDs and payloads. Each capture records its source URL and file mtime in the local manifest. The original Plan Your Visit capture remains `2026-09-04T08:49:28.645305+00:00`. Discovery used Chrome's original-URL comments where canonical links were absent. No manual manifest was required. Every passage fits the pinned E5 tokenizer's 512-token limit, including prefix and special tokens. Browser asset folders are excluded. The map capture contains category labels only; no room connections or directions are inferred.
 
 Visitor answers cite the source URL and can use the returned capture timestamp. File mtime is a capture-time proxy chosen for these saved files, not a claim about when the museum last updated the page. Copying or editing a file may change it. Reuse the generated manifest to preserve the accepted capture metadata.
 
@@ -54,7 +54,7 @@ Versioned runtime prompts live in `api/prompts/`, are packaged in wheels, and ha
 
 ## Providers, cost, and observability
 
-Chat uses explicit credentials and exact configured Google model identifiers through LiteLLM. With AI Gateway enabled, Google calls use its provider-native gateway path and gateway authorization header. Embeddings continue to run locally unless Gemini is explicitly configured. Authentication and model-not-found failures do not trigger fallback. Only exhausted rate-limit or timeout failures may use configured Groq, directly, with its separate credential.
+Chat uses explicit provider credentials through LiteLLM, with per-model token and request pacing, independently optional fallbacks, and provider-native AI Gateway paths. See [provider routing](provider-routing.md) for verified model availability, limits, and failure handling. Local embeddings remain the default.
 
 `cost_usd` sums estimates for successful model responses, including routing, drafting, verification, and repair calls. Unknown model pricing produces `null`, not a fabricated zero. Estimates use LiteLLM's available price catalog and reported token usage; they are not invoices and exclude infrastructure, gateway charges, and any unreported charges for failed requests. Latency is measured wall time and includes retrieval and guardrails.
 
@@ -70,6 +70,6 @@ make demo-check
 
 This calls the real FastAPI `/chat` route through an ASGI HTTP transport for `col-003`, `vis-001`, and `ref-001`. It prints answer, citations, route, latency, estimated cost, and actual model paths. It saves a local `data/demo-check.json` report and exits nonzero on a provider error, failed verification, absent factual citations, or missing policy refusal. It is a smoke test, not the Phase 3 evaluator.
 
-On September 4, 2026, live collection and visitor searches returned results, and image similarity returned published-vector neighbors. The Met API returned gallery 131 for object 547802 and gallery 851 for object 488978. The three-question live demo stopped on HTTP 403 from Google through AI Gateway before drafting. Google's upstream response described a project-level access denial. Restore access for the configured Google project or supply a key from an authorized working project in the local `.env`, then rerun the command. Creating a `workers.dev` domain does not resolve that denial.
+On September 4, 2026, live collection, visitor, and image searches worked. The visitor index contains nine pages and 191 verified chunks; the object collection remains at 20,000. Tables in complementary HTML sections are preserved, including the saved opening-hours table. Only three newly extracted texts required embedding during the repair; unchanged texts reused byte-identical vectors after index identity validation.
 
-Offline tests use controlled responses for routing, multilingual policy, unseen citations, one unsupported claim, the six-call budget, terminal handoff, SSE buffering, audit redaction, and MCP validation. They do not claim that the live classifier passes the golden set. Phase 3 will measure retrieval and answer quality once live model access works.
+The final Groq demo passed all three golden questions: Dendur in Gallery 131, Fifth Avenue closed on Wednesdays, and the non-interpretive refusal. Both factual answers passed the existing citation and atomic grounding checks. Earlier failures are preserved in local session logs. Final answers use Groq's native strict schema in a separate no-tool call; the wire citation source maps back to the original public citation type before verification. See the [README measurement](../README.md#phase-2-demo-measurement) for latency, costs, and limitations. Phase 2 stops here; evaluation scoring, web UI, and deployment remain later phases.

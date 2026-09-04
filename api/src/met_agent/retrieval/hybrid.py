@@ -1,8 +1,10 @@
 """Fuse dense and BM25 candidates, preserve score evidence, and rerank bounded results."""
 
+import time
 from collections.abc import Sequence
 from typing import Protocol
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from qdrant_client import models
 
@@ -105,10 +107,12 @@ class HybridRetriever:
     ) -> list[tuple[models.ScoredPoint, ScoreBreakdown]]:
         if not query.strip() or not 1 <= k <= 40:
             raise ValueError("Search requires a query and k from 1 to 40")
+        started = time.monotonic()
         vector = self.store.embed_query(query, self.dense)
         sparse_vectors = self.sparse.embed([query])
         if len(sparse_vectors) != 1:
             raise IndexCompatibilityError("Sparse query vector count differs from input")
+        embedded = time.monotonic()
         condition = filters.qdrant() if filters else None
         dense = self.store.client.query_points(
             self.store.collection,
@@ -141,7 +145,15 @@ class HybridRetriever:
         texts = [str((points[point_id].payload or {}).get("text", "")) for point_id in ordered]
         if any(not text for text in texts):
             raise IndexCompatibilityError("Retrieved records lack their indexed text")
+        searched = time.monotonic()
         reranked = self.reranker.score(query, texts)
+        structlog.get_logger(__name__).info(
+            "retrieval_timing",
+            query_embedding_ms=(embedded - started) * 1000,
+            vector_search_ms=(searched - embedded) * 1000,
+            rerank_ms=(time.monotonic() - searched) * 1000,
+            candidates=len(texts),
+        )
         if len(reranked) != len(ordered):
             raise IndexCompatibilityError("Reranker score count differs from candidates")
         results = [

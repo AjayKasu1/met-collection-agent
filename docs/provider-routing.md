@@ -14,7 +14,7 @@ As checked on September 4, 2026, [Groq's published free limits](https://console.
 
 The built-in minute budgets cover the two Groq GPT-OSS models and Cerebras GPT-OSS 120B (30,000 uncached TPM and 5 RPM). Override them with `LLM_RATE_LIMITS`, a JSON object keyed by the exact configured model, with `tokens_per_minute` and `requests_per_minute` positive integers. A supplied object replaces the built-in map. Unlisted models use the conservative configurable defaults of 6,000 TPM and 5 RPM. `LLM_PACING_ENABLED=false` is intended for isolated tests, not quota bypass.
 
-## Live Phase 2 demo
+## Initial live Phase 2 demo
 
 The September 4 demo used temporary process settings, leaving the local dotenv file unchanged:
 
@@ -29,8 +29,12 @@ Groq chat through AI Gateway succeeded. The full three-question demo did not pas
 
 ## Native final answers, costs, and timing
 
-Groq's [structured-output contract](https://console.groq.com/docs/structured-outputs) supports strict JSON Schema on GPT-OSS 120B and 20B, but excludes simultaneous tool use. Tool selection therefore uses a separate prompt that does not ask for a final JSON answer. Once selection ends, a no-tool call composes the final answer with `response_format.type=json_schema` and `strict=true`. Pydantic schemas are closed recursively, with nullable fields retained and all properties required. Server-side citation identity, verbatim quotes, language, and atomic grounding checks remain unchanged. The same native format is used for intent and grounding on supported Groq models.
+Groq's [structured-output contract](https://console.groq.com/docs/structured-outputs) supports strict JSON Schema on GPT-OSS 120B and 20B, but excludes simultaneous tool use. Tool selection therefore uses a separate prompt that does not ask for a final JSON answer. Once selection ends, a no-tool call composes the final answer with `response_format.type=json_schema` and `strict=true`. Pydantic schemas are closed recursively and all properties are required. Final citations use a nested wire source with disjoint Object ID or URL variants to satisfy Groq's strict decoder. The adapter converts that source back to the unchanged public citation type before verification. Server-side citation identity, verbatim quotes, language, and atomic grounding checks remain unchanged. The same native format is used for intent and grounding on supported Groq models.
 
 The checked-in price table uses [Groq's standard inference prices](https://console.groq.com/docs/models), verified September 4, 2026: GPT-OSS 120B costs $0.15 input and $0.60 output per million tokens; GPT-OSS 20B costs $0.075 input and $0.30 output per million tokens. Each query sums reported input and completion usage across every model call, including guardrails. These are standard-price estimates, not a claim of charges on a free account. Unknown model prices remain unavailable. No unverified cached-token discount is assumed.
 
 Each model-call record separates `pacing_ms`, `provider_ms`, and `retry_ms`. Tool durations are separate `tool_timing` events. Demo output reports those components plus remaining tool and service overhead. Cold local model loading and free-tier minute-budget waits are included in end-to-end latency; neither is hidden as provider inference time.
+
+## Verified rerun
+
+After fixing the provider wire schema and preserving saved hours tables, all three demo questions passed without relaxing citation or grounding checks. The main model remains GPT-OSS 120B; no model substitution was required. Dendur used the lite route and cited Object 547802, the visitor answer used main and cited the captured Plan Your Visit table, and the interpretive request returned the configured refusal. See the [README measurement](../README.md#phase-2-demo-measurement) for actual prices and latency. Earlier failed event logs remain local and are not published.
