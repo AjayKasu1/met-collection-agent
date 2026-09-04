@@ -9,6 +9,8 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field, ValidationError
 from qdrant_client import models
 
+from met_agent.retrieval.schema import EmbeddingIdentity
+
 
 class EmbeddingError(RuntimeError):
     """A sanitized provider failure, safe to print without leaking keys or request data."""
@@ -83,6 +85,10 @@ class SparseEmbedder(Protocol):
     def embed(self, texts: Sequence[str]) -> list[models.SparseVector]: ...
 
 
+class IdentifiedEmbedder(DenseEmbedder, Protocol):
+    identity: EmbeddingIdentity
+
+
 class _Vector(BaseModel):
     index: int = Field(ge=0)
     embedding: list[float] = Field(min_length=1)
@@ -95,11 +101,20 @@ class _Response(BaseModel):
 class GeminiEmbedder:
     """Use a configured Router and reject malformed, reordered, or non-finite vectors."""
 
-    def __init__(self, router: EmbeddingTransport, *, output_dimensionality: int = 768) -> None:
+    def __init__(
+        self,
+        router: EmbeddingTransport,
+        *,
+        output_dimensionality: int = 768,
+        model_name: str = "gemini-embedding-001",
+    ) -> None:
         if output_dimensionality <= 0 or output_dimensionality > 3072:
             raise ValueError("Embedding output dimensionality must be between 1 and 3072")
         self.router = router
         self.output_dimensionality = output_dimensionality
+        self.identity = EmbeddingIdentity(
+            provider="gemini", model=model_name, dimensions=output_dimensionality
+        )
 
     def embed(
         self, texts: Sequence[str], *, purpose: Literal["document", "query"] = "document"

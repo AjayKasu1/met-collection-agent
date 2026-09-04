@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml==6.0.3",
     "qdrant-client==1.19.0",
     "structlog==26.1.0",
+    "tokenizers==0.23.2",
     "uvicorn==0.52.4",
 ]
 

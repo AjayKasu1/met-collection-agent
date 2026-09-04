@@ -852,6 +852,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "structlog" },
+    { name = "tokenizers" },
     { name = "uvicorn" },
 ]
 
@@ -883,6 +884,7 @@ requires-dist = [
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "qdrant-client", specifier = "==1.19.0" },
     { name = "structlog", specifier = "==26.1.0" },
+    { name = "tokenizers", specifier = "==0.23.2" },
     { name = "uvicorn", specifier = "==0.52.4" },
 ]
 
