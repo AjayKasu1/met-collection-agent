@@ -50,3 +50,10 @@ seed:
 
 demo-check:
 	$(UV) run --project api --locked python api/scripts/demo_check.py
+
+.PHONY: evals evals-quick
+evals:
+	$(UV) run --project api --locked python evals/run_evals.py $(ARGS)
+
+evals-quick:
+	$(UV) run --project api --locked python evals/run_evals.py --quick $(ARGS)

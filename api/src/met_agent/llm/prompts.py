@@ -5,11 +5,11 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Literal
 
-PromptName = Literal["system_v1", "tools_v1", "intent_v1", "grounding_v1"]
+PromptName = Literal["system_v1", "tools_v1", "intent_v1", "grounding_v1", "evaluation_v1"]
 
 
 def load_prompt(name: PromptName) -> str:
-    if name not in {"system_v1", "tools_v1", "intent_v1", "grounding_v1"}:
+    if name not in {"system_v1", "tools_v1", "intent_v1", "grounding_v1", "evaluation_v1"}:
         raise ValueError("Unknown prompt version")
     resource = files("met_agent").joinpath("prompts", name + ".md")
     if resource.is_file():

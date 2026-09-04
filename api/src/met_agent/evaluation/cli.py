@@ -1,0 +1,86 @@
+"""Command-line entry point for reproducible full and quick evaluations."""
+
+import argparse
+import asyncio
+import hashlib
+import json
+import subprocess
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+
+from met_agent.config import load_settings
+from met_agent.evaluation.models import EvalRow, Report
+from met_agent.evaluation.publishing import publish
+from met_agent.evaluation.reporting import save
+from met_agent.evaluation.runner import run
+from met_agent.evaluation.scoring import regression, summarize
+from met_agent.llm.prompts import prompt_hash
+from met_agent.llm.providers import configured_models
+from met_agent.runtime import Runtime
+
+
+def read_rows(path: Path, *, quick: bool) -> list[EvalRow]:
+    rows = [
+        EvalRow.model_validate_json(line) for line in path.read_text().splitlines() if line.strip()
+    ]
+    if len({r.id for r in rows}) != len(rows):
+        raise ValueError("Duplicate golden IDs")
+    selected = [r for r in rows if not r.verify] if quick else rows
+    if not selected or (quick and len(selected) != 10):
+        raise ValueError("Quick suite requires exactly ten verify:false rows; full cannot be empty")
+    return selected
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--quick", action="store_true")
+    parser.add_argument("--golden", type=Path, default=Path("evals/golden.jsonl"))
+    parser.add_argument("--output-dir", type=Path, default=Path("evals/reports"))
+    parser.add_argument("--resume", type=Path)
+    parser.add_argument("--baseline", type=Path)
+    args = parser.parse_args(argv)
+    rows = read_rows(args.golden, quick=args.quick)
+    settings = load_settings()
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()  # noqa: S607
+    now = datetime.now(UTC)
+    report = Report(
+        run_id=f"{now:%Y-%m-%dT%H%M%S}-{sha[:8]}-{'quick' if args.quick else 'full'}",
+        git_sha=sha,
+        started_at=now.isoformat(),
+        suite="quick" if args.quick else "full",
+        golden_sha256=hashlib.sha256(args.golden.read_bytes()).hexdigest(),
+        prompt_sha256={
+            name: prompt_hash(name)
+            for name in ("system_v1", "tools_v1", "intent_v1", "grounding_v1", "evaluation_v1")
+        },
+        models=configured_models(settings),
+        expected_ids=[r.id for r in rows],
+    )
+    path = args.output_dir / (report.run_id + ".json")
+    if args.resume:
+        previous = Report.model_validate_json(args.resume.read_text())
+        for field in (
+            "git_sha",
+            "suite",
+            "golden_sha256",
+            "prompt_sha256",
+            "models",
+            "expected_ids",
+        ):
+            if getattr(previous, field) != getattr(report, field):
+                raise ValueError("Resume identity mismatch: " + field)
+        report, path = previous, args.resume
+    save(report, path)
+    runtime = Runtime(settings)
+    try:
+        asyncio.run(run(runtime, report, rows, path))
+        if runtime.telemetry:
+            publish(report, runtime.telemetry.client)
+    finally:
+        runtime.close()
+    print(json.dumps(summarize(report), indent=2))
+    print(f"Report: {path}")
+    if args.baseline:
+        return int(regression(report, Report.model_validate_json(args.baseline.read_text())))
+    return int(any(r.error for r in report.results))
