@@ -1,5 +1,6 @@
 """Verify capture provenance and local-file boundaries without crawling or provider requests."""
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,29 @@ import yaml
 from met_agent.ingestion import saved_pages
 from met_agent.ingestion.http import SourceError
 from met_agent.ingestion.saved_pages import load_saved_pages
+
+
+@pytest.mark.parametrize("canonical", [True, False])
+def test_browser_save_discovery_records_source_and_mtime(tmp_path: Path, canonical: bool) -> None:
+    url = "https://www.metmuseum.org/plan-your-visit"
+    source = (
+        f'<link rel="canonical" href="{url}">'
+        if canonical
+        else (f"<!-- saved from url=(0041){url} -->")
+    )
+    page = tmp_path / "Visit.html"
+    page.write_text(source + "<title>Visit</title><main>Closed Wednesday.</main>")
+    os.utime(page, (1000, 1000))
+    assets = tmp_path / "Visit_files"
+    assets.mkdir()
+    (assets / "tracker.html").write_text("Unrelated advertising frame")
+    loaded = load_saved_pages(tmp_path)
+    assert len(loaded) == 1 and loaded[0].url == url
+    assert loaded[0].fetched_at == datetime.fromtimestamp(1000, UTC)
+    assert loaded[0].provenance.endswith("file_mtime")
+    assert (tmp_path / "sources.yaml").exists()
+    os.utime(page, (2000, 2000))
+    assert load_saved_pages(tmp_path)[0].fetched_at == loaded[0].fetched_at
 
 
 @pytest.fixture

@@ -81,8 +81,22 @@ def html_to_markdown(html: str) -> tuple[str, str]:
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
     candidate = soup.find("main") or soup.find("article") or soup.body
     content = candidate if isinstance(candidate, Tag) else soup
+    for picture in content.find_all("picture"):
+        picture.unwrap()
+    for image in content.find_all("img"):
+        image.replace_with(str(image.get("alt") or ""))
     for element in content.find_all(
-        ["script", "style", "nav", "footer", "header", "aside", "noscript"]
+        [
+            "script",
+            "style",
+            "nav",
+            "footer",
+            "header",
+            "aside",
+            "noscript",
+            "iframe",
+            "svg",
+        ]
     ):
         element.decompose()
     for anchor in content.find_all("a", href=True):

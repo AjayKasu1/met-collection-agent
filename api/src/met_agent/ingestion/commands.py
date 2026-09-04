@@ -297,17 +297,19 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
                         url=url,
                         html=html,
                         fetched_at=datetime.now(UTC),
+                        provenance="live_http",
                     )
                 )
     for content in pages:
         title, markdown = html_to_markdown(content.html)
+        page_chunks = chunk_markdown(
+            markdown,
+            source_url=content.url,
+            page_title=title or content.label,
+            fetched_at=content.fetched_at,
+        )
         chunks.extend(
-            chunk_markdown(
-                markdown,
-                source_url=content.url,
-                page_title=title or content.label,
-                fetched_at=content.fetched_at,
-            )
+            chunk.model_copy(update={"provenance": content.provenance}) for chunk in page_chunks
         )
         logger.info(
             "visitor_page_prepared", source_url=content.url, saved_html=args.html_dir is not None

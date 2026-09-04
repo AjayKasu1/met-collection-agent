@@ -92,6 +92,7 @@ class VisitorChunk(BaseModel):
     section_heading: str
     fetched_at: datetime
     chunk_index: int
+    provenance: str = "explicit_manifest"
     text: str
 
     def document(self) -> IndexDocument:
