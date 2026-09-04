@@ -26,3 +26,11 @@ CEREBRAS_API_KEY= make demo-check
 ```
 
 Groq chat through AI Gateway succeeded. The full three-question demo did not pass: the collection and visitor questions returned HTTP 400 before a verified final answer. A diagnostic replay identified `tool_use_failed`: the model attempted an unregistered tool named `json`. The interpretive question correctly returned the policy refusal. No grounding or citation rules were relaxed, and no provider fallback was used. Unknown pricing is reported as unavailable rather than zero. Local reports and session events are excluded from Git.
+
+## Native final answers, costs, and timing
+
+Groq's [structured-output contract](https://console.groq.com/docs/structured-outputs) supports strict JSON Schema on GPT-OSS 120B and 20B, but excludes simultaneous tool use. Tool selection therefore uses a separate prompt that does not ask for a final JSON answer. Once selection ends, a no-tool call composes the final answer with `response_format.type=json_schema` and `strict=true`. Pydantic schemas are closed recursively, with nullable fields retained and all properties required. Server-side citation identity, verbatim quotes, language, and atomic grounding checks remain unchanged. The same native format is used for intent and grounding on supported Groq models.
+
+The checked-in price table uses [Groq's standard inference prices](https://console.groq.com/docs/models), verified September 4, 2026: GPT-OSS 120B costs $0.15 input and $0.60 output per million tokens; GPT-OSS 20B costs $0.075 input and $0.30 output per million tokens. Each query sums reported input and completion usage across every model call, including guardrails. These are standard-price estimates, not a claim of charges on a free account. Unknown model prices remain unavailable. No unverified cached-token discount is assumed.
+
+Each model-call record separates `pacing_ms`, `provider_ms`, and `retry_ms`. Tool durations are separate `tool_timing` events. Demo output reports those components plus remaining tool and service overhead. Cold local model loading and free-tier minute-budget waits are included in end-to-end latency; neither is hidden as provider inference time.

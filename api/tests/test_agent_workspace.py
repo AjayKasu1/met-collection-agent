@@ -8,7 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from met_agent.agent.events import EventStore
 from met_agent.agent.loop import Agent
@@ -40,6 +40,7 @@ class ScriptedModel:
         messages: list[dict[str, Any]],
         *,
         tools: list[dict[str, object]] | None = None,
+        response_schema: type[BaseModel] | None = None,
     ) -> Reply:
         self.calls.append((route, json.loads(json.dumps(messages)), tools))
         reply = self.replies.pop(0)

@@ -53,7 +53,10 @@ class Agent:
         audit("user_message", {"message": request.message, "language_hint": request.language})
         audit(
             "prompt_versions",
-            {name: prompt_hash(name) for name in ("system_v1", "intent_v1", "grounding_v1")},
+            {
+                name: prompt_hash(name)
+                for name in ("system_v1", "tools_v1", "intent_v1", "grounding_v1")
+            },
         )
         try:
             intent = await structured(
@@ -132,7 +135,7 @@ class Agent:
         audit: Callable[[str, JsonValue], None],
     ) -> AgentAnswer:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": load_prompt("system_v1")},
+            {"role": "system", "content": load_prompt("tools_v1")},
             *history,
             {"role": "user", "content": request.message},
             {
@@ -141,7 +144,6 @@ class Agent:
                     {
                         "detected_language": intent.language,
                         "english_search_query": intent.search_query,
-                        "final_schema": AgentDraft.model_json_schema(),
                     }
                 ),
             },
@@ -154,6 +156,7 @@ class Agent:
                 intent.route,
                 messages,
                 tools=self.tools.schemas if tool_count < MAX_TOOL_CALLS else None,
+                response_schema=AgentDraft,
             )
             calls = reply.message.get("tool_calls") or []
             if not isinstance(calls, list) or any(
@@ -183,7 +186,12 @@ class Agent:
                     if not isinstance(arguments, str):
                         arguments = json.dumps(arguments)
                     audit("tool_call", {"name": name, "arguments": arguments, "number": tool_count})
+                    tool_started = time.monotonic()
                     result = await self.tools.execute(name, arguments)
+                    audit(
+                        "tool_timing",
+                        {"name": name, "latency_ms": (time.monotonic() - tool_started) * 1000},
+                    )
                     audit(
                         "validation_error" if result.error else "tool_result",
                         result.model_dump(mode="json"),

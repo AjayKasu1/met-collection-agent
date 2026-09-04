@@ -6,6 +6,13 @@ from typing import Any
 
 from met_agent.agent.models import ModelCall
 
+# USD per million tokens, standard inference prices verified 2026-09-04.
+# Source: https://console.groq.com/docs/models
+GROQ_PRICES: dict[str, tuple[float, float]] = {
+    "groq/openai/gpt-oss-120b": (0.15, 0.60),
+    "groq/openai/gpt-oss-20b": (0.075, 0.30),
+}
+
 
 @dataclass
 class CallLedger:
@@ -21,6 +28,12 @@ class CallLedger:
 def estimate_cost(response: Any) -> float | None:
     from litellm import completion_cost
 
+    if response.model in GROQ_PRICES:
+        input_price, output_price = GROQ_PRICES[response.model]
+        return (
+            int(response.usage.prompt_tokens) * input_price
+            + int(response.usage.completion_tokens) * output_price
+        ) / 1_000_000
     try:
         result = float(completion_cost(completion_response=response))
         return result if math.isfinite(result) and result >= 0 else None

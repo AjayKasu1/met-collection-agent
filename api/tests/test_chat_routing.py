@@ -318,3 +318,50 @@ def test_retry_reserves_each_attempt_and_respects_retry_after(
     asyncio.run(model.complete("main", []))
     assert sleeps == [3]
     assert len(reservations) == 2 and reservations[0] == reservations[1]
+
+
+def test_native_final_schema_is_separate_from_tool_selection(settings: Settings) -> None:
+    from met_agent.agent.models import AgentDraft
+
+    ready = response()
+    ready.choices[0].message.content = "READY"
+    router = Router([ready, response()])
+    config = settings.model_copy(
+        update={"llm_model": "groq/openai/gpt-oss-120b", "groq_api_key": SecretStr("synthetic")}
+    )
+    asyncio.run(
+        LiteLLMChat(config, router=router).complete(
+            "main",
+            [
+                {"role": "user", "content": "Where?"},
+                {"role": "tool", "tool_call_id": "call", "content": "Gallery 131"},
+            ],
+            tools=[{"type": "function"}],
+            response_schema=AgentDraft,
+        )
+    )
+    first, final = router.calls
+    assert "tools" in first and "response_format" not in first
+    assert "tools" not in final
+    fmt = final["response_format"]
+    assert fmt["type"] == "json_schema" and fmt["json_schema"]["strict"] is True
+    schema = fmt["json_schema"]["schema"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["$defs"]["Citation"]["required"] == ["object_id", "source_url", "quote"]
+    assert "Gallery 131" in final["messages"][1]["content"]
+    assert all(message["role"] != "tool" for message in final["messages"])
+
+
+@pytest.mark.parametrize(
+    "model,input_price,output_price",
+    [
+        ("groq/openai/gpt-oss-120b", 0.15, 0.60),
+        ("groq/openai/gpt-oss-20b", 0.075, 0.30),
+    ],
+)
+def test_groq_prices_use_reported_tokens(
+    model: str, input_price: float, output_price: float
+) -> None:
+    result = response().model_copy(update={"model": model})
+    assert cost.estimate_cost(result) == pytest.approx((30 * input_price + 20 * output_price) / 1e6)

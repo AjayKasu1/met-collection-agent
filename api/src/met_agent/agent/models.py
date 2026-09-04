@@ -39,6 +39,9 @@ class ModelCall(BaseModel):
     route: str
     provider: ChatProvider = "gemini"
     path: Literal["ai_gateway", "direct_google", "direct_groq", "direct_cerebras"]
+    pacing_ms: float = Field(default=0, ge=0)
+    provider_ms: float = Field(default=0, ge=0)
+    retry_ms: float = Field(default=0, ge=0)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     cost_usd: float | None = Field(default=None, ge=0, allow_inf_nan=False)

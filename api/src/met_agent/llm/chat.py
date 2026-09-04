@@ -15,9 +15,11 @@ from met_agent.agent.models import ModelCall, Route
 from met_agent.config import Settings, model_provider
 from met_agent.llm.cost import CallLedger, estimate_cost
 from met_agent.llm.pacing import RequestBudgetError, TokenPacer, prompt_tokens
+from met_agent.llm.prompts import load_prompt
 from met_agent.llm.providers import chat_routes as chat_routes
 from met_agent.llm.providers import configured_models
 from met_agent.llm.providers import google_model as google_model
+from met_agent.llm.structured_output import response_format
 
 
 class ModelError(RuntimeError):
@@ -51,6 +53,7 @@ class ChatModel(Protocol):
         messages: list[dict[str, Any]],
         *,
         tools: list[dict[str, object]] | None = None,
+        response_schema: type[BaseModel] | None = None,
     ) -> Reply: ...
 
 
@@ -66,6 +69,7 @@ async def structured[T: BaseModel](
             },
             {"role": "user", "content": json.dumps(content, ensure_ascii=False)},
         ],
+        response_schema=schema,
     )
     try:
         return schema.model_validate_json(reply.text)
@@ -117,22 +121,51 @@ class LiteLLMChat:
         messages: list[dict[str, Any]],
         *,
         tools: list[dict[str, object]] | None = None,
+        response_schema: type[BaseModel] | None = None,
     ) -> Reply:
         from litellm.exceptions import RateLimitError, Timeout
 
+        if (
+            response_schema is not None
+            and response_schema.__name__ == "AgentDraft"
+            and not tools
+            and any(item.get("role") == "tool" for item in messages)
+        ):
+            messages = [
+                {"role": "system", "content": load_prompt("system_v1")},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "context": [
+                                item for item in messages if item.get("role") in {"user", "tool"}
+                            ]
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ]
         context = CURRENT_CALL.get()
         if context:
             context.audit(
                 "model_request", {"route": route, "messages": json.loads(json.dumps(messages))}
             )
+        output_limit = min(
+            self.settings.llm_max_output_tokens,
+            512
+            if tools
+            else 384
+            if response_schema and response_schema.__name__ == "Intent"
+            else 1024,
+        )
         options: dict[str, Any] = {
             "messages": messages,
             "temperature": 0,
-            "max_tokens": self.settings.llm_max_output_tokens,
+            "max_tokens": output_limit,
         }
         if tools:
             options["tools"] = tools
-        else:
+        elif response_schema is None:
             options["response_format"] = {"type": "json_object"}
         if self.callback is not None:
             options["input_callback"] = [self.callback]
@@ -141,34 +174,49 @@ class LiteLLMChat:
             options["metadata"] = {"trace_context": self.callback.metadata()}
         started = time.monotonic()
         actual_route = str(route)
+        pacing_ms = 0.0
+        provider_ms = 0.0
+        retry_ms = 0.0
         response = None
         try:
             candidates = [str(route)] + [k for k in self.models if k.startswith("fallback")]
             for candidate in candidates:
                 actual_route = candidate
                 model_name = self.models[candidate]
+                if response_schema is not None and not tools:
+                    options["response_format"] = response_format(response_schema, model_name)
                 if "gpt-oss" in model_name:
                     options["reasoning_effort"] = "low"
                 else:
                     options.pop("reasoning_effort", None)
                 for attempt in range(self.settings.llm_max_retries + 1):
+                    pacing_started = time.monotonic()
                     reservation = await self.pacer.reserve(
                         model_name,
                         prompt_tokens(model_name, messages, tools)
-                        + self.settings.llm_max_output_tokens,
+                        + output_limit
+                        + (
+                            len(json.dumps(options.get("response_format", {})).encode("utf-8")) // 2
+                        ),
                     )
+                    pacing_ms += (time.monotonic() - pacing_started) * 1000
+                    provider_started = time.monotonic()
                     try:
                         response = await self.router.acompletion(model=candidate, **options)
+                        provider_ms += (time.monotonic() - provider_started) * 1000
                         await self.pacer.reconcile(reservation, int(response.usage.total_tokens))
                         break
                     except (RateLimitError, Timeout) as error:
+                        provider_ms += (time.monotonic() - provider_started) * 1000
                         headers = getattr(getattr(error, "response", None), "headers", {})
                         try:
                             retry_after = max(0.0, float(headers.get("retry-after", 0)))
                         except (TypeError, ValueError):
                             retry_after = 0.0
                         if attempt < self.settings.llm_max_retries and retry_after <= 60:
+                            retry_started = time.monotonic()
                             await asyncio.sleep(max(2**attempt, retry_after))
+                            retry_ms += (time.monotonic() - retry_started) * 1000
                             continue
                         if candidate == candidates[-1]:
                             raise
@@ -219,7 +267,12 @@ class LiteLLMChat:
             else "direct_google",
             input_tokens=int(usage.prompt_tokens),
             output_tokens=int(usage.completion_tokens),
-            cost_usd=estimate_cost(response),
+            cost_usd=estimate_cost(
+                response.model_copy(update={"model": self.models[actual_route]})
+            ),
+            pacing_ms=pacing_ms,
+            provider_ms=provider_ms,
+            retry_ms=retry_ms,
             latency_ms=(time.monotonic() - started) * 1000,
         )
         message = response.choices[0].message.model_dump(exclude_none=True)
@@ -237,4 +290,21 @@ class LiteLLMChat:
                     "usage": call.model_dump(mode="json"),
                 },
             )
+        if tools and response_schema is not None and not message.get("tool_calls"):
+            # Groq forbids tools with structured output. Start a separate final-answer call.
+            final_messages = [
+                {"role": "system", "content": load_prompt("system_v1")},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "context": [
+                                item for item in messages if item.get("role") in {"user", "tool"}
+                            ]
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ]
+            return await self.complete(route, final_messages, response_schema=response_schema)
         return Reply(message)
