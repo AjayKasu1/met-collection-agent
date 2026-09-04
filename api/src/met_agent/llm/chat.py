@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import random
 import time
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -19,6 +20,7 @@ from met_agent.llm.pacing import RequestBudgetError, TokenPacer, prompt_tokens
 from met_agent.llm.providers import chat_routes as chat_routes
 from met_agent.llm.providers import configured_models
 from met_agent.llm.providers import google_model as google_model
+from met_agent.llm.recovery import failure_details, retry_delay
 from met_agent.llm.structured_output import decode_final, response_format
 
 
@@ -86,6 +88,8 @@ class LiteLLMChat:
         self.settings, self.callback = settings, callback
         self.models = configured_models(settings)
         self.pacer = TokenPacer(settings)
+        self.quarantined: set[str] = set()
+        self.cooldown_until: dict[str, float] = {}
         logging.getLogger(__name__).info(
             "Active model fallbacks: %s",
             {k: v for k, v in self.models.items() if k.startswith("fallback")},
@@ -171,6 +175,12 @@ class LiteLLMChat:
             for candidate in candidates:
                 actual_route = candidate
                 model_name = self.models[candidate]
+                if model_name in self.quarantined:
+                    raise ModelError("access_denied", "Provider access needs operator review")
+                if self.cooldown_until.get(model_name, 0) > time.monotonic():
+                    if candidate != candidates[-1]:
+                        continue
+                    raise ModelError("provider_unavailable", "Provider is temporarily unavailable")
                 if response_schema is not None and not tools:
                     options["response_format"] = response_format(
                         response_schema, model_name, catalog=citation_catalog
@@ -198,16 +208,19 @@ class LiteLLMChat:
                         break
                     except (RateLimitError, Timeout) as error:
                         provider_ms += (time.monotonic() - provider_started) * 1000
-                        headers = getattr(getattr(error, "response", None), "headers", {})
-                        try:
-                            retry_after = max(0.0, float(headers.get("retry-after", 0)))
-                        except (TypeError, ValueError):
-                            retry_after = 0.0
+                        details = failure_details(error, model=model_name, route=candidate)
+                        details["attempt"] = attempt + 1
+                        if context:
+                            context.audit("provider_attempt_failed", details)
+                        retry_after = retry_delay(details)
                         if attempt < self.settings.llm_max_retries and retry_after <= 60:
                             retry_started = time.monotonic()
-                            await asyncio.sleep(max(2**attempt, retry_after))
+                            await asyncio.sleep(
+                                max(random.SystemRandom().uniform(0, 2**attempt), retry_after)
+                            )
                             retry_ms += (time.monotonic() - retry_started) * 1000
                             continue
+                        self.cooldown_until[model_name] = time.monotonic() + max(30, retry_after)
                         if candidate == candidates[-1]:
                             raise
                         if context:
@@ -221,6 +234,8 @@ class LiteLLMChat:
                         break
                 if response is not None:
                     break
+        except ModelError:
+            raise
         except Exception as error:
             status = getattr(getattr(error, "response", None), "status_code", None) or getattr(
                 error, "status_code", None
@@ -234,7 +249,13 @@ class LiteLLMChat:
                 if status == 404
                 else "provider_unavailable"
             )
+            if status in (401, 403):
+                self.quarantined.add(self.models[actual_route])
             if context:
+                context.audit(
+                    "provider_failure",
+                    failure_details(error, model=self.models[actual_route], route=actual_route),
+                )
                 context.audit("model_error", {"code": code, "error_type": type(error).__name__})
             raise ModelError(
                 code,

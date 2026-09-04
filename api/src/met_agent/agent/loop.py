@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from pydantic import JsonValue
 
 from met_agent.agent.events import EventStore
+from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
 from met_agent.guardrails.intent import Intent
@@ -203,7 +204,11 @@ class Agent:
                             "content": result.model_context(),
                         }
                     )
-                    evidence.extend(result.model_evidence())
+                    evidence = pack_evidence(messages)
+                    audit(
+                        "evidence_context",
+                        [item.model_dump(mode="json", exclude_none=True) for item in evidence],
+                    )
                     if isinstance(result.output, Handoff):
                         audit("terminal_handoff", result.output.model_dump(mode="json"))
                         return self._answer(

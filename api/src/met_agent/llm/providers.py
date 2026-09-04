@@ -18,7 +18,11 @@ def configured_models(settings: Settings) -> dict[str, str]:
         ("fallback", settings.llm_model_fallback),
         ("fallback_2", settings.llm_model_fallback_2),
     ):
-        if model is not None and settings.provider_key(model_provider(model)) is not None:
+        if (
+            settings.llm_fallback_enabled
+            and model is not None
+            and settings.provider_key(model_provider(model)) is not None
+        ):
             models[alias] = model
     return {
         alias: google_model(model) if model_provider(model) == "gemini" else model

@@ -1,5 +1,6 @@
 """Own shared service resources; construction is deferred until the first workspace request."""
 
+import asyncio
 from uuid import uuid4
 
 import httpx
@@ -10,7 +11,7 @@ from met_agent.agent.loop import Agent
 from met_agent.agent.models import AgentAnswer, ChatRequest
 from met_agent.config import Settings
 from met_agent.ingestion.commands import qdrant_client
-from met_agent.llm.chat import LiteLLMChat
+from met_agent.llm.chat import LiteLLMChat, ModelError
 from met_agent.observability.tracing import Telemetry
 from met_agent.retrieval.service import SearchService
 from met_agent.tools.get_object import LiveObjectClient
@@ -49,9 +50,24 @@ class Runtime:
                 self.events,
             )
         request = request.model_copy(update={"session_id": request.session_id or uuid4()})
-        if self.telemetry:
-            return await self.telemetry.run(self.agent.run, request)
-        return await self.agent.run(request)
+        try:
+            async with asyncio.timeout(self.settings.chat_deadline_seconds):
+                if self.telemetry:
+                    return await self.telemetry.run(self.agent.run, request)
+                return await self.agent.run(request)
+        except TimeoutError:
+            if request.session_id is not None:
+                events = self.events.read(request.session_id, limit=500)
+                self.events.append(
+                    request.session_id,
+                    events[-1].turn_id if events else uuid4(),
+                    "turn_error",
+                    {"code": "verification_unavailable", "reason": "interactive_deadline"},
+                )
+            raise ModelError(
+                "verification_unavailable",
+                "A verified answer was not ready in time. Please try again shortly.",
+            ) from None
 
     def close(self) -> None:
         self.http.close()

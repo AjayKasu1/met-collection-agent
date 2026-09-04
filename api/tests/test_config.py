@@ -153,6 +153,7 @@ def test_complete_optional_services_are_enabled(
         "LANGFUSE_SECRET_KEY": "unit-test-secret-key",
         "LANGFUSE_BASE_URL": "https://localhost:3001",
         "GROQ_API_KEY": "unit-test-groq-key",
+        "LLM_FALLBACK_ENABLED": "true",
         "LLM_MODEL_FALLBACK": "test/fallback-model",
         "HF_DATASET_REPO": "test/collection",
         "R2_ENDPOINT_URL": "https://localhost:9000",

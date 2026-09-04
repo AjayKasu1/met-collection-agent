@@ -15,10 +15,16 @@ from met_agent.evaluation.scoring import score
 from met_agent.llm.chat import CURRENT_CALL, CallContext, ModelError, structured
 from met_agent.llm.prompts import load_prompt
 from met_agent.runtime import Runtime
-from met_agent.tools.models import CollectionSearchResult, ToolResult
+from met_agent.tools.models import CollectionSearchResult, Evidence, ToolResult
 
 
 def evidence(events: list[Event]) -> list[dict[str, object]]:
+    for event in reversed(events):
+        if event.kind == "evidence_context" and isinstance(event.data, list):
+            return [
+                Evidence.model_validate(item).model_dump(mode="json", exclude_none=True)
+                for item in event.data
+            ]
     records: dict[str, dict[str, object]] = {}
     for event in events:
         if event.kind in {"tool_result", "validation_error"}:

@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     embedding_threads: Annotated[int, Field(ge=1, le=64)] = 4
     llm_model_fallback: NonEmptyString | None = None
     llm_model_fallback_2: NonEmptyString | None = None
+    llm_fallback_enabled: bool = False
+    chat_deadline_seconds: Annotated[float, Field(gt=0, le=600)] = 30
     groq_api_key: Credential | None = Field(default=None, repr=False)
     cerebras_api_key: Credential | None = Field(default=None, repr=False)
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60
@@ -260,7 +262,8 @@ class Settings(BaseSettings):
         """Report configured integrations without claiming connectivity or readiness."""
         return OptionalServices(
             ai_gateway=self.use_ai_gateway,
-            fallback_llm=any(
+            fallback_llm=self.llm_fallback_enabled
+            and any(
                 model is not None and self.provider_key(model_provider(model)) is not None
                 for model in (self.llm_model_fallback, self.llm_model_fallback_2)
             ),

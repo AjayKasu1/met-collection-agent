@@ -20,6 +20,7 @@ def test_missing_fallback_keys_and_provider_keys(settings: Settings, caplog: Any
         update={
             "llm_model": "groq/openai/gpt-oss-120b",
             "llm_model_lite": "groq/openai/gpt-oss-20b",
+            "llm_fallback_enabled": True,
             "groq_api_key": SecretStr("synthetic-groq"),
             "llm_model_fallback": "cerebras/gpt-oss-120b",
             "llm_model_fallback_2": "groq/llama-3.3-70b-versatile",

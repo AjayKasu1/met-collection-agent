@@ -72,6 +72,7 @@ def test_explicit_routes_and_gateway(settings: Settings) -> None:
             "use_ai_gateway": True,
             "cf_ai_gateway_url": "https://gateway.ai.cloudflare.com/v1/account/gateway",
             "cf_ai_gateway_token": SecretStr("gateway-private"),
+            "llm_fallback_enabled": True,
             "llm_model_fallback": "groq/fallback",
             "groq_api_key": SecretStr("groq-private"),
         }
@@ -124,6 +125,7 @@ def test_fallback_is_only_for_quota_and_timeout(
     config = settings.model_copy(
         update={
             "llm_max_retries": 0,
+            "llm_fallback_enabled": True,
             "llm_model_fallback": "groq/fallback",
             "groq_api_key": SecretStr("synthetic"),
         }
@@ -183,6 +185,7 @@ def test_provider_failure_is_sanitized_without_fallback(
                 LiteLLMChat(
                     settings.model_copy(
                         update={
+                            "llm_fallback_enabled": True,
                             "llm_model_fallback": "groq/fallback",
                             "groq_api_key": SecretStr("synthetic"),
                         }
@@ -267,6 +270,7 @@ def test_missing_first_key_uses_second_and_403_stops_chain(settings: Settings) -
     config = settings.model_copy(
         update={
             "llm_max_retries": 0,
+            "llm_fallback_enabled": True,
             "llm_model_fallback": "cerebras/gpt-oss-120b",
             "llm_model_fallback_2": "groq/llama-3.3-70b-versatile",
             "groq_api_key": SecretStr("synthetic"),
