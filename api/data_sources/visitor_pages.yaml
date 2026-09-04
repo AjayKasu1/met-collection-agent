@@ -1,0 +1,15 @@
+# Public museum pages. The accessibility page supplies map guidance and the
+# official interactive-map link. No gallery adjacency is inferred from it.
+pages:
+  - label: Hours, admission, directions, and planning
+    url: https://www.metmuseum.org/plan-your-visit
+  - label: Complimentary admission
+    url: https://www.metmuseum.org/policies/complimentary-admission
+  - label: Accessibility, entrances, elevators, and map guidance
+    url: https://www.metmuseum.org/visit-guides/accessibility
+  - label: Bag, stroller, and visitor policies
+    url: https://www.metmuseum.org/policies/visitor-guidelines
+  - label: Current gallery closures
+    url: https://www.metmuseum.org/plan-your-visit/gallery-closures
+  - label: Contact information
+    url: https://www.metmuseum.org/about-the-met/contact-us
