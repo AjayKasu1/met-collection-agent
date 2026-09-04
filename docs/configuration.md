@@ -15,7 +15,7 @@ Run development commands from the repository root. The loader reads `.env` in th
 
 Required strings cannot be empty or whitespace. No model name is inferred. The scaffold validates these names as configuration but does not call the provider to check availability. A later model-not-found response must be resolved by checking the configured provider model.
 
-`.env.example` lists every supported setting and documents defaults. A test checks the set of keys against the settings schema. Blank optional environment values are ignored. Settings are immutable after loading; restart the process after changing configuration.
+`.env.example` lists every supported setting and documents defaults. A test checks the set of keys against the settings schema. Blank optional environment values are ignored. `LOG_LEVEL` accepts upper or lower case and is normalized before logging setup. Settings are immutable after loading; restart the process after changing configuration.
 
 ## Optional integration activation
 
@@ -36,7 +36,7 @@ Service URLs must use HTTP or HTTPS and cannot carry user credentials, query str
 
 - `GET /health` is a typed liveness response. It does not prove retrieval or model readiness.
 - `GET /docs` and `GET /openapi.json` expose the implemented API contract.
-- `CORS_ORIGINS` accepts a JSON array of explicit HTTP origins. Wildcards, credentials, paths, query strings, and fragments are rejected. An empty array disables cross-origin access. Cookies are not allowed by CORS.
+- `CORS_ORIGINS` accepts a JSON array or comma-separated list of explicit HTTP origins. Wildcards, credentials, paths, query strings, and fragments are rejected. An empty array disables cross-origin access. Cookies are not allowed by CORS.
 - Each HTTP response, including errors and CORS preflights, carries `X-Request-ID`. A supplied ID is accepted only if it is a single header, 1 to 128 characters, starts with an ASCII letter or digit, and contains only ASCII letters, digits, `.`, `_`, `:`, or `-`. Other values are replaced by a generated ID.
 - Requests log the route template, method, status, elapsed milliseconds, and request ID. Raw unmatched paths, query strings, headers, and bodies are omitted.
 - Unhandled exceptions return a generic JSON error with the request ID. Logs contain the exception class, not its potentially sensitive message. If a response stream already started, the connection fails with a sanitized exception instead of sending a second response.

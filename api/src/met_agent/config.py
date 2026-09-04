@@ -103,15 +103,24 @@ class Settings(BaseSettings):
         """Reject whitespace-only credentials and normalize copied configuration."""
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: object) -> object:
+        """Accept conventional lowercase log levels without relaxing allowed values."""
+        return value.strip().upper() if isinstance(value, str) else value
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: object) -> tuple[str, ...]:
-        """Accept JSON arrays of explicit HTTP origins, never wildcard credentials."""
+        """Accept JSON or comma-separated explicit origins, never wildcard credentials."""
         if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except json.JSONDecodeError:
-                raise ValueError("CORS_ORIGINS must be a JSON array of origins") from None
+            if value.lstrip().startswith(("[", '"', "{")):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    raise ValueError("CORS_ORIGINS contains invalid JSON") from None
+            else:
+                value = [origin.strip() for origin in value.split(",")]
         if not isinstance(value, list | tuple):
             raise ValueError("CORS_ORIGINS must be a JSON array of origins")
         origins: list[str] = []

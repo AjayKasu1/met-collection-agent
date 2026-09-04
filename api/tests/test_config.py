@@ -76,7 +76,6 @@ def test_invalid_values_fail_without_echoing_input(
 @pytest.mark.parametrize(
     "value",
     [
-        "http://localhost:3000",
         '"http://localhost:3000"',
         '["*"]',
         '["https://*.example.org"]',
@@ -200,3 +199,22 @@ def test_example_covers_every_typed_setting() -> None:
         if line.strip() and not line.startswith("#")
     }
     assert keys == {name.upper() for name in Settings.model_fields}
+
+
+def test_lowercase_log_level_and_comma_separated_origins(
+    valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "info")
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:3000, https://museum.example")
+    settings = load_settings(env_file=None)
+    assert settings.log_level == "INFO"
+    assert settings.cors_origins == ("http://localhost:3000", "https://museum.example")
+
+
+def test_malformed_cors_json_is_reported_without_input(
+    valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CORS_ORIGINS", '["private-input"')
+    with pytest.raises(ConfigurationError, match="CORS_ORIGINS") as error:
+        load_settings(env_file=None)
+    assert "private-input" not in str(error.value)
