@@ -86,6 +86,8 @@ def test_unicode_windows_and_section_boundaries() -> None:
     [
         "http://www.metmuseum.org/visit",
         "https://evil.example/visit",
+        "https://maps.metmuseum.org.evil.example/",
+        "https://unlisted.metmuseum.org/",
         "https://user@www.metmuseum.org/visit",
     ],
 )

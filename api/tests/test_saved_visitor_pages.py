@@ -14,8 +14,13 @@ from met_agent.ingestion.saved_pages import load_saved_pages
 
 
 @pytest.mark.parametrize("canonical", [True, False])
-def test_browser_save_discovery_records_source_and_mtime(tmp_path: Path, canonical: bool) -> None:
-    url = "https://www.metmuseum.org/plan-your-visit"
+@pytest.mark.parametrize(
+    "url",
+    ["https://www.metmuseum.org/plan-your-visit", "https://maps.metmuseum.org/?floor=1"],
+)
+def test_browser_save_discovery_records_source_and_mtime(
+    tmp_path: Path, canonical: bool, url: str
+) -> None:
     source = (
         f'<link rel="canonical" href="{url}">'
         if canonical

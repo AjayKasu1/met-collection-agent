@@ -12,7 +12,7 @@ from markdownify import markdownify
 from met_agent.ingestion.http import USER_AGENT, SourceClient, SourceError
 from met_agent.ingestion.models import VisitorChunk
 
-_HOSTS = frozenset({"www.metmuseum.org", "metmuseum.org"})
+_HOSTS = frozenset({"www.metmuseum.org", "metmuseum.org", "maps.metmuseum.org"})
 _TOKENS = re.compile(r"[\u3400-\u9fff]|[^\W_]{1,4}|[^\w\s]", re.UNICODE)
 
 
