@@ -49,9 +49,9 @@ Tests supply synthetic settings and never load the developer's `.env` or call an
 
 ```sh
 make qdrant
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --prepare-only"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --prepare-only"
 make verify-golden ARGS="--data-dir data/pilot"
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared --batch-delay-seconds 30"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --reuse-prepared --batch-delay-seconds 30"
 ```
 
 Preparation makes no model calls. The final command uses the configured embedding provider and Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md) and [snapshot publication and seeding](docs/index-artifacts.md).

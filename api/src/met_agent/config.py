@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     llm_model: NonEmptyString
     llm_model_lite: NonEmptyString
     embedding_model: NonEmptyString
+    embedding_dimensions: Annotated[int, Field(ge=128, le=3072)] = 768
     llm_model_fallback: NonEmptyString | None = None
     groq_api_key: Credential | None = Field(default=None, repr=False)
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60

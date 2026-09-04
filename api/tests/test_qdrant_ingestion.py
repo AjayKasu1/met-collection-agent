@@ -37,7 +37,7 @@ def local_store() -> Iterator[HybridStore]:
         client.close()
         pytest.skip("Local Qdrant is unavailable at 127.0.0.1:6333")
     name = "test_ingestion_" + uuid4().hex
-    store = HybridStore(client, name, "test-embedding-v1")
+    store = HybridStore(client, name, "test-embedding-v1", 4)
     try:
         yield store
     finally:
@@ -67,6 +67,8 @@ def test_twenty_object_hybrid_ingest_is_idempotent(local_store: HybridStore) -> 
     assert client.count(local_store.collection, exact=True).count == 20
     assert isinstance(info.config.params.vectors, dict)
     assert info.config.params.vectors["dense"].on_disk
+    assert info.config.metadata and info.config.metadata["dimensions"] == 4
+    assert info.config.metadata["schema_version"] == 2
     sparse = info.config.params.sparse_vectors
     assert sparse and sparse["sparse"].modifier == models.Modifier.IDF
     assert sparse["sparse"].index and sparse["sparse"].index.on_disk
@@ -77,7 +79,7 @@ def test_twenty_object_hybrid_ingest_is_idempotent(local_store: HybridStore) -> 
     assert points[0].payload and points[0].payload["raw_fields"] == {"Title": "Vessel 1"}
     assert isinstance(points[0].vector, dict) and set(points[0].vector) == {"dense", "sparse"}
     with pytest.raises(IndexCompatibilityError):
-        HybridStore(client, local_store.collection, "different-model").ensure_collection(4)
+        HybridStore(client, local_store.collection, "different-model", 4).ensure_collection(4)
     with pytest.raises(IndexCompatibilityError):
         local_store.ensure_collection(3)
 
@@ -107,7 +109,7 @@ def test_invalid_batch_size_is_rejected_without_network() -> None:
     client = QdrantClient(location=":memory:")
     try:
         with pytest.raises(ValueError):
-            HybridStore(client, "test", "test-model").ingest(
+            HybridStore(client, "test", "test-model", 4).ingest(
                 [], TestDense(), TestSparse(), batch_size=0
             )
     finally:
@@ -120,7 +122,7 @@ def test_batch_pacing_waits_only_between_batches_and_validates_delay(
     waits: list[float] = []
     monkeypatch.setattr("met_agent.retrieval.qdrant_store.time.sleep", waits.append)
     client = QdrantClient(location=":memory:")
-    store = HybridStore(client, "paced", "test-model")
+    store = HybridStore(client, "paced", "test-model", 4)
     monkeypatch.setattr(store, "ensure_collection", lambda _: None)
     monkeypatch.setattr(client, "upsert", lambda *a, **kw: None)
     documents = [IndexDocument(point_id=i, text="Vessel", payload={}) for i in range(1, 6)]
@@ -177,8 +179,11 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
             tmp_path / "bundle",
             {"collection": local_store.collection},
             local_store.embedding_model,
+            4,
         )
         assert manifest.indexes[0].points == 20
+        assert manifest.indexes[0].dimensions == 4
+        assert manifest.indexes[0].schema_version == 2
         try:
             restore_bundle(
                 client,
@@ -186,6 +191,7 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
                 tmp_path / "bundle",
                 {"collection": restored},
                 local_store.embedding_model,
+                4,
             )
             assert client.count(restored, exact=True).count == 20
             with pytest.raises(IndexCompatibilityError, match="overwrite"):
@@ -195,10 +201,16 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
                     tmp_path / "bundle",
                     {"collection": restored},
                     local_store.embedding_model,
+                    4,
                 )
             with pytest.raises(IndexCompatibilityError, match="EMBEDDING_MODEL"):
                 restore_bundle(
-                    client, http, tmp_path / "bundle", {"collection": "unused"}, "different-model"
+                    client,
+                    http,
+                    tmp_path / "bundle",
+                    {"collection": "unused"},
+                    "different-model",
+                    4,
                 )
             with pytest.raises(IndexCompatibilityError, match="payloads"):
                 verify_index(
@@ -219,7 +231,7 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
 @pytest.mark.filterwarnings("ignore:Payload indexes have no effect:UserWarning")
 def test_embedded_store_pairs_vectors_and_preserves_model_identity() -> None:
     client = QdrantClient(location=":memory:")
-    store = HybridStore(client, "offline", "test-model")
+    store = HybridStore(client, "offline", "test-model", 4)
     first, stale = str(uuid4()), str(uuid4())
     documents = [
         IndexDocument(
@@ -234,9 +246,20 @@ def test_embedded_store_pairs_vectors_and_preserves_model_identity() -> None:
         points = client.retrieve("offline", ids=[first], with_vectors=True)
         assert isinstance(points[0].vector, dict) and set(points[0].vector) == {"dense", "sparse"}
         with pytest.raises(IndexCompatibilityError):
-            HybridStore(client, "offline", "different-model").ensure_collection(4)
+            HybridStore(client, "offline", "different-model", 4).ensure_collection(4)
         store.remove_stale_page_chunks("https://museum/visit", [first])
         assert client.count("offline", exact=True).count == 1
+        client.update_collection(
+            "offline",
+            metadata={
+                "schema_version": 2,
+                "embedding_model": "test-model",
+                "sparse_model": "Qdrant/bm25",
+                "dimensions": 768,
+            },
+        )
+        with pytest.raises(IndexCompatibilityError, match="schema"):
+            store.ensure_collection(4)
     finally:
         client.close()
 
@@ -259,7 +282,7 @@ def test_bad_embedding_batches_never_write_unpaired_points(failure: str) -> None
             return [[1.0] * (self.calls + 2)]
 
     client = QdrantClient(location=":memory:")
-    store = HybridStore(client, "offline", "test-model")
+    store = HybridStore(client, "offline", "test-model", 3)
     documents = [IndexDocument(point_id=i, text="Vessel", payload={}) for i in (1, 2)]
     try:
         with pytest.raises(IndexCompatibilityError):

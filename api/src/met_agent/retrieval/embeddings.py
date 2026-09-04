@@ -20,7 +20,9 @@ class ModelUnavailableError(EmbeddingError):
 class EmbeddingTransport(Protocol):
     """Narrow typed seam around LiteLLM's provider response."""
 
-    def embedding(self, *, model: str, input: list[str], task_type: str) -> object: ...
+    def embedding(
+        self, *, model: str, input: list[str], task_type: str, dimensions: int
+    ) -> object: ...
 
 
 class DenseEmbedder(Protocol):
@@ -49,8 +51,11 @@ class _Response(BaseModel):
 class GeminiEmbedder:
     """Use a configured Router and reject malformed, reordered, or non-finite vectors."""
 
-    def __init__(self, router: EmbeddingTransport) -> None:
+    def __init__(self, router: EmbeddingTransport, *, output_dimensionality: int = 768) -> None:
+        if output_dimensionality <= 0 or output_dimensionality > 3072:
+            raise ValueError("Embedding output dimensionality must be between 1 and 3072")
         self.router = router
+        self.output_dimensionality = output_dimensionality
 
     def embed(
         self, texts: Sequence[str], *, purpose: Literal["document", "query"] = "document"
@@ -62,6 +67,8 @@ class GeminiEmbedder:
                 model="embedding",
                 input=list(texts),
                 task_type="RETRIEVAL_DOCUMENT" if purpose == "document" else "RETRIEVAL_QUERY",
+                # LiteLLM maps dimensions to Gemini's native outputDimensionality field.
+                dimensions=self.output_dimensionality,
             )
         except Exception as error:
             if (
@@ -78,12 +85,19 @@ class GeminiEmbedder:
             if [item.index for item in ordered] != list(range(len(texts))):
                 raise ValueError("Embedding response indices do not match the input batch")
             vectors = [item.embedding for item in ordered]
-            if len({len(vector) for vector in vectors}) != 1 or any(
+            if {len(vector) for vector in vectors} != {self.output_dimensionality} or any(
                 not all(math.isfinite(value) for value in vector) or not any(vector)
                 for vector in vectors
             ):
                 raise ValueError("Embedding response contains invalid vector values")
-            return vectors
+            # Gemini Embedding 1 requires normalization when requesting reduced dimensions.
+            normalized = []
+            for vector in vectors:
+                norm = math.hypot(*vector)
+                if not math.isfinite(norm) or norm == 0:
+                    raise ValueError("Embedding norm is invalid")
+                normalized.append([value / norm for value in vector])
+            return normalized
         except (ValidationError, ValueError):
             raise EmbeddingError(
                 "Embedding response failed shape and finite-value validation"

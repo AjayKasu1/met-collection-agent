@@ -148,11 +148,16 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
         "collection_prepared", objects=len(objects), images=sum(obj.has_image for obj in objects)
     )
     if not args.prepare_only:
-        dense = GeminiEmbedder(create_embedding_router(settings))
+        dense = GeminiEmbedder(
+            create_embedding_router(settings), output_dimensionality=settings.embedding_dimensions
+        )
         sparse = BM25Embedder(settings.data_dir / "models")
         with closing(qdrant_client(settings)) as client:
             store = HybridStore(
-                client, args.collection or settings.qdrant_collection, settings.embedding_model
+                client,
+                args.collection or settings.qdrant_collection,
+                settings.embedding_model,
+                settings.embedding_dimensions,
             )
             count = store.ingest(
                 [obj.document() for obj in objects],
@@ -234,13 +239,16 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
         raise SourceError("No visitor chunks were produced")
     save_chunks(output / "visitor_chunks.jsonl", chunks)
     if not args.prepare_only:
-        dense = GeminiEmbedder(create_embedding_router(settings))
+        dense = GeminiEmbedder(
+            create_embedding_router(settings), output_dimensionality=settings.embedding_dimensions
+        )
         sparse = BM25Embedder(settings.data_dir / "models")
         with closing(qdrant_client(settings)) as client:
             store = HybridStore(
                 client,
                 args.collection or settings.qdrant_visitor_collection,
                 settings.embedding_model,
+                settings.embedding_dimensions,
             )
             store.ingest(
                 [chunk.document() for chunk in chunks],
@@ -325,7 +333,13 @@ def publish_index(argv: Sequence[str] | None = None) -> int:
         collections["visitor"] = args.visitor_collection or settings.qdrant_visitor_collection
     with closing(qdrant_client(settings)) as client, _snapshot_http(settings) as http:
         export_bundle(
-            client, http, output, output / "bundle", collections, settings.embedding_model
+            client,
+            http,
+            output,
+            output / "bundle",
+            collections,
+            settings.embedding_model,
+            settings.embedding_dimensions,
         )
     print("Verified snapshot bundle exported")
     if args.upload:
@@ -372,6 +386,7 @@ def seed(argv: Sequence[str] | None = None) -> int:
                 "visitor": args.visitor_collection or settings.qdrant_visitor_collection,
             },
             settings.embedding_model,
+            settings.embedding_dimensions,
         )
     for name in manifest.files:
         if not name.endswith(".snapshot"):

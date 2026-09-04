@@ -13,7 +13,7 @@ from met_agent.retrieval.embeddings import DenseEmbedder, SparseEmbedder
 
 logger = structlog.get_logger(__name__)
 
-SCHEMA_VERSION: Literal[1] = 1
+SCHEMA_VERSION: Literal[2] = 2
 PAYLOAD_INDEXES = {
     "department": models.PayloadSchemaType.KEYWORD,
     "object_id": models.PayloadSchemaType.INTEGER,
@@ -32,17 +32,29 @@ class IndexCompatibilityError(RuntimeError):
 class HybridStore:
     """Share schema and vector validation across collection and visitor ingestion."""
 
-    def __init__(self, client: QdrantClient, collection: str, embedding_model: str) -> None:
+    def __init__(
+        self,
+        client: QdrantClient,
+        collection: str,
+        embedding_model: str,
+        embedding_dimensions: int = 768,
+    ) -> None:
+        if embedding_dimensions <= 0:
+            raise ValueError("Embedding dimensions must be positive")
         self.client = client
         self.collection = collection
         self.embedding_model = embedding_model
+        self.embedding_dimensions = embedding_dimensions
 
     def ensure_collection(self, dimensions: int) -> None:
         """Create a disk-backed quantized index, or verify an existing compatible one."""
+        if dimensions != self.embedding_dimensions:
+            raise IndexCompatibilityError("Embedding dimensions differ from the configured index")
         metadata = {
             "schema_version": SCHEMA_VERSION,
             "embedding_model": self.embedding_model,
             "sparse_model": "Qdrant/bm25",
+            "dimensions": self.embedding_dimensions,
         }
         if self.client.collection_exists(self.collection):
             info = self.client.get_collection(self.collection)
@@ -106,6 +118,8 @@ class HybridStore:
             raise ValueError("Embedding batch size must be positive")
         if not math.isfinite(batch_delay_seconds) or batch_delay_seconds < 0:
             raise ValueError("Embedding batch delay must be finite and nonnegative")
+        if documents and self.client.collection_exists(self.collection):
+            self.ensure_collection(self.embedding_dimensions)
         count = 0
         dimensions: int | None = None
         for offset in range(0, len(documents), batch_size):

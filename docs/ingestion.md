@@ -7,9 +7,9 @@ Run commands from the repository root after `make setup`. Configuration loads on
 Use a separate directory and collection so a small sample cannot be confused with a complete index:
 
 ```sh
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --prepare-only"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --prepare-only"
 make verify-golden ARGS="--data-dir data/pilot"
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared --batch-delay-seconds 30"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --reuse-prepared --batch-delay-seconds 30"
 ```
 
 `--prepare-only` downloads and validates public sources without calling an embedding model or Qdrant. `--reuse-prepared` indexes the existing Parquet artifact and makes no Met requests. The default limit comes from `INGEST_MAX_OBJECTS`; a positive `--limit` overrides it. Use a distinct collection for each differently sized sample. An upsert does not delete objects outside the current sample.
@@ -27,6 +27,8 @@ Every record keeps its raw CSV fields. Retrieval text uses supplied title, artis
 ## Hybrid index
 
 The dense provider uses the exact `EMBEDDING_MODEL` identifier. The adapter accepts Google's bare or `models/` form and LiteLLM's `gemini/` prefix. Authentication, invalid model identifiers, malformed vectors, and incompatible existing collections stop ingestion. Rate limits, timeouts, and transient failures use bounded Router retries. Embeddings never fall back to another model because that would mix vector spaces.
+
+`EMBEDDING_DIMENSIONS` defaults to 768. The adapter's `output_dimensionality` is passed through LiteLLM's `dimensions` parameter, which serializes Gemini's native `outputDimensionality`; vectors are requested at that size rather than sliced locally. Responses must match the requested size and are normalized to unit length, as required for reduced [Gemini Embedding 1 vectors](https://ai.google.dev/gemini-api/docs/embeddings). Collection schema version 2 stores the dimension with the model identity and rejects mismatches. The earlier 3,072-dimensional, schema-version-1 pilot is retained separately and is not migrated or overwritten.
 
 For direct Gemini, set `USE_AI_GATEWAY=false`. When enabled, AI Gateway uses its Google AI Studio endpoint, the gateway token in `cf-aig-authorization`, and the Google key separately. Authentication errors do not silently switch routes. See [Cloudflare's provider documentation](https://developers.cloudflare.com/ai-gateway/usage/providers/google-ai-studio/).
 

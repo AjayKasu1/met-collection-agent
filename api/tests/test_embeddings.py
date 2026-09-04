@@ -23,9 +23,11 @@ class ResponseTransport:
     def __init__(self, response: object) -> None:
         self.response = response
         self.purpose = ""
+        self.dimensions = 0
 
-    def embedding(self, *, model: str, input: list[str], task_type: str) -> object:
+    def embedding(self, *, model: str, input: list[str], task_type: str, dimensions: int) -> object:
         self.purpose = task_type
+        self.dimensions = dimensions
         if isinstance(self.response, Exception):
             raise self.response
         return self.response
@@ -40,13 +42,34 @@ def test_response_order_and_retrieval_purpose() -> None:
             ]
         }
     )
-    embedder = GeminiEmbedder(transport)
+    embedder = GeminiEmbedder(transport, output_dimensionality=2)
     assert embedder.embed(["first", "second"]) == [[1, 0], [0, 1]]
     assert transport.purpose == "RETRIEVAL_DOCUMENT"
     assert embedder.embed([]) == []
     transport.response = {"data": [{"index": 0, "embedding": [1, 1]}]}
-    assert embedder.embed(["question"], purpose="query") == [[1, 1]]
+    assert embedder.embed(["question"], purpose="query")[0] == pytest.approx([2**-0.5, 2**-0.5])
     assert transport.purpose == "RETRIEVAL_QUERY"
+
+
+def test_requested_dimensions_reach_native_gemini_and_vectors_are_normalized() -> None:
+    from litellm.llms.vertex_ai.gemini_embeddings.batch_embed_content_transformation import (
+        transform_openai_input_gemini_content,
+    )
+
+    transport = ResponseTransport({"data": [{"index": 0, "embedding": [2.0] * 768}]})
+    vector = GeminiEmbedder(transport, output_dimensionality=768).embed(["Vessel"])[0]
+    assert transport.dimensions == 768 and len(vector) == 768
+    assert sum(value**2 for value in vector) == pytest.approx(1.0)
+    body = transform_openai_input_gemini_content(
+        input=["Vessel"],
+        model="gemini-embedding-001",
+        optional_params={"dimensions": transport.dimensions, "task_type": transport.purpose},
+    )
+    assert body["requests"][0]["outputDimensionality"] == 768
+    with pytest.raises(EmbeddingError, match="shape"):
+        GeminiEmbedder(transport, output_dimensionality=3072).embed(["Vessel"])
+    with pytest.raises(ValueError, match="dimensionality"):
+        GeminiEmbedder(transport, output_dimensionality=0)
 
 
 @pytest.mark.parametrize(

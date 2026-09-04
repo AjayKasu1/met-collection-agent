@@ -87,7 +87,7 @@ def test_manifest_rejects_extra_paths_wrong_counts_and_versions(bundle: Path) ->
     with pytest.raises(ValidationError):
         Manifest.model_validate(data)
     updates: tuple[dict[str, Any], ...] = (
-        {"format_version": 2},
+        {"format_version": 999},
         {"created_at": datetime(2026, 1, 1)},
         {"indexes": []},
         {"files": {}},
@@ -123,13 +123,23 @@ def test_restore_preflight_rejects_version_model_and_existing_targets(
         )
     ) as http:
         with pytest.raises(IndexCompatibilityError, match="version"):
-            artifacts.restore_bundle(client, http, bundle, {"collection": "target"}, "test-model")
+            artifacts.restore_bundle(
+                client, http, bundle, {"collection": "target"}, "test-model", 4
+            )
         client.info.return_value = SimpleNamespace(version="1.19.0")
+        with pytest.raises(IndexCompatibilityError, match="EMBEDDING_DIMENSIONS"):
+            artifacts.restore_bundle(
+                client, http, bundle, {"collection": "target"}, "test-model", 768
+            )
         with pytest.raises(IndexCompatibilityError, match="EMBEDDING_MODEL"):
-            artifacts.restore_bundle(client, http, bundle, {"collection": "target"}, "wrong-model")
+            artifacts.restore_bundle(
+                client, http, bundle, {"collection": "target"}, "wrong-model", 4
+            )
         client.collection_exists.return_value = True
         with pytest.raises(IndexCompatibilityError, match="overwrite"):
-            artifacts.restore_bundle(client, http, bundle, {"collection": "target"}, "test-model")
+            artifacts.restore_bundle(
+                client, http, bundle, {"collection": "target"}, "test-model", 4
+            )
 
 
 def test_visitor_bundle_requires_both_source_and_snapshot(bundle: Path) -> None:

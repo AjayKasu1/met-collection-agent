@@ -41,14 +41,14 @@ class IndexSpec(BaseModel):
     dimensions: Annotated[int, Field(gt=0)]
     embedding_model: str
     sparse_model: Literal["Qdrant/bm25"] = "Qdrant/bm25"
-    schema_version: Literal[1] = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
 
 
 class Manifest(BaseModel):
     """An exact file allowlist prevents publication or download of unrelated private inputs."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    format_version: Literal[1] = 1
+    format_version: Literal[2] = 2
     created_at: datetime
     qdrant_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
     files: dict[ArtifactName, Artifact]
@@ -117,6 +117,7 @@ def export_bundle(
     output: Path,
     collections: dict[IndexKind, str],
     embedding_model: str,
+    embedding_dimensions: int = 768,
 ) -> Manifest:
     """Export single-node snapshots after checking source identity and model compatibility.
 
@@ -132,7 +133,9 @@ def export_bundle(
         if not isinstance(vectors, dict) or "dense" not in vectors:
             raise IndexCompatibilityError("Collection has no named dense vector")
         dimensions = vectors["dense"].size
-        HybridStore(client, collection, embedding_model).ensure_collection(dimensions)
+        HybridStore(client, collection, embedding_model, embedding_dimensions).ensure_collection(
+            dimensions
+        )
         cluster = client.collection_cluster_info(collection)
         if cluster.remote_shards:
             raise IndexCompatibilityError("Export requires a single-node collection snapshot")
@@ -240,6 +243,7 @@ def restore_bundle(
     directory: Path,
     collections: dict[IndexKind, str],
     embedding_model: str,
+    embedding_dimensions: int = 768,
 ) -> Manifest:
     """Restore into absent collections only, after validating the entire bundle."""
     manifest = Manifest.model_validate_json((directory / "manifest.json").read_bytes())
@@ -256,6 +260,8 @@ def restore_bundle(
     for index in manifest.indexes:
         if index.embedding_model != embedding_model:
             raise IndexCompatibilityError("EMBEDDING_MODEL differs from the published index")
+        if index.dimensions != embedding_dimensions:
+            raise IndexCompatibilityError("EMBEDDING_DIMENSIONS differs from the published index")
         if client.collection_exists(collections[index.kind]):
             raise IndexCompatibilityError(
                 "Seed refuses to overwrite an existing collection; choose an unused name"
@@ -270,6 +276,8 @@ def restore_bundle(
             )
         if response.status_code != 200:
             raise SourceError(f"Snapshot restore returned HTTP {response.status_code}")
-        HybridStore(client, collection, embedding_model).ensure_collection(index.dimensions)
+        HybridStore(client, collection, embedding_model, embedding_dimensions).ensure_collection(
+            index.dimensions
+        )
         verify_index(client, collection, load_documents(directory, index.kind))
     return manifest

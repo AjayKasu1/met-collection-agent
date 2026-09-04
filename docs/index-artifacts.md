@@ -18,6 +18,8 @@ For a pilot, pass the same `--data-dir`, `--collection`, and optional `--visitor
 
 The manifest records the format version, Qdrant version, embedding model, sparse model, vector dimensions, point counts, UTC creation time, file sizes, and SHA-256 hashes. Publication uses one [Hugging Face commit](https://huggingface.co/docs/huggingface_hub/guides/upload) with an explicit file allowlist and expected parent revision. It never uploads a directory recursively. Unrelated local files, credentials, and build instructions are excluded.
 
+Manifest format version 2 requires collection schema version 2. Both the snapshot's collection metadata and its manifest record the requested embedding dimension. Export checks the configured `EMBEDDING_DIMENSIONS` against the stored vectors and metadata. Restore rejects a manifest dimension mismatch before uploading a snapshot and checks the restored metadata afterward. Version-1 pilot indexes remain separate; this workflow does not silently upgrade or relabel them.
+
 Export currently supports a collection whose shards are all on one Qdrant node. A distributed collection needs snapshots from each node and is rejected. For Qdrant's snapshot scope and recovery constraints, see its [snapshot documentation](https://qdrant.tech/documentation/operations/snapshots/).
 
 ## Restore without embedding

@@ -47,7 +47,7 @@ def stub_index(monkeypatch: pytest.MonkeyPatch) -> list[IndexDocument]:
     monkeypatch.setattr(commands, "HybridStore", Store)
     monkeypatch.setattr(commands, "qdrant_client", lambda _: SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(commands, "create_embedding_router", lambda _: None)
-    monkeypatch.setattr(commands, "GeminiEmbedder", lambda _: None)
+    monkeypatch.setattr(commands, "GeminiEmbedder", lambda *a, **kw: None)
     monkeypatch.setattr(commands, "BM25Embedder", lambda _: None)
     return indexed
 
