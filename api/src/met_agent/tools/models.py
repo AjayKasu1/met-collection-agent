@@ -114,6 +114,21 @@ class ToolResult(BaseModel):
     error: ToolError | None = None
     evidence: list[Evidence] = Field(default_factory=list)
 
+    def model_evidence(self) -> list[Evidence]:
+        """Bound model-visible evidence without changing full API/MCP results."""
+        return [
+            item.model_copy(
+                update={
+                    "text": "\n".join(
+                        line
+                        for line in item.text.splitlines()
+                        if not line.startswith(("primary_image:", "primary_image_small:"))
+                    )
+                }
+            )
+            for item in self.evidence[:8]
+        ]
+
     def model_context(self) -> str:
         """Send citation evidence once; retain full records only in tool APIs and audit logs."""
         import json
@@ -122,7 +137,9 @@ class ToolResult(BaseModel):
             return self.model_dump_json(exclude={"evidence"})
         payload = {
             "name": self.name,
-            "evidence": [item.model_dump(mode="json") for item in self.evidence],
+            "evidence": [
+                item.model_dump(mode="json", exclude_none=True) for item in self.model_evidence()
+            ],
         }
         if isinstance(self.output, CollectionSearchResult):
             payload["freshness"] = self.output.freshness

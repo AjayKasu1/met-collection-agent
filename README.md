@@ -124,8 +124,10 @@ Measured September 4, 2026 with GPT-OSS 120B main, GPT-OSS 20B lite, local E5 re
 
 | Question | Verified result | Route | End-to-end latency | Standard-price estimate |
 | --- | --- | --- | --- | --- |
-| Temple of Dendur gallery | Gallery 131, Object 547802 | lite | 75.125 s | $0.000766275 |
-| Fifth Avenue on Wednesdays | Closed, captured Plan Your Visit hours table | main | 8.332 s | $0.001025700 |
-| Meaning of Wheat Field with Cypresses | Non-interpretive policy refusal | main policy, lite classification | 0.320 s | $0.000061200 |
+| Temple of Dendur gallery | Gallery 131, Object 547802 | lite | 76.156 s | $0.000763275 |
+| Fifth Avenue on Wednesdays | Closed, captured Plan Your Visit hours table | main | 7.168 s | $0.001022625 |
+| Meaning of Wheat Field with Cypresses | Non-interpretive policy refusal | main policy, lite classification | 0.147 s | $0.000061200 |
 
-Dendur spent 58.311 s waiting for the 8,000-TPM model budget, 2.733 s in provider calls, and 14.077 s in tools/service overhead including cold model startup. No retries or fallback occurred. These results do not imply sub-second end-to-end retrieval or unlimited free throughput. The checked-in [price table](api/src/met_agent/llm/cost.py) uses Groq's published standard input/output rates and reported tokens for every model call, including guardrails; it estimates equivalent inference cost, not a charge on the free tier. Local CPU and infrastructure costs are excluded.
+Dendur spent 58.209 s waiting for the 8,000-TPM model budget, 2.602 s in provider calls, and 15.342 s in tools/service overhead including cold model startup. No retries or fallback occurred. These results do not imply sub-second end-to-end retrieval or unlimited free throughput. The checked-in [price table](api/src/met_agent/llm/cost.py) uses Groq's published standard input/output rates and reported tokens for every model call, including guardrails; it estimates equivalent inference cost, not a charge on the free tier. Local CPU and infrastructure costs are excluded.
+
+See [measured latency and operating limits](docs/limitations.md) for the timing breakdown and paid-tier pacing configuration.

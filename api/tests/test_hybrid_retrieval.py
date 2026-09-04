@@ -128,3 +128,24 @@ def test_reranker_uses_pinned_assets_and_rejects_malformed_scores(
     state.fail = True
     with pytest.raises(EmbeddingError, match="reranking failed"):
         model.score("vase", ["Vessel"])
+
+
+def test_rerank_receives_only_top_twenty_fused_candidates() -> None:
+    class BoundedRank:
+        def score(self, query: str, documents: Sequence[str]) -> list[float]:
+            assert len(documents) == 20
+            return [1.0] * len(documents)
+
+    with closing(QdrantClient(location=":memory:")) as client:
+        store = HybridStore(client, "bounded", "fixture", 2, embedding_provider="local")
+        store.ingest(
+            [
+                IndexDocument(point_id=i, text=f"Object {i}", payload={"text": f"Object {i}"})
+                for i in range(1, 61)
+            ],
+            Dense(),
+            Sparse(),
+            batch_size=60,
+        )
+        results = HybridRetriever(store, Dense(), Sparse(), BoundedRank()).search("object", k=40)
+        assert len(results) == 20

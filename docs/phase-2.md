@@ -4,7 +4,7 @@ The HTTP service and MCP server share five validated tools. Chat adds a bounded 
 
 ## Retrieval
 
-`search_collection` and `search_visitor_info` query 40 dense and 40 sparse candidates with the same payload filters. Reciprocal rank fusion uses `1 / (60 + rank)` per list. A local cross-encoder reranks the union, with deterministic score and ID tie-breaking. Collection search returns eight results by default; visitor search returns five. Each result includes dense, sparse, fusion, and reranker scores. These scores are ranking signals, not probabilities of correctness.
+`search_collection` and `search_visitor_info` query 40 dense and 40 sparse candidates with the same payload filters. Reciprocal rank fusion uses `1 / (60 + rank)` per list. A local cross-encoder reranks the top 20 fused candidates, with deterministic score and ID tie-breaking. Collection search returns eight results by default; visitor search returns five. Each result includes dense, sparse, fusion, and reranker scores. These scores are ranking signals, not probabilities of correctness.
 
 Text embeddings default to `intfloat/multilingual-e5-large` through FastEmbed. Gemini remains optional. Provider, model name, and dimensions must match collection metadata before any query embedding is computed. The reranker is FastEmbed's Apache-2.0 `Xenova/ms-marco-MiniLM-L-6-v2`, pinned to revision `a09144355adeed5f58c8ed011d209bf8ee5a1fec`. The first search downloads its weights. Model instances are shared and CPU inference is serialized within each process.
 

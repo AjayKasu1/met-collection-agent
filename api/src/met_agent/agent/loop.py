@@ -203,7 +203,7 @@ class Agent:
                             "content": result.model_context(),
                         }
                     )
-                    evidence.extend(result.evidence)
+                    evidence.extend(result.model_evidence())
                     if isinstance(result.output, Handoff):
                         audit("terminal_handoff", result.output.model_dump(mode="json"))
                         return self._answer(

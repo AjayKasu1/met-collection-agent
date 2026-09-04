@@ -91,7 +91,7 @@ class Reranker(Protocol):
 
 
 class HybridRetriever:
-    """Use 40 candidates per vector, reciprocal rank fusion, then cross-encoder scores."""
+    """Fuse 40 candidates per vector, rerank the best 20, and return bounded results."""
 
     def __init__(
         self,
@@ -139,7 +139,9 @@ class HybridRetriever:
                 score = scores.setdefault(point_id, {"rrf": 0.0})
                 score[kind] = point.score
                 score["rrf"] += 1 / (60 + rank)
-        ordered = sorted(points, key=lambda point_id: (-scores[point_id]["rrf"], str(point_id)))
+        ordered = sorted(points, key=lambda point_id: (-scores[point_id]["rrf"], str(point_id)))[
+            :20
+        ]
         if not ordered:
             return []
         texts = [str((points[point_id].payload or {}).get("text", "")) for point_id in ordered]

@@ -109,6 +109,26 @@ def test_compact_context_keeps_exact_citation_evidence() -> None:
     )
     result = ToolResult(name="get_object", evidence=[evidence])
     payload = json.loads(result.model_context())
-    assert payload["evidence"] == [evidence.model_dump(mode="json")]
+    assert payload["evidence"] == [evidence.model_dump(mode="json", exclude_none=True)]
     assert "output" not in payload
     assert json.loads(ToolResult(name="handoff").model_context())["name"] == "handoff"
+
+
+def test_model_payload_caps_objects_and_omits_image_urls() -> None:
+    result = ToolResult(
+        name="get_object",
+        evidence=[
+            Evidence(
+                key=f"object:{i}",
+                object_id=i,
+                kind="collection",
+                text=f"Object ID: {i}\nprimary_image: https://images.example.org/{i}\nTitle: Vase",
+            )
+            for i in range(1, 13)
+        ],
+    )
+    context = json.loads(result.model_context())
+    assert len(context["evidence"]) == 8
+    assert len(result.evidence) == 12
+    assert all("primary_image" not in e["text"] for e in context["evidence"])
+    assert all("Title: Vase" in e.text for e in result.model_evidence())
