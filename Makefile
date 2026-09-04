@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev lint typecheck test check check-repository ingest ingest-visitors prepare-images verify-golden publish-index seed qdrant
+.PHONY: setup dev lint typecheck test check check-repository ingest ingest-visitors prepare-images verify-golden publish-index seed qdrant demo-check
 
 setup:
 	$(UV) sync --project api --locked
@@ -47,3 +47,6 @@ publish-index:
 
 seed:
 	$(UV) run --project api --locked python api/scripts/seed.py $(ARGS)
+
+demo-check:
+	$(UV) run --project api --locked python api/scripts/demo_check.py

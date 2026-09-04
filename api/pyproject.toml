@@ -13,6 +13,7 @@ dependencies = [
     "langfuse==4.15.1",
     "litellm==1.99.0",
     "markdownify==1.2.3",
+    "mcp==2.1.1",
     "polars==1.44.1",
     "pydantic==2.13.5",
     "pydantic-settings==2.15.0",
@@ -22,6 +23,9 @@ dependencies = [
     "tokenizers==0.23.2",
     "uvicorn==0.52.4",
 ]
+
+[project.scripts]
+met-agent-mcp = "met_agent.mcp.server:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]

@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, live or saved visitor-page ingestion, multilingual local text/BM25 indexes with published image vectors, golden-ID verification, and portable Qdrant snapshots. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
+The API now provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. Live retrieval works; the three-question chat demo is currently blocked by Google project access (HTTP 403). Evaluation scoring, the web client, and deployment remain later phases. No retrieval-quality or faithfulness scores are claimed yet.
 
 ## Run locally
 
@@ -56,11 +56,28 @@ make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pil
 
 Preparation makes no model calls. The final command downloads pinned ONNX weights on first use, runs text inference locally, and writes to the configured Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md) and [snapshot publication and seeding](docs/index-artifacts.md).
 
-The bounded sample reserves eligible golden IDs before filling its remaining slots. `selection.json` records exclusions such as non-public-domain objects. To prepare browser-saved visitor HTML without crawling, use `make ingest-visitors ARGS="--html-dir data/visitor_pages --prepare-only"` with the local source manifest described in the ingestion guide.
+The bounded sample reserves eligible golden IDs before filling its remaining slots. `selection.json` records exclusions such as non-public-domain objects. To prepare browser-saved visitor HTML without crawling, use `make ingest-visitors ARGS="--html-dir data/visitor_pages --prepare-only"` to derive source URLs from canonical links or Chrome original-URL comments and capture times from file mtime. The generated local manifest preserves that provenance.
 
 The [full ingestion guide](docs/full-ingestion.md) covers local inference, published SigLIP 2 image vectors, durable checkpoints, and detached execution with `nohup`. Local inference has no API quotas. Gemini remains available with token-aware pacing and persisted daily quota accounting.
 
 See the [completed Phase 1 build report](docs/phase-1-results.md) for measured duration, image coverage, golden verification, and the pinned published snapshot.
+
+## Chat and MCP
+
+```sh
+make dev
+# In another terminal, from the repository root:
+make demo-check
+```
+
+The demo exercises three golden questions through the actual HTTP chat route and prints answer, citations, route, latency, and estimated cost. It exits nonzero if the provider is unavailable or answer verification fails. See [Phase 2 behavior and verification status](docs/phase-2.md) for the API contract, retrieval scores, guardrails, and current limitations.
+
+```sh
+uv run --project api --locked met-agent-mcp
+uv run --project api --locked met-agent-mcp --transport sse --port 8001
+```
+
+See [MCP client setup](docs/mcp.md). Both transports use the same validation and five tool schemas as chat. Local embeddings remain the default; image similarity uses only the Met's published vectors.
 
 ## Project layout
 
@@ -68,12 +85,16 @@ See the [completed Phase 1 build report](docs/phase-1-results.md) for measured d
 api/
   src/met_agent/
     config.py                 Environment loading and validation
-    main.py                   Application factory and health endpoint
+    main.py, routes.py        Application factory, chat SSE, objects, audit
     middleware.py             Request context and safe HTTP errors
-    observability/logging.py  JSON logging and structured redaction
+    observability/            Safe logs and optional Langfuse traces
     ingestion/                Public sources, documents, verification, snapshots
-    retrieval/                Validated embeddings and hybrid index schema
-    llm/router.py             Explicit provider and optional gateway routing
+    retrieval/                Embeddings, dense/BM25 fusion, local reranking
+    llm/                      Explicit routing, cost estimates, prompt loading
+    tools/                    Five shared typed tool implementations
+    agent/, guardrails/       Bounded loop, session events, evidence checks
+    mcp/                      Official SDK stdio and SSE transports
+  prompts/                    Versioned runtime instructions and changelog
   scripts/                    Ingestion, verification, publication, seed, privacy check
   data_sources/               Curated public visitor pages
   tests/                      Offline tests and local Qdrant integration tests
@@ -85,7 +106,7 @@ docs/configuration.md         Settings and operational behavior
 
 ## Boundaries
 
-The current service has no authentication or rate limiting. The development server binds to loopback. CORS restricts browser origins and is not an authorization mechanism. Request logs omit bodies, raw paths, query strings, and headers; application code must continue to avoid interpolating sensitive values into free-form log messages. Future tracing and audit storage require their own content-access and retention controls.
+The current service has no authentication or rate limiting. The development server binds to loopback. CORS restricts browser origins and is not an authorization mechanism. Request logs omit bodies, raw paths, query strings, and headers; application code must continue to avoid interpolating sensitive values into free-form log messages. Session audits under `DATA_DIR` and optional Langfuse traces contain conversation content. They require access and retention controls before a public deployment. Phase 2 uses one API process with local session locks.
 
 ## Data and attribution
 

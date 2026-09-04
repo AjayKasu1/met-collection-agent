@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from met_agent.config import OptionalServices, Settings, load_settings
 from met_agent.middleware import ErrorBoundaryMiddleware, RequestContextMiddleware
 from met_agent.observability.logging import configure_logging
+from met_agent.routes import router
 
 VERSION = version("met-collection-agent-api")
 logger = structlog.get_logger(__name__)
@@ -35,8 +36,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("service_started", version=VERSION, git_sha=config.git_sha)
-        yield
-        logger.info("service_stopped")
+        try:
+            yield
+        finally:
+            if getattr(app.state, "runtime", None) is not None:
+                app.state.runtime.close()
+            logger.info("service_stopped")
 
     app = FastAPI(
         title="Met Collection Agent API",
@@ -45,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = config
+    app.include_router(router)
     app.add_middleware(ErrorBoundaryMiddleware)
     # CORS wraps request handling so controlled 500 responses carry CORS headers too.
     app.add_middleware(
