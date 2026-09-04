@@ -2,11 +2,45 @@
 
 import logging
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
-from met_agent.config import Settings
+from met_agent.config import ConfigurationError, Settings
 
 if TYPE_CHECKING:
     from litellm.router import Router
+
+
+def _gateway_base(url: str) -> str:
+    """Accept gateway roots or native Google bases; reject Workers AI inference URLs."""
+    parsed = urlsplit(url)
+    parts = parsed.path.strip("/").split("/")
+    suffix = parts[3:]
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "gateway.ai.cloudflare.com"
+        or parsed.query
+        or parsed.fragment
+        or len(parts) < 3
+        or parts[0] != "v1"
+        or not all(parts)
+        or suffix
+        not in (
+            [],
+            ["google-ai-studio"],
+            ["google-ai-studio", "v1"],
+            ["google-ai-studio", "v1beta"],
+        )
+    ):
+        raise ConfigurationError(
+            "CF_AI_GATEWAY_URL must be https://gateway.ai.cloudflare.com/v1/ACCOUNT/GATEWAY "
+            "with an optional /google-ai-studio/v1beta suffix"
+        )
+    base = url.rstrip("/")
+    if not suffix:
+        base += "/google-ai-studio"
+    if len(suffix) < 2:
+        base += "/v1beta"
+    return base
 
 
 def embedding_route(settings: Settings) -> dict[str, Any]:
@@ -19,12 +53,7 @@ def embedding_route(settings: Settings) -> dict[str, Any]:
     if settings.use_ai_gateway:
         if settings.cf_ai_gateway_url is None or settings.cf_ai_gateway_token is None:
             raise ValueError("AI Gateway configuration is incomplete")
-        base = str(settings.cf_ai_gateway_url).rstrip("/")
-        if "/google-ai-studio" not in base:
-            base += "/google-ai-studio"
-        if base.endswith("/google-ai-studio"):
-            base += "/v1beta"
-        parameters["api_base"] = base
+        parameters["api_base"] = _gateway_base(str(settings.cf_ai_gateway_url))
         parameters["extra_headers"] = {
             "cf-aig-authorization": "Bearer " + settings.cf_ai_gateway_token.get_secret_value(),
         }

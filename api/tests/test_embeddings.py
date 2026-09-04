@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import HttpUrl, SecretStr
 
-from met_agent.config import Settings
+from met_agent.config import ConfigurationError, Settings
 from met_agent.llm.router import create_embedding_router, embedding_route
 from met_agent.retrieval.embeddings import (
     BM25Embedder,
@@ -126,6 +126,53 @@ def test_router_retries_transient_errors_without_embedding_fallback(
     logging.getLogger("LiteLLM").error("private-provider-token")
     captured_logs = capsys.readouterr()
     assert "private-provider-token" not in captured_logs.out + captured_logs.err
+
+
+@pytest.mark.parametrize(
+    "suffix", ["", "/", "/google-ai-studio", "/google-ai-studio/v1beta", "/google-ai-studio/v1"]
+)
+def test_gateway_accepts_only_supported_native_bases(settings: Settings, suffix: str) -> None:
+    configured = settings.model_copy(
+        update={
+            "use_ai_gateway": True,
+            "cf_ai_gateway_url": HttpUrl(
+                "https://gateway.ai.cloudflare.com/v1/account/gateway" + suffix
+            ),
+            "cf_ai_gateway_token": SecretStr("test-gateway-token"),
+        }
+    )
+    base = embedding_route(configured)["litellm_params"]["api_base"]
+    assert base.count("google-ai-studio") == 1
+    assert base.endswith("/v1" if suffix.endswith("/v1") else "/v1beta")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.cloudflare.com/client/v4/accounts/account/ai/v1/chat/completions",
+        "https://gateway.ai.cloudflare.com/v1/account/gateway/compat",
+        "https://gateway.ai.cloudflare.com/v1/account/gateway/google-ai-studio/v1beta/models/model",
+        "https://gateway.ai.cloudflare.com/v1/account",
+        "https://gateway.ai.cloudflare.com/v1//gateway",
+        "http://gateway.ai.cloudflare.com/v1/account/gateway",
+        "https://gateway.ai.cloudflare.com/v1/account/gateway?key=private-input",
+        "https://gateway.ai.cloudflare.com/v1/account/gateway#private-input",
+        "https://user:private-input@gateway.ai.cloudflare.com/v1/account/gateway",
+    ],
+)
+def test_gateway_rejects_misrouted_requests_before_sending_credentials(
+    settings: Settings, url: str
+) -> None:
+    configured = settings.model_copy(
+        update={
+            "use_ai_gateway": True,
+            "cf_ai_gateway_url": HttpUrl(url),
+            "cf_ai_gateway_token": SecretStr("test-gateway-token"),
+        }
+    )
+    with pytest.raises(ConfigurationError, match="CF_AI_GATEWAY_URL") as error:
+        embedding_route(configured)
+    assert "private-input" not in str(error.value)
 
 
 def test_bm25_converts_numpy_vectors_without_dense_model(

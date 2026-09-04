@@ -28,6 +28,8 @@ The dense provider uses the exact `EMBEDDING_MODEL` identifier. The adapter acce
 
 For direct Gemini, set `USE_AI_GATEWAY=false`. When enabled, AI Gateway uses its Google AI Studio endpoint, the gateway token in `cf-aig-authorization`, and the Google key separately. Authentication errors do not silently switch routes. See [Cloudflare's provider documentation](https://developers.cloudflare.com/ai-gateway/usage/providers/google-ai-studio/).
 
+Set `CF_AI_GATEWAY_URL` to `https://gateway.ai.cloudflare.com/v1/ACCOUNT/GATEWAY`. The native `/google-ai-studio`, `/google-ai-studio/v1`, and `/google-ai-studio/v1beta` suffixes are also accepted. Workers AI URLs on `api.cloudflare.com`, OpenAI-compatible `/compat` routes, and complete inference URLs are rejected before credentials are sent. The gateway token needs AI Gateway Run permission. Workers AI Edit does not change this application's Google provider route.
+
 Qdrant stores named `dense` cosine vectors and `sparse` FastEmbed `Qdrant/bm25` vectors. Both use disk storage; dense vectors also use INT8 scalar quantization. The sparse index applies Qdrant's IDF modifier. Payload indexes cover department, object ID, highlight status, gallery, begin/end dates, and source URL. Collection metadata records the embedding model, sparse model, and schema version.
 
 Batch responses must contain one finite, nonzero dense vector per input with a consistent dimension. Writes pair both vectors with the same document and wait for acknowledgment. Repeating a completed ingestion upserts stable IDs without duplicates. A failed run can leave acknowledged earlier batches; rerun against the same prepared artifact to finish. It recomputes embeddings and may incur provider usage again.
