@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Phase 0 implements the API foundation: typed configuration, health reporting, request IDs, JSON logs, strict static checks, and offline tests. Collection ingestion, retrieval, chat, evaluations, MCP, and the web client are subsequent phases. No model calls or external-service connections are made by this scaffold, and no evaluation results are claimed yet.
+The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, visitor-page ingestion, hybrid Gemini/BM25 indexes, golden-ID verification. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
 
 ## Run locally
 
@@ -41,9 +41,20 @@ make test
 make check
 ```
 
-Tests supply synthetic settings and never load the developer's `.env`. They require neither an LLM key nor a running Qdrant instance. Coverage includes configuration validation, concurrent request isolation, CORS preflights, error redaction, and incremental ASGI streaming. The coverage gate is 90% with branch coverage enabled.
+Tests supply synthetic settings and never load the developer's `.env` or call an LLM. Start `make qdrant` to include the real index integration checks; CI supplies that service automatically. Coverage includes configuration validation, concurrent request isolation, CORS preflights, error redaction, and incremental ASGI streaming. The coverage gate is 90% with branch coverage enabled.
 
 `make setup` installs pre-commit hooks. Hooks and CI use the same pinned lint, type, and test tools. The repository check inspects the Git index, rejects private file paths before reading their contents, and detects recognizable provider tokens. It is an additional safeguard, not proof that arbitrary secrets cannot be committed. Stage files explicitly and review `git diff --cached` before committing.
+
+## Ingest a pilot
+
+```sh
+make qdrant
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --prepare-only"
+make verify-golden ARGS="--data-dir data/pilot"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared"
+```
+
+Preparation makes no model calls. The final command uses the configured embedding provider and Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md).
 
 ## Project layout
 
@@ -54,8 +65,12 @@ api/
     main.py                   Application factory and health endpoint
     middleware.py             Request context and safe HTTP errors
     observability/logging.py  JSON logging and structured redaction
-  scripts/check_repository.py Git index privacy check
-  tests/                      Offline unit and HTTP tests
+    ingestion/                Public sources, documents, verification, snapshots
+    retrieval/                Validated embeddings and hybrid index schema
+    llm/router.py             Explicit provider and optional gateway routing
+  scripts/                    Ingestion, verification, publication, seed, privacy check
+  data_sources/               Curated public visitor pages
+  tests/                      Offline tests and local Qdrant integration tests
   pyproject.toml              Exact direct dependency pins and tool settings
   uv.lock                     Reproducible transitive dependency resolution
 evals/golden.jsonl             Original evaluation questions, not yet scored
