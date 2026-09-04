@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from met_agent.config import OptionalServices, Settings, load_settings
+from met_agent.llm.providers import configured_models
 from met_agent.middleware import ErrorBoundaryMiddleware, RequestContextMiddleware
 from met_agent.observability.logging import configure_logging
 from met_agent.routes import router
@@ -36,6 +37,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("service_started", version=VERSION, git_sha=config.git_sha)
+        logger.info(
+            "model_fallbacks_configured",
+            active={
+                alias: model
+                for alias, model in configured_models(config).items()
+                if alias.startswith("fallback")
+            },
+        )
         try:
             yield
         finally:

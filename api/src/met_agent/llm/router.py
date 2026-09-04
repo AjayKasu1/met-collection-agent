@@ -48,7 +48,7 @@ def embedding_route(settings: Settings) -> dict[str, Any]:
     model = "gemini/" + settings.embedding_model.removeprefix("gemini/").removeprefix("models/")
     parameters: dict[str, Any] = {
         "model": model,
-        "api_key": settings.gemini_api_key.get_secret_value(),
+        "api_key": settings.require_api_key("gemini").get_secret_value(),
     }
     if settings.use_ai_gateway:
         if settings.cf_ai_gateway_url is None or settings.cf_ai_gateway_token is None:

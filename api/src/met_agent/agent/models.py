@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from met_agent.config import ChatProvider
 from met_agent.tools.models import Handoff
 
 Language = Literal["en", "fr", "es", "zh"]
@@ -36,7 +37,8 @@ class AgentDraft(BaseModel):
 class ModelCall(BaseModel):
     model: str
     route: str
-    path: Literal["ai_gateway", "direct_google", "direct_groq"]
+    provider: ChatProvider = "gemini"
+    path: Literal["ai_gateway", "direct_google", "direct_groq", "direct_cerebras"]
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     cost_usd: float | None = Field(default=None, ge=0, allow_inf_nan=False)

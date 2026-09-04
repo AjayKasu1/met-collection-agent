@@ -83,7 +83,7 @@ def test_explicit_routes_and_gateway(settings: Settings) -> None:
         routes[0]["litellm_params"]["extra_headers"]["cf-aig-authorization"]
         == "Bearer gateway-private"
     )
-    assert "extra_headers" not in routes[2]["litellm_params"]
+    assert routes[2]["litellm_params"]["api_base"].endswith("/groq")
     with pytest.raises(ValueError):
         chat_routes(config.model_copy(update={"cf_ai_gateway_token": None}))
 
@@ -122,7 +122,11 @@ def test_fallback_is_only_for_quota_and_timeout(
     settings: Settings, monkeypatch: pytest.MonkeyPatch, failure: Exception
 ) -> None:
     config = settings.model_copy(
-        update={"llm_model_fallback": "groq/fallback", "groq_api_key": SecretStr("synthetic")}
+        update={
+            "llm_max_retries": 0,
+            "llm_model_fallback": "groq/fallback",
+            "groq_api_key": SecretStr("synthetic"),
+        }
     )
     router = Router([failure, response()])
     monkeypatch.setattr(chat, "estimate_cost", lambda _: 0.002)
@@ -257,3 +261,60 @@ def test_unknown_pricing_is_not_reported_as_free(monkeypatch: pytest.MonkeyPatch
         for value in (0.01, 0.02)
     ]
     assert cost.CallLedger(calls).cost == 0.03
+
+
+def test_missing_first_key_uses_second_and_403_stops_chain(settings: Settings) -> None:
+    config = settings.model_copy(
+        update={
+            "llm_max_retries": 0,
+            "llm_model_fallback": "cerebras/gpt-oss-120b",
+            "llm_model_fallback_2": "groq/llama-3.3-70b-versatile",
+            "groq_api_key": SecretStr("synthetic"),
+        }
+    )
+    quota = RateLimitError("quota", llm_provider="gemini", model="test")
+    router = Router([quota, response()])
+    asyncio.run(LiteLLMChat(config, router=router).complete("main", []))
+    assert [call["model"] for call in router.calls] == ["main", "fallback_2"]
+    denied = BadRequestError(
+        "private",
+        llm_provider="cerebras",
+        model="test",
+        response=httpx.Response(403, request=httpx.Request("POST", "https://test.local")),
+    )
+    router = Router([quota, denied])
+    config = config.model_copy(update={"cerebras_api_key": SecretStr("synthetic")})
+    with pytest.raises(ModelError) as error:
+        asyncio.run(LiteLLMChat(config, router=router).complete("main", []))
+    assert error.value.code == "access_denied"
+    assert [call["model"] for call in router.calls] == ["main", "fallback"]
+
+
+def test_retry_reserves_each_attempt_and_respects_retry_after(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sleeps: list[float] = []
+    reservations: list[str] = []
+
+    async def sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    config = settings.model_copy(update={"llm_max_retries": 1})
+    quota = RateLimitError(
+        "quota",
+        llm_provider="gemini",
+        model="test",
+        response=httpx.Response(
+            429, headers={"Retry-After": "3"}, request=httpx.Request("POST", "https://test.local")
+        ),
+    )
+    model = LiteLLMChat(config, router=Router([quota, response()]))
+
+    async def reserve(name: str, tokens: int) -> None:
+        reservations.append(name)
+
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    monkeypatch.setattr(model.pacer, "reserve", reserve)
+    asyncio.run(model.complete("main", []))
+    assert sleeps == [3]
+    assert len(reservations) == 2 and reservations[0] == reservations[1]

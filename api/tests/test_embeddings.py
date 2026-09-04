@@ -174,7 +174,7 @@ def test_direct_route_and_gateway_use_distinct_authentication(settings: Settings
     route = embedding_route(gateway)["litellm_params"]
     assert route["api_base"].endswith("/google-ai-studio/v1beta")
     assert route["extra_headers"] == {"cf-aig-authorization": "Bearer test-gateway-token"}
-    assert route["api_key"] == settings.gemini_api_key.get_secret_value()
+    assert route["api_key"] == settings.require_api_key("gemini").get_secret_value()
     with pytest.raises(ValueError, match="incomplete"):
         embedding_route(direct.model_copy(update={"use_ai_gateway": True}))
 

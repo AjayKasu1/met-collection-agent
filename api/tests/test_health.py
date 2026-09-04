@@ -49,7 +49,7 @@ def test_health_is_typed_and_does_not_expose_configuration(
         "git_sha": "unknown",
         "optional_services": settings.optional_services.model_dump(),
     }
-    assert settings.gemini_api_key.get_secret_value() not in response.text
+    assert settings.require_api_key("gemini").get_secret_value() not in response.text
     assert settings.llm_model not in response.text
     assert str(settings.qdrant_url) not in response.text
 
@@ -195,12 +195,13 @@ def test_lifespan_logs_start_and_stop(app: FastAPI, logs: StringIO) -> None:
     with TestClient(app):
         pass
     events = [json.loads(line)["event"] for line in logs.getvalue().splitlines()]
-    assert events == ["service_started", "service_stopped"]
+    assert events == ["service_started", "model_fallbacks_configured", "service_stopped"]
+    assert json.loads(logs.getvalue().splitlines()[1])["active"] == {}
 
 
 def test_factory_fails_before_serving_with_missing_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(ConfigurationError, match="GEMINI_API_KEY: missing"):
+    with pytest.raises(ConfigurationError, match="LLM_MODEL: missing"):
         create_app()

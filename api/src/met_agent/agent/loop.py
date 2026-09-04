@@ -192,7 +192,7 @@ class Agent:
                         {
                             "role": "tool",
                             "tool_call_id": call.get("id", ""),
-                            "content": result.model_dump_json(),
+                            "content": result.model_context(),
                         }
                     )
                     evidence.extend(result.evidence)

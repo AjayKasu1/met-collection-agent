@@ -27,7 +27,10 @@ def test_token_counting_uses_the_configured_provider_path(
 
     def respond(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/models/gemini-embedding-001:countTokens")
-        assert request.headers["x-goog-api-key"] == settings.gemini_api_key.get_secret_value()
+        assert (
+            request.headers["x-goog-api-key"]
+            == settings.require_api_key("gemini").get_secret_value()
+        )
         assert ("cf-aig-authorization" in request.headers) == gateway
         body = json.loads(request.content)
         assert len(body["contents"]) == 2

@@ -10,7 +10,7 @@ from met_agent.config import ConfigurationError, Settings, load_settings
 def test_missing_required_keys_are_reported_together() -> None:
     with pytest.raises(ConfigurationError) as error:
         load_settings(env_file=None)
-    for key in ("GEMINI_API_KEY", "LLM_MODEL", "LLM_MODEL_LITE"):
+    for key in ("LLM_MODEL", "LLM_MODEL_LITE"):
         assert f"{key}: missing" in str(error.value)
 
 
@@ -36,12 +36,14 @@ def test_blank_required_values_fail(
     monkeypatch.setenv("LLM_MODEL", value)
     with pytest.raises(ConfigurationError) as error:
         load_settings(env_file=None)
-    assert "GEMINI_API_KEY" in str(error.value)
     assert "LLM_MODEL" in str(error.value)
+    monkeypatch.setenv("LLM_MODEL", valid_environment["LLM_MODEL"])
+    with pytest.raises(ConfigurationError, match="GEMINI_API_KEY"):
+        load_settings(env_file=None)
 
 
 def test_secrets_are_hidden_from_repr_and_json(settings: Settings) -> None:
-    secret = settings.gemini_api_key.get_secret_value()
+    secret = settings.require_api_key("gemini").get_secret_value()
     assert secret not in repr(settings)
     assert secret not in settings.model_dump_json()
 
@@ -177,7 +179,7 @@ def test_explicit_dotenv_path_and_environment_precedence(
     result = load_settings(env_file=synthetic_file)
     assert result.ingest_max_objects == 50
     assert result.groq_api_key is None
-    assert result.gemini_api_key.get_secret_value() == "unit-test-dotenv-key"
+    assert result.require_api_key("gemini").get_secret_value() == "unit-test-dotenv-key"
 
 
 def test_dotenv_does_not_search_parent_directories(
@@ -187,7 +189,7 @@ def test_dotenv_does_not_search_parent_directories(
     child = tmp_path / "child"
     child.mkdir()
     monkeypatch.chdir(child)
-    with pytest.raises(ConfigurationError, match="GEMINI_API_KEY: missing"):
+    with pytest.raises(ConfigurationError, match="LLM_MODEL: missing"):
         load_settings()
 
 

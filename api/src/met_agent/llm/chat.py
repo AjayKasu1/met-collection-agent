@@ -1,5 +1,6 @@
 """Route chat through LiteLLM with explicit credentials, bounded retries, and narrow fallback."""
 
+import asyncio
 import json
 import logging
 import time
@@ -11,9 +12,12 @@ from typing import Any, Protocol
 from pydantic import BaseModel, JsonValue
 
 from met_agent.agent.models import ModelCall, Route
-from met_agent.config import Settings
+from met_agent.config import Settings, model_provider
 from met_agent.llm.cost import CallLedger, estimate_cost
-from met_agent.llm.router import _gateway_base
+from met_agent.llm.pacing import RequestBudgetError, TokenPacer, prompt_tokens
+from met_agent.llm.providers import chat_routes as chat_routes
+from met_agent.llm.providers import configured_models
+from met_agent.llm.providers import google_model as google_model
 
 
 class ModelError(RuntimeError):
@@ -71,48 +75,17 @@ async def structured[T: BaseModel](
         ) from None
 
 
-def google_model(name: str) -> str:
-    return "gemini/" + name.removeprefix("google-ai-studio/").removeprefix("gemini/").removeprefix(
-        "models/"
-    )
-
-
-def chat_routes(settings: Settings) -> list[dict[str, Any]]:
-    routes = []
-    for alias, name in (("lite", settings.llm_model_lite), ("main", settings.llm_model)):
-        params: dict[str, Any] = {
-            "model": google_model(name),
-            "api_key": settings.gemini_api_key.get_secret_value(),
-        }
-        if settings.use_ai_gateway:
-            if settings.cf_ai_gateway_url is None or settings.cf_ai_gateway_token is None:
-                raise ValueError("AI Gateway configuration is incomplete")
-            params.update(
-                api_base=_gateway_base(str(settings.cf_ai_gateway_url)),
-                extra_headers={
-                    "cf-aig-authorization": "Bearer "
-                    + settings.cf_ai_gateway_token.get_secret_value()
-                },
-            )
-        routes.append({"model_name": alias, "litellm_params": params})
-    if settings.llm_model_fallback and settings.groq_api_key:
-        routes.append(
-            {
-                "model_name": "fallback",
-                "litellm_params": {
-                    "model": settings.llm_model_fallback,
-                    "api_key": settings.groq_api_key.get_secret_value(),
-                },
-            }
-        )
-    return routes
-
-
 class LiteLLMChat:
     """Fallback only after rate-limit or timeout exhaustion, never after authentication failure."""
 
     def __init__(self, settings: Settings, *, router: Any = None, callback: Any = None) -> None:
         self.settings, self.callback = settings, callback
+        self.models = configured_models(settings)
+        self.pacer = TokenPacer(settings)
+        logging.getLogger(__name__).info(
+            "Active model fallbacks: %s",
+            {k: v for k, v in self.models.items() if k.startswith("fallback")},
+        )
         if router is None:
             from litellm.router import Router
             from litellm.types.router import RetryPolicy
@@ -124,13 +97,13 @@ class LiteLLMChat:
             router = Router(
                 model_list=chat_routes(settings),
                 timeout=settings.llm_timeout_seconds,
-                num_retries=settings.llm_max_retries,
+                num_retries=0,
                 retry_policy=RetryPolicy(
                     BadRequestErrorRetries=0,
                     AuthenticationErrorRetries=0,
-                    TimeoutErrorRetries=settings.llm_max_retries,
-                    RateLimitErrorRetries=settings.llm_max_retries,
-                    InternalServerErrorRetries=settings.llm_max_retries,
+                    TimeoutErrorRetries=0,
+                    RateLimitErrorRetries=0,
+                    InternalServerErrorRetries=0,
                 ),
                 fallbacks=[],
                 max_fallbacks=0,
@@ -152,7 +125,11 @@ class LiteLLMChat:
             context.audit(
                 "model_request", {"route": route, "messages": json.loads(json.dumps(messages))}
             )
-        options: dict[str, Any] = {"messages": messages, "temperature": 0, "max_tokens": 2000}
+        options: dict[str, Any] = {
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": self.settings.llm_max_output_tokens,
+        }
         if tools:
             options["tools"] = tools
         else:
@@ -164,22 +141,56 @@ class LiteLLMChat:
             options["metadata"] = {"trace_context": self.callback.metadata()}
         started = time.monotonic()
         actual_route = str(route)
+        response = None
         try:
-            try:
-                response = await self.router.acompletion(model=route, **options)
-            except (RateLimitError, Timeout):
-                if not (self.settings.llm_model_fallback and self.settings.groq_api_key):
-                    raise
-                actual_route = "fallback"
-                if context:
-                    context.audit("model_fallback", {"from": route, "to": "fallback"})
-                response = await self.router.acompletion(model="fallback", **options)
+            candidates = [str(route)] + [k for k in self.models if k.startswith("fallback")]
+            for candidate in candidates:
+                actual_route = candidate
+                model_name = self.models[candidate]
+                if "gpt-oss" in model_name:
+                    options["reasoning_effort"] = "low"
+                else:
+                    options.pop("reasoning_effort", None)
+                for attempt in range(self.settings.llm_max_retries + 1):
+                    reservation = await self.pacer.reserve(
+                        model_name,
+                        prompt_tokens(model_name, messages, tools)
+                        + self.settings.llm_max_output_tokens,
+                    )
+                    try:
+                        response = await self.router.acompletion(model=candidate, **options)
+                        await self.pacer.reconcile(reservation, int(response.usage.total_tokens))
+                        break
+                    except (RateLimitError, Timeout) as error:
+                        headers = getattr(getattr(error, "response", None), "headers", {})
+                        try:
+                            retry_after = max(0.0, float(headers.get("retry-after", 0)))
+                        except (TypeError, ValueError):
+                            retry_after = 0.0
+                        if attempt < self.settings.llm_max_retries and retry_after <= 60:
+                            await asyncio.sleep(max(2**attempt, retry_after))
+                            continue
+                        if candidate == candidates[-1]:
+                            raise
+                        if context:
+                            context.audit(
+                                "model_fallback",
+                                {
+                                    "from": candidate,
+                                    "to": candidates[candidates.index(candidate) + 1],
+                                },
+                            )
+                        break
+                if response is not None:
+                    break
         except Exception as error:
             status = getattr(getattr(error, "response", None), "status_code", None) or getattr(
                 error, "status_code", None
             )
             code = (
-                "access_denied"
+                "context_budget_exceeded"
+                if isinstance(error, RequestBudgetError)
+                else "access_denied"
                 if status in (401, 403)
                 else "model_not_found"
                 if status == 404
@@ -192,14 +203,19 @@ class LiteLLMChat:
                 f"Model request failed ({type(error).__name__}, HTTP {status}); "
                 "check provider access and configured model identifiers",
             ) from None
+        if response is None:
+            raise ModelError("provider_unavailable", "No provider response")
         usage = response.usage
         call = ModelCall(
             model=str(response.model),
             route=actual_route,
-            path="direct_groq"
-            if actual_route == "fallback"
-            else "ai_gateway"
+            provider=model_provider(self.models[actual_route]),
+            path="ai_gateway"
             if self.settings.use_ai_gateway
+            else "direct_groq"
+            if model_provider(self.models[actual_route]) == "groq"
+            else "direct_cerebras"
+            if model_provider(self.models[actual_route]) == "cerebras"
             else "direct_google",
             input_tokens=int(usage.prompt_tokens),
             output_tokens=int(usage.completion_tokens),
@@ -209,6 +225,7 @@ class LiteLLMChat:
         message = response.choices[0].message.model_dump(exclude_none=True)
         # Preserve provider tool signatures for subsequent calls, but do not expose reasoning text.
         message.pop("reasoning_content", None)
+        message.pop("reasoning", None)
         if context:
             context.ledger.calls.append(call)
             context.audit(

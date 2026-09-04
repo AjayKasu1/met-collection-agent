@@ -57,6 +57,7 @@ def valid_environment(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         "EMBEDDING_MODEL": "test/embedding-model",
         "EMBEDDING_PROVIDER": "gemini",
         "EMBEDDING_DIMENSIONS": "768",
+        "LLM_PACING_ENABLED": "false",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)

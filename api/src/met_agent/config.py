@@ -26,6 +26,33 @@ from pydantic_settings.exceptions import SettingsError
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Credential = Annotated[SecretStr, Field(min_length=1)]
 CorsOrigins = Annotated[tuple[str, ...], NoDecode]
+ChatProvider = Literal["gemini", "groq", "cerebras"]
+
+
+def model_provider(model: str) -> ChatProvider:
+    """Recognize provider-qualified chat models while retaining raw Google identifiers."""
+    if model.startswith("groq/"):
+        return "groq"
+    if model.startswith("cerebras/"):
+        return "cerebras"
+    return "gemini"
+
+
+class LLMRateLimit(BaseModel):
+    """Per-model process limits; account-wide quotas may be lower or shared elsewhere."""
+
+    model_config = {"extra": "forbid", "frozen": True}
+    tokens_per_minute: Annotated[int, Field(gt=0)]
+    requests_per_minute: Annotated[int, Field(gt=0)]
+
+
+def default_llm_limits() -> dict[str, LLMRateLimit]:
+    """Use published entry-tier limits verified on September 4, 2026."""
+    return {
+        "groq/openai/gpt-oss-120b": LLMRateLimit(tokens_per_minute=8000, requests_per_minute=30),
+        "groq/openai/gpt-oss-20b": LLMRateLimit(tokens_per_minute=8000, requests_per_minute=30),
+        "cerebras/gpt-oss-120b": LLMRateLimit(tokens_per_minute=30000, requests_per_minute=5),
+    }
 
 
 class OptionalServices(BaseModel):
@@ -61,7 +88,7 @@ class Settings(BaseSettings):
     git_sha: Annotated[str, Field(pattern=r"^(?:unknown|[0-9a-f]{7,40})$")] = "unknown"
     cors_origins: CorsOrigins = ("http://localhost:3000",)
 
-    gemini_api_key: Credential = Field(repr=False)
+    gemini_api_key: Credential | None = Field(default=None, repr=False)
     llm_model: NonEmptyString
     llm_model_lite: NonEmptyString
     embedding_provider: Literal["local", "gemini"] = "local"
@@ -69,9 +96,16 @@ class Settings(BaseSettings):
     embedding_dimensions: Annotated[int, Field(ge=128, le=3072)] = 1024
     embedding_threads: Annotated[int, Field(ge=1, le=64)] = 4
     llm_model_fallback: NonEmptyString | None = None
+    llm_model_fallback_2: NonEmptyString | None = None
     groq_api_key: Credential | None = Field(default=None, repr=False)
+    cerebras_api_key: Credential | None = Field(default=None, repr=False)
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60
     llm_max_retries: Annotated[int, Field(ge=0, le=5)] = 2
+    llm_pacing_enabled: bool = True
+    llm_max_output_tokens: Annotated[int, Field(ge=128, le=8192)] = 1600
+    llm_rate_limits: dict[str, LLMRateLimit] = Field(default_factory=default_llm_limits)
+    llm_default_tokens_per_minute: Annotated[int, Field(gt=0)] = 6000
+    llm_default_requests_per_minute: Annotated[int, Field(gt=0)] = 5
 
     use_ai_gateway: bool = False
     cf_ai_gateway_url: HttpUrl | None = None
@@ -190,12 +224,46 @@ class Settings(BaseSettings):
                 )
         return self
 
+    def provider_key(self, provider: ChatProvider) -> SecretStr | None:
+        """Keep provider selection and optional-service flags consistent."""
+        return {
+            "gemini": self.gemini_api_key,
+            "groq": self.groq_api_key,
+            "cerebras": self.cerebras_api_key,
+        }[provider]
+
+    def require_api_key(self, provider: ChatProvider) -> SecretStr:
+        """Unwrap credentials only after checking the selected provider is configured."""
+        key = self.provider_key(provider)
+        if key is None:
+            raise ConfigurationError(f"{provider.upper()}_API_KEY is required")
+        return key
+
+    @model_validator(mode="after")
+    def validate_model_credentials(self) -> Self:
+        required = {model_provider(self.llm_model), model_provider(self.llm_model_lite)}
+        if self.embedding_provider == "gemini":
+            required.add("gemini")
+        missing = [
+            f"{provider.upper()}_API_KEY"
+            for provider in sorted(required)
+            if not self.provider_key(provider)
+        ]
+        if missing:
+            raise PydanticCustomError(
+                "missing_configuration", "Required settings: {keys}", {"keys": ", ".join(missing)}
+            )
+        return self
+
     @property
     def optional_services(self) -> OptionalServices:
         """Report configured integrations without claiming connectivity or readiness."""
         return OptionalServices(
             ai_gateway=self.use_ai_gateway,
-            fallback_llm=bool(self.groq_api_key and self.llm_model_fallback),
+            fallback_llm=any(
+                model is not None and self.provider_key(model_provider(model)) is not None
+                for model in (self.llm_model_fallback, self.llm_model_fallback_2)
+            ),
             langfuse=bool(
                 self.langfuse_public_key and self.langfuse_secret_key and self.langfuse_base_url
             ),

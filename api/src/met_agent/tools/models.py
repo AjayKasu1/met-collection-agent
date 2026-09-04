@@ -113,3 +113,17 @@ class ToolResult(BaseModel):
     output: ToolPayload | None = None
     error: ToolError | None = None
     evidence: list[Evidence] = Field(default_factory=list)
+
+    def model_context(self) -> str:
+        """Send citation evidence once; retain full records only in tool APIs and audit logs."""
+        import json
+
+        if self.error or not self.evidence:
+            return self.model_dump_json(exclude={"evidence"})
+        payload = {
+            "name": self.name,
+            "evidence": [item.model_dump(mode="json") for item in self.evidence],
+        }
+        if isinstance(self.output, CollectionSearchResult):
+            payload["freshness"] = self.output.freshness
+        return json.dumps(payload, ensure_ascii=False)
