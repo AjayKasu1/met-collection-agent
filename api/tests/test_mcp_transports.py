@@ -18,6 +18,11 @@ from met_agent.mcp.server import create_server
 
 async def exercise(session: ClientSession) -> None:
     await session.initialize()
+    async with asyncio.timeout(10):
+        await exercise_tools(session)
+
+
+async def exercise_tools(session: ClientSession) -> None:
     listed = await session.list_tools()
     assert any(tool.name == "handoff" for tool in listed.tools)
     result = await session.call_tool("handoff", {"reason": "account"})
@@ -47,7 +52,8 @@ def test_stdio_protocol_and_clean_shutdown(tmp_path: Path) -> None:
             ClientSession(
                 read,
                 write,
-                read_timeout_seconds=15,
+                # A cold subprocess imports ONNX and Arrow; dispatch is bounded separately.
+                read_timeout_seconds=60,
                 client_info=Implementation(name="protocol-test", version="1"),
             ) as session,
         ):
