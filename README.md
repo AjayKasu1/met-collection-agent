@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, live or saved visitor-page ingestion, hybrid Gemini/BM25 indexes, golden-ID verification, and portable Qdrant snapshots. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
+The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, live or saved visitor-page ingestion, multilingual local text/BM25 indexes with published image vectors, golden-ID verification, and portable Qdrant snapshots. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ make setup
 cp .env.example .env
 ```
 
-Edit `.env` locally and supply `GEMINI_API_KEY`, `LLM_MODEL`, `LLM_MODEL_LITE`, and `EMBEDDING_MODEL`. Use exact model identifiers accepted by your provider through LiteLLM. Model names are intentionally configuration, with no guessed defaults. Keep `USE_AI_GATEWAY=false` for direct provider access.
+Edit `.env` locally and supply `GEMINI_API_KEY`, `LLM_MODEL`, and `LLM_MODEL_LITE` for chat configuration. Text embeddings default to local FastEmbed with `EMBEDDING_MODEL=intfloat/multilingual-e5-large` and `EMBEDDING_DIMENSIONS=1024`. The optional Gemini embedding path requires an explicit provider, model, and dimension change. Keep `USE_AI_GATEWAY=false` for direct Google access, or configure the gateway as described in the configuration guide.
 
 ```sh
 make dev
@@ -49,16 +49,16 @@ Tests supply synthetic settings and never load the developer's `.env` or call an
 
 ```sh
 make qdrant
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --prepare-only"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_local --prepare-only"
 make verify-golden ARGS="--data-dir data/pilot"
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --reuse-prepared --batch-delay-seconds 30"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_local --reuse-prepared --batch-size 32"
 ```
 
-Preparation makes no model calls. The final command uses the configured embedding provider and Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md) and [snapshot publication and seeding](docs/index-artifacts.md).
+Preparation makes no model calls. The final command downloads pinned ONNX weights on first use, runs text inference locally, and writes to the configured Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md) and [snapshot publication and seeding](docs/index-artifacts.md).
 
 The bounded sample reserves eligible golden IDs before filling its remaining slots. `selection.json` records exclusions such as non-public-domain objects. To prepare browser-saved visitor HTML without crawling, use `make ingest-visitors ARGS="--html-dir data/visitor_pages --prepare-only"` with the local source manifest described in the ingestion guide.
 
-The [full ingestion guide](docs/full-ingestion.md) covers 768-dimensional vectors, token-aware batching, daily quota waits, durable checkpoints, and detached execution with `nohup`. The verified free-tier daily allowance makes a 20,000-object run take about 20 days; the progress log reports a quota-based completion estimate.
+The [full ingestion guide](docs/full-ingestion.md) covers local inference, published SigLIP 2 image vectors, durable checkpoints, and detached execution with `nohup`. Local inference has no API quotas. Gemini remains available with token-aware pacing and persisted daily quota accounting.
 
 ## Project layout
 
@@ -85,4 +85,12 @@ docs/configuration.md         Settings and operational behavior
 
 The current service has no authentication or rate limiting. The development server binds to loopback. CORS restricts browser origins and is not an authorization mechanism. Request logs omit bodies, raw paths, query strings, and headers; application code must continue to avoid interpolating sensitive values into free-form log messages. Future tracing and audit storage require their own content-access and retention controls.
 
-The source code is MIT licensed. Collection data comes from [The Met Open Access initiative](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access) under its applicable CC0 terms. This project is not affiliated with or endorsed by The Metropolitan Museum of Art.
+## Data and attribution
+
+Collection metadata is provided by The Metropolitan Museum of Art through [metmuseum/openaccess](https://github.com/metmuseum/openaccess), under CC0. Preparation uses its official CSV. The [Met's Hugging Face dataset card](https://huggingface.co/datasets/metmuseum/openaccess) supplies the accompanying attribution and usage guidance.
+
+Image embeddings are provided by The Metropolitan Museum of Art through [metmuseum/openaccess-embeddings-siglip2](https://huggingface.co/datasets/metmuseum/openaccess-embeddings-siglip2), also CC0. The pinned source revision is `45fe67456ef1cffbe5ba801d5cd341fcf31cd806`, using `google/siglip2-so400m-patch14-384` with 1,152 dimensions. Its published vectors match 19,964 of the selected 20,000 Object IDs (99.82%); the remaining 36 objects have no image vector. No image embeddings are computed by this project.
+
+This is a modified derivative: 20,000 public-domain records are selected, metadata is normalized, retrieval text is assembled, local text embeddings are generated, and published image vectors are joined by Object ID into a Qdrant index. Raw metadata fields and source URLs are retained. Text uses `intfloat/multilingual-e5-large` with 1,024 dimensions; model weights have their own MIT license. Snapshot manifests record the provider, model, dimensions, image source revision, coverage, and artifact hashes.
+
+This project is not affiliated with or endorsed by The Metropolitan Museum of Art. Museum logos and trademarks are not used as project branding. The source code is MIT licensed. Visitor website extracts retain their original ownership and are not covered by the collection dataset's CC0 license.

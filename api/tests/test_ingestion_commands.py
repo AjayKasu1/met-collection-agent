@@ -34,7 +34,7 @@ def stub_index(monkeypatch: pytest.MonkeyPatch) -> list[IndexDocument]:
     indexed: list[IndexDocument] = []
 
     class Store:
-        def __init__(self, *args: Any) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
         def ingest(self, documents: Sequence[IndexDocument], *args: Any, **kwargs: Any) -> int:
@@ -46,8 +46,7 @@ def stub_index(monkeypatch: pytest.MonkeyPatch) -> list[IndexDocument]:
 
     monkeypatch.setattr(commands, "HybridStore", Store)
     monkeypatch.setattr(commands, "qdrant_client", lambda _: SimpleNamespace(close=lambda: None))
-    monkeypatch.setattr(commands, "create_embedding_router", lambda _: None)
-    monkeypatch.setattr(commands, "GeminiEmbedder", lambda *a, **kw: None)
+    monkeypatch.setattr(commands, "create_embedder", lambda _: None)
     monkeypatch.setattr(commands, "BM25Embedder", lambda _: None)
     return indexed
 
@@ -140,7 +139,7 @@ def test_checkpoint_command_owns_retries_and_passes_quota_overrides(
     )
     checkpoint = configured_commands.data_dir / "ingest.checkpoint.json"
     routes: list[Settings] = []
-    monkeypatch.setattr(commands, "create_embedding_router", routes.append)
+    monkeypatch.setattr(commands, "create_embedder", routes.append)
 
     class Runner:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -204,6 +203,62 @@ def test_invalid_checkpoint_options_fail_before_source_access(
     monkeypatch.setattr(commands, "read_golden", no_sources)
     with pytest.raises(ValueError):
         commands.ingest_collection(arguments)
+
+
+def test_local_command_uses_checkpoint_and_published_images_without_quota_runner(
+    configured_commands: Settings, stub_index: list[IndexDocument], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from met_agent.ingestion.image_vectors import SIGLIP2, ImageManifest
+
+    configured = configured_commands.model_copy(
+        update={
+            "embedding_provider": "local",
+            "embedding_model": "intfloat/multilingual-e5-large",
+            "embedding_dimensions": 1024,
+        }
+    )
+    monkeypatch.setattr(commands, "load_settings", lambda: configured)
+    obj = CollectionObject(
+        object_id=1, title="Vessel", source_url="https://www.metmuseum.org/item/1", raw_fields={}
+    )
+    manifest = ImageManifest(
+        source=SIGLIP2,
+        artifact_sha256="a" * 64,
+        selected_ids=[1],
+        included_ids=[1],
+        missing_ids=[],
+        source_files={},
+    )
+    images = {1: [1.0] + [0.0] * 1151}
+    monkeypatch.setattr(commands, "load_images", lambda *a: (manifest, images))
+    monkeypatch.setattr(
+        commands,
+        "reuse_selection",
+        lambda *a, **kw: CollectionSelection(
+            objects=[obj], report=SelectionReport(required_ids=[], included_ids=[], excluded_ids={})
+        ),
+    )
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("Local ingestion cannot invoke Gemini's quota or token-counting path")
+
+    def run(*args: Any, **kwargs: Any) -> int:
+        assert args[4] == configured.data_dir / "local_ingest.checkpoint.json"
+        assert kwargs["images"] == images
+        assert kwargs["image_sha256"] == manifest.artifact_sha256
+        stub_index.extend(args[1])
+        return len(args[1])
+
+    monkeypatch.setattr(commands, "ResumableIngestor", forbidden)
+    monkeypatch.setattr(commands, "GeminiTokenCounter", forbidden)
+    monkeypatch.setattr(commands, "run_local_ingestion", run)
+    assert commands.ingest_collection(["--reuse-prepared", "--with-images"]) == 0
+    assert [doc.point_id for doc in stub_index] == [1]
+    with pytest.raises(ValueError, match="no API quota delay"):
+        commands.ingest_collection(["--batch-delay-seconds", "30"])
+    save_objects(configured.data_dir / "objects.parquet", [obj])
+    monkeypatch.setattr(commands, "prepare_images", lambda *a: manifest)
+    assert commands.prepare_image_vectors([]) == 0
 
 
 def test_collection_passes_deduplicated_golden_ids_and_reports_eligibility_exceptions(
@@ -371,7 +426,7 @@ def test_snapshot_commands_export_publish_and_restore_explicit_artifacts(
     publications: list[str] = []
     downloads: list[str] = []
 
-    def export(*args: Any) -> None:
+    def export(*args: Any, **kwargs: Any) -> None:
         exports.append(args[4])
 
     def publish(directory: Path, repo: str, token: str) -> str:
@@ -388,7 +443,7 @@ def test_snapshot_commands_export_publish_and_restore_explicit_artifacts(
     monkeypatch.setattr(
         artifacts,
         "restore_bundle",
-        lambda *a: SimpleNamespace(files={"objects.parquet": None}, indexes=[None]),
+        lambda *a, **kw: SimpleNamespace(files={"objects.parquet": None}, indexes=[None]),
     )
     assert commands.publish_index(["--include-visitor"]) == 0
     assert publications == []

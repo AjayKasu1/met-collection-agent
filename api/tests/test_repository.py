@@ -1,8 +1,22 @@
 """Protect private inputs while allowing publishable runtime prompts and configuration examples."""
 
+from pathlib import Path
+
 import pytest
 
 from scripts import check_repository
+
+
+def test_readme_preserves_data_attribution_modifications_and_independence() -> None:
+    readme = (Path(__file__).resolve().parents[2] / "README.md").read_text()
+    for required in (
+        "https://github.com/metmuseum/openaccess",
+        "https://huggingface.co/datasets/metmuseum/openaccess-embeddings-siglip2",
+        "CC0",
+        "modified derivative",
+        "not affiliated with or endorsed by The Metropolitan Museum of Art",
+    ):
+        assert required in readme
 
 
 @pytest.mark.parametrize(

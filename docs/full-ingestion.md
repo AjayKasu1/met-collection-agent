@@ -1,15 +1,71 @@
 # Resumable collection ingestion
 
-Run from the repository root after `make setup`. Prepare and verify the input before indexing:
+Run from the repository root after `make setup`. The default is local multilingual E5 text inference with 1,024 dimensions. Set these values together in your local `.env`:
+
+```dotenv
+EMBEDDING_PROVIDER=local
+EMBEDDING_MODEL=intfloat/multilingual-e5-large
+EMBEDDING_DIMENSIONS=1024
+```
+
+Prepare the public-domain selection, review golden identities, and join published image vectors:
 
 ```sh
 make ingest ARGS="--limit 20000 --prepare-only"
 make verify-golden
+make prepare-images
 ```
 
-The prepared `data/objects.parquet` and `data/selection.json` reserve all eligible golden IDs. Keep these artifacts unchanged while a checkpoint is active. `col-008` remains in the evaluation file with a note that Pollock's non-public-domain object is answered through `get_object`, not `search_collection`.
+`data/objects.parquet` and `data/selection.json` reserve all eligible golden IDs. The image preparation command downloads the pinned Met SigLIP 2 Parquet shards, then writes the joined vectors and their provenance manifest. The source download is about 1.12 GB, and the local text model is about 2.24 GB. Downloads are cached under ignored `data/`; subsequent runs reuse them. No image model is run.
 
-## Provider quotas and batching
+Keep these artifacts unchanged while a checkpoint is active. `col-008` remains in the evaluation file: Pollock's non-public-domain object is answered through `get_object`, not `search_collection`. The other eight unique golden IDs are in the public-domain selection.
+
+## Start local inference detached
+
+Choose an absent or empty collection. A fresh checkpoint refuses to adopt a nonempty collection. The local model runs on CPU with four threads by default. Batches of 32 are grouped by text length to reduce padding. Performance depends on the host and record lengths; the progress log records measured batch and elapsed times. Local inference has no RPM, TPM, RPD, or daily pause logic.
+
+```sh
+nohup api/.venv/bin/python -u api/scripts/ingest_collection.py \
+  --limit 20000 --reuse-prepared --with-images --collection met_objects \
+  --batch-size 32 --checkpoint data/local_ingest.checkpoint.json \
+  >> data/local_ingest.log 2>&1 < /dev/null &
+echo $! > data/local_ingest.pid
+```
+
+On macOS, this optional command keeps the machine from idle sleeping while that worker runs:
+
+```sh
+caffeinate -i -w "$(cat data/local_ingest.pid)" &
+```
+
+```sh
+tail -f data/local_ingest.log
+```
+
+`local_ingestion_progress` records acknowledged counts, active elapsed seconds accumulated across resumes, and batch duration. `local_ingestion_completed` appears only after every expected ID, payload, published image vector, and declared image absence has been checked in Qdrant. `collection_indexed.wall_seconds` measures the current process's indexing stage, including model initialization and verification. Time spent stopped between attempts and earlier source downloads is separate.
+
+`nohup` survives terminal closure, but not reboot or sleep. To stop, send SIGINT to the PID in `data/local_ingest.pid`. After the process exits, run the same launch command to resume. Do not run two workers for one checkpoint. After completion:
+
+```sh
+make verify-golden ARGS="--collection met_objects"
+make publish-index ARGS="--upload"
+```
+
+Review [snapshot publication and restoration](index-artifacts.md) before choosing a destination. No writer should be running during export.
+
+## Checkpoint guarantees
+
+A schema-version-3 checkpoint binds the complete input digest, destination hash, collection, text provider/model/dimension, selected image artifact hash, and object count. Local checkpoints record completed Object IDs and active elapsed time; their quota field is null. An exclusive OS lock prevents concurrent use, and checkpoint writes are flushed, synchronized, and atomically replaced. Checkpoints contain no API keys.
+
+The completed-ID set advances only after Qdrant acknowledges dense, sparse, and available image vectors together. Resume validates the run identity and every checkpointed payload before skipping those objects. Remaining records can be regrouped without losing the acknowledged set. Missing or changed records and incompatible metadata stop the run. If a process dies between an acknowledged write and its checkpoint update, that single batch may be recomputed; stable IDs make its upsert idempotent.
+
+The stopped Gemini run's 798 vectors and payloads are preserved in `met_objects_gemini_798`, with the original checkpoint and a separate local snapshot under `data/gemini_798/`. They are not used by the local index. The original 3,072-dimensional pilot remains in `met_objects_pilot_200`. Legacy checkpoints and vector spaces must stay separate from schema-version-3 local runs.
+
+## Optional Gemini inference
+
+Set `EMBEDDING_PROVIDER=gemini`, `EMBEDDING_MODEL=gemini-embedding-001`, and `EMBEDDING_DIMENSIONS=768` together. Use a new collection and checkpoint. The reduced dimension is requested through Gemini's native output dimensionality parameter and normalized before indexing. Gateway settings apply to this path when enabled.
+
+### Gemini quotas and batching
 
 The project's signed-in [Google AI Studio rate-limit dashboard](https://aistudio.google.com/rate-limit) was checked on September 4, 2026. It showed these free-tier limits for `gemini-embedding-001`:
 
@@ -30,36 +86,17 @@ Once RPD is exhausted, the process logs its wake time and sleeps until the next 
 
 At 1,000 inputs per day, 20,000 objects need at least 20 daily quota allocations. Expect about 20 calendar days when part of today's allowance is already used. The log's `estimated_finish_at` includes the remaining daily budget and observed average tokens per object. It assumes the host stays awake, the process remains running, and no other client consumes quota. HTTP latency and failures can extend it. A fixed 30-second delay cannot remove the daily limit.
 
-## Start detached, watch, and resume
+### Start a separate quota-paced run
 
-The default `EMBEDDING_DIMENSIONS=768` requests reduced vectors from Gemini, normalizes them, and binds both the collection schema and checkpoint to that dimension. Schema-version-1 collections such as the original 3,072-dimensional pilot remain separate. Use a new or empty collection for a new checkpoint. Snapshot export and restore also check the configured dimension; see [index artifacts](index-artifacts.md).
-
-For a project with no embedding requests used yet today, launch:
+This example assumes no embedding requests have been used today. Replace `--initial-daily-requests 0` with the dashboard's existing usage when creating a checkpoint. Persisted quota usage takes precedence on resume.
 
 ```sh
 nohup api/.venv/bin/python -u api/scripts/ingest_collection.py \
-  --limit 20000 --reuse-prepared --collection met_objects \
-  --batch-size 100 --checkpoint data/ingest.checkpoint.json \
+  --limit 20000 --reuse-prepared --collection met_objects_gemini_768 \
+  --batch-size 100 --checkpoint data/gemini_ingest.checkpoint.json \
   --requests-per-minute 100 --tokens-per-minute 30000 --requests-per-day 1000 \
-  --initial-daily-requests 0 >> data/ingest.log 2>&1 < /dev/null &
-echo $! > data/ingest.pid
+  --initial-daily-requests 0 >> data/gemini_ingest.log 2>&1 < /dev/null &
+echo $! > data/gemini_ingest.pid
 ```
 
-For an existing day's usage, replace `--initial-daily-requests 0` with the number already consumed, including smoke calls. This argument is used only when creating a checkpoint. On resume, persisted quota usage takes precedence. `--batch-size 100` overrides an older, smaller `EMBEDDING_BATCH_SIZE` without editing `.env`. Omit `--batch-delay-seconds` in checkpoint mode; the two pacing modes are incompatible.
-
-```sh
-tail -f data/ingest.log
-cat data/ingest.pid
-```
-
-Progress records include the acknowledged object count, batch tokens, reserved tokens, daily requests, and estimated finish time in UTC. A quota-wait event reports why processing paused and when it will resume. It is normal for the log to remain quiet during a daily wait. `ingestion_completed` is emitted only after all expected IDs and payloads have been verified in Qdrant.
-
-`nohup` lets the job survive terminal closure. It does not keep a laptop awake or survive a reboot. After a process exits or the machine restarts, run the same launch command from the repository root to resume. Keep the same prepared artifacts, target, model, dimension, and checkpoint path. Network, authentication, input, and schema errors stop the process with acknowledged progress retained; fix the cause before resuming. Do not delete a checkpoint to retry a failed run.
-
-## Checkpoint guarantees
-
-The checkpoint records a SHA-256 of the complete input records, a hash of the Qdrant destination, the collection, model, dimension, schema version, total objects, next offset, completed tokens, and quota reservations. It contains no API keys. The file is flushed and synchronized before atomic replacement. An exclusive OS lock prevents concurrent use of the same checkpoint.
-
-Every request reservation is persisted before the provider call. The offset advances only after Qdrant acknowledges both dense and sparse vectors. Resume validates the run identity and every checkpointed payload before skipping completed batches. Missing or changed records and incompatible schema metadata stop the run. A new checkpoint cannot adopt a nonempty collection.
-
-If the process dies after Qdrant acknowledges a batch but before the checkpoint advances, that one batch may be embedded again. Stable point IDs make the repeated write idempotent. Earlier checkpointed batches are skipped, and their quota history survives the interruption. Source artifacts, checkpoints, lock files, PIDs, logs, and model caches stay under ignored `data/`.
+Gemini checkpoint mode persists reservations before each attempt, resumes from the acknowledged input offset, and waits across daily resets. It currently supports text and sparse vectors; attaching published images in this mode is rejected explicitly. Ordinary Gemini ingestion can use prepared image vectors, but recomputes text embeddings on rerun. Do not pass `--batch-delay-seconds` with a checkpoint. Authentication, schema, and input errors stop the process with acknowledged progress retained.

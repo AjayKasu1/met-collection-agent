@@ -2,6 +2,7 @@
 
 import argparse
 import math
+import time
 from collections.abc import Callable, Sequence
 from contextlib import closing
 from datetime import UTC, datetime
@@ -22,6 +23,8 @@ from met_agent.ingestion.collection import (
     select_objects,
 )
 from met_agent.ingestion.http import SourceClient, SourceError, download_csv
+from met_agent.ingestion.image_vectors import load_images, prepare_images
+from met_agent.ingestion.local_run import run_local_ingestion
 from met_agent.ingestion.models import VisitorChunk
 from met_agent.ingestion.quota import QuotaLimits
 from met_agent.ingestion.resumable import ResumableIngestor
@@ -37,9 +40,9 @@ from met_agent.ingestion.storage import (
 from met_agent.ingestion.token_counting import GeminiTokenCounter
 from met_agent.ingestion.verify import read_golden, verification_markdown, verify_golden
 from met_agent.ingestion.visitors import VisitorCrawler, chunk_markdown, html_to_markdown
-from met_agent.llm.router import create_embedding_router
 from met_agent.observability.logging import configure_logging
-from met_agent.retrieval.embeddings import BM25Embedder, EmbeddingError, GeminiEmbedder
+from met_agent.retrieval.embeddings import BM25Embedder, EmbeddingError
+from met_agent.retrieval.providers import create_embedder
 from met_agent.retrieval.qdrant_store import HybridStore, IndexCompatibilityError
 
 logger = structlog.get_logger(__name__)
@@ -108,6 +111,9 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--collection", help="Qdrant collection, overriding QDRANT_COLLECTION")
     parser.add_argument(
+        "--with-images", action="store_true", help="Attach prepared Met image vectors"
+    )
+    parser.add_argument(
         "--prepare-only", action="store_true", help="Download and prepare without LLM calls"
     )
     parser.add_argument(
@@ -119,6 +125,8 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     settings = load_settings()
     configure_logging(settings.log_level)
+    if settings.embedding_provider == "local" and args.batch_delay_seconds:
+        raise ValueError("Local ingestion has no API quota delay")
     batch_size = args.batch_size if args.batch_size is not None else settings.embedding_batch_size
     if not 1 <= batch_size <= 100 or args.initial_daily_requests < 0:
         raise ValueError("Batch size must be 1-100 and initial quota usage nonnegative")
@@ -174,11 +182,14 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
         "collection_prepared", objects=len(objects), images=sum(obj.has_image for obj in objects)
     )
     if not args.prepare_only:
-        dense = GeminiEmbedder(
-            create_embedding_router(
-                settings.model_copy(update={"llm_max_retries": 0}) if args.checkpoint else settings
-            ),
-            output_dimensionality=settings.embedding_dimensions,
+        started = time.monotonic()
+        image_manifest, images = (
+            load_images(output, {obj.object_id for obj in objects})
+            if args.with_images
+            else (None, None)
+        )
+        dense = create_embedder(
+            settings.model_copy(update={"llm_max_retries": 0}) if args.checkpoint else settings
         )
         sparse = BM25Embedder(settings.data_dir / "models")
         with closing(qdrant_client(settings)) as client:
@@ -187,9 +198,25 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
                 args.collection or settings.qdrant_collection,
                 settings.embedding_model,
                 settings.embedding_dimensions,
+                embedding_provider=settings.embedding_provider,
+                image=image_manifest.source if image_manifest else None,
             )
             documents = [obj.document() for obj in objects]
-            if args.checkpoint is not None:
+            if settings.embedding_provider == "local":
+                count = run_local_ingestion(
+                    store,
+                    documents,
+                    dense,
+                    sparse,
+                    args.checkpoint or output / "local_ingest.checkpoint.json",
+                    destination=str(settings.qdrant_url),
+                    batch_size=batch_size,
+                    images=images,
+                    image_sha256=image_manifest.artifact_sha256 if image_manifest else None,
+                )
+            elif args.checkpoint is not None:
+                if images is not None:
+                    raise ValueError("Gemini quota checkpoints require a text-only collection")
                 with httpx.Client(timeout=settings.llm_timeout_seconds) as token_http:
                     count = ResumableIngestor(
                         store,
@@ -212,8 +239,11 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
                     sparse,
                     batch_size=batch_size,
                     batch_delay_seconds=args.batch_delay_seconds,
+                    images=images,
                 )
-        logger.info("collection_indexed", objects=count)
+        logger.info(
+            "collection_indexed", objects=count, wall_seconds=round(time.monotonic() - started, 2)
+        )
     return 0
 
 
@@ -286,9 +316,7 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
         raise SourceError("No visitor chunks were produced")
     save_chunks(output / "visitor_chunks.jsonl", chunks)
     if not args.prepare_only:
-        dense = GeminiEmbedder(
-            create_embedding_router(settings), output_dimensionality=settings.embedding_dimensions
-        )
+        dense = create_embedder(settings)
         sparse = BM25Embedder(settings.data_dir / "models")
         with closing(qdrant_client(settings)) as client:
             store = HybridStore(
@@ -296,6 +324,7 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
                 args.collection or settings.qdrant_visitor_collection,
                 settings.embedding_model,
                 settings.embedding_dimensions,
+                embedding_provider=settings.embedding_provider,
             )
             store.ingest(
                 [chunk.document() for chunk in chunks],
@@ -316,10 +345,18 @@ def verify(argv: Sequence[str] | None = None) -> int:
     """Print live object existence, selected-sample membership, and manual-review rows."""
     parser = _base_parser("Verify the golden set against the live Met API and prepared data")
     parser.add_argument("--golden", type=Path, default=Path("evals/golden.jsonl"))
+    parser.add_argument(
+        "--collection", help="Verify actual Qdrant IDs and payloads before golden checks"
+    )
     args = parser.parse_args(argv)
     settings = load_settings()
     output: Path = args.data_dir or settings.data_dir
     objects = load_objects(output / "objects.parquet")
+    if args.collection:
+        from met_agent.ingestion.artifacts import verify_index
+
+        with closing(qdrant_client(settings)) as index:
+            verify_index(index, args.collection, [obj.document() for obj in objects])
     rows = read_golden(args.golden)
     with httpx.Client(timeout=30, follow_redirects=False) as client:
         results = verify_golden(
@@ -332,6 +369,17 @@ def verify(argv: Sequence[str] | None = None) -> int:
     atomic_write(output / "verify_golden.md", report.encode())
     print(report)
     return 1 if any(item.exists is not True for item in results) else 0
+
+
+def prepare_image_vectors(argv: Sequence[str] | None = None) -> int:
+    parser = _base_parser("Join the Met's pinned SigLIP 2 vectors to prepared object IDs")
+    args = parser.parse_args(argv)
+    settings = load_settings()
+    output = args.data_dir or settings.data_dir
+    selected = {obj.object_id for obj in load_objects(output / "objects.parquet")}
+    manifest = prepare_images(output, selected)
+    print(f"Published image coverage: {len(manifest.included_ids)}/{len(selected)} objects")
+    return 0
 
 
 def run_command(command: Callable[[], int]) -> int:
@@ -387,6 +435,7 @@ def publish_index(argv: Sequence[str] | None = None) -> int:
             collections,
             settings.embedding_model,
             settings.embedding_dimensions,
+            embedding_provider=settings.embedding_provider,
         )
     print("Verified snapshot bundle exported")
     if args.upload:
@@ -434,9 +483,10 @@ def seed(argv: Sequence[str] | None = None) -> int:
             },
             settings.embedding_model,
             settings.embedding_dimensions,
+            embedding_provider=settings.embedding_provider,
         )
     for name in manifest.files:
-        if not name.endswith(".snapshot"):
+        if not name.endswith(".snapshot") and name != "README.md":
             atomic_write(output / name, (bundle / name).read_bytes())
     print(f"Restored {len(manifest.indexes)} index(es) without embedding calls")
     return 0

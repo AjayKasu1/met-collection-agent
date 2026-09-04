@@ -10,7 +10,7 @@ from met_agent.config import ConfigurationError, Settings, load_settings
 def test_missing_required_keys_are_reported_together() -> None:
     with pytest.raises(ConfigurationError) as error:
         load_settings(env_file=None)
-    for key in ("GEMINI_API_KEY", "LLM_MODEL", "LLM_MODEL_LITE", "EMBEDDING_MODEL"):
+    for key in ("GEMINI_API_KEY", "LLM_MODEL", "LLM_MODEL_LITE"):
         assert f"{key}: missing" in str(error.value)
 
 

@@ -42,7 +42,7 @@ class OptionalServices(BaseModel):
 class Settings(BaseSettings):
     """Typed settings shared by API, ingestion, evaluation, and deployment tooling.
 
-    Model identifiers have no guessed defaults. Optional integrations activate only
+    Chat model identifiers have no guessed defaults. Optional integrations activate only
     when their configuration is complete, except an explicitly enabled AI Gateway,
     which requires its URL and token. Dotenv loading is reserved for load_settings.
     """
@@ -64,8 +64,10 @@ class Settings(BaseSettings):
     gemini_api_key: Credential = Field(repr=False)
     llm_model: NonEmptyString
     llm_model_lite: NonEmptyString
-    embedding_model: NonEmptyString
-    embedding_dimensions: Annotated[int, Field(ge=128, le=3072)] = 768
+    embedding_provider: Literal["local", "gemini"] = "local"
+    embedding_model: NonEmptyString = "intfloat/multilingual-e5-large"
+    embedding_dimensions: Annotated[int, Field(ge=128, le=3072)] = 1024
+    embedding_threads: Annotated[int, Field(ge=1, le=64)] = 4
     llm_model_fallback: NonEmptyString | None = None
     groq_api_key: Credential | None = Field(default=None, repr=False)
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60

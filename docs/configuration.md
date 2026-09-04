@@ -11,11 +11,24 @@ Run development commands from the repository root. The loader reads `.env` in th
 | `GEMINI_API_KEY` | Provider key, represented internally as `SecretStr` |
 | `LLM_MODEL` | Exact LiteLLM identifier for the main model |
 | `LLM_MODEL_LITE` | Exact LiteLLM identifier for lightweight tasks |
-| `EMBEDDING_MODEL` | Exact embedding model identifier |
 
-Required strings cannot be empty or whitespace. No model name is inferred. The scaffold validates these names as configuration but does not call the provider to check availability. A later model-not-found response must be resolved by checking the configured provider model.
+Required strings cannot be empty or whitespace. Chat model names have no defaults. Configuration validation does not call Google to check model availability. A later model-not-found response must be resolved by checking the configured provider model.
 
 `.env.example` lists every supported setting and documents defaults. A test checks the set of keys against the settings schema. Blank optional environment values are ignored. `LOG_LEVEL` accepts upper or lower case and is normalized before logging setup. Settings are immutable after loading; restart the process after changing configuration.
+
+## Embedding provider
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `EMBEDDING_PROVIDER` | `local` | `local` or `gemini`; never falls back silently |
+| `EMBEDDING_MODEL` | `intfloat/multilingual-e5-large` | Exact identity stored in collection and snapshot metadata |
+| `EMBEDDING_DIMENSIONS` | `1024` | Positive dimension; local E5 requires exactly 1,024 |
+| `EMBEDDING_THREADS` | `4` | Local ONNX CPU threads, from 1 to 64 |
+| `EMBEDDING_BATCH_SIZE` | `32` | Inputs per batch; collection CLI can override with `--batch-size` |
+
+The installed FastEmbed 0.8.0 registry includes the multilingual E5 large model. Weights come from [`qdrant/multilingual-e5-large-onnx`](https://huggingface.co/qdrant/multilingual-e5-large-onnx/tree/66076b8dc6e367337e3e90e6fb309fb0f3addaf6) at revision `66076b8dc6e367337e3e90e6fb309fb0f3addaf6`. The first use downloads about 2.24 GB; subsequent runs use the local cache without a Hub request. Inference runs on CPU through FastEmbed and ONNX Runtime. The tokenizer checks the actual 512-token limit, including E5's `passage: ` or `query: ` prefix, and rejects oversized inputs instead of silently truncating them. Outputs are normalized to unit length. The prepared 20,000 collection texts fit this limit; newly prepared visitor chunks must also fit it.
+
+To use Gemini embeddings, explicitly set `EMBEDDING_PROVIDER=gemini`, `EMBEDDING_MODEL=gemini-embedding-001`, and `EMBEDDING_DIMENSIONS=768`. These are coordinated settings: changing only the provider does not rewrite the model or dimension. Use a separate collection and checkpoint whenever the provider, model, or dimension changes. Gemini receives the requested output dimensionality through its native API parameter. Its API quotas and gateway routing apply only to that provider. Local text inference makes no Google embedding or token-counting calls, even when the gateway is enabled for chat.
 
 ## Optional integration activation
 

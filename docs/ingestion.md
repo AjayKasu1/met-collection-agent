@@ -7,9 +7,9 @@ Run commands from the repository root after `make setup`. Configuration loads on
 Use a separate directory and collection so a small sample cannot be confused with a complete index:
 
 ```sh
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --prepare-only"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_local --prepare-only"
 make verify-golden ARGS="--data-dir data/pilot"
-make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_768 --reuse-prepared --batch-delay-seconds 30"
+make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_local --reuse-prepared --batch-size 32"
 ```
 
 `--prepare-only` downloads and validates public sources without calling an embedding model or Qdrant. `--reuse-prepared` indexes the existing Parquet artifact and makes no Met requests. The default limit comes from `INGEST_MAX_OBJECTS`; a positive `--limit` overrides it. Use a distinct collection for each differently sized sample. An upsert does not delete objects outside the current sample.
@@ -26,19 +26,30 @@ Every record keeps its raw CSV fields. Retrieval text uses supplied title, artis
 
 ## Hybrid index
 
-The dense provider uses the exact `EMBEDDING_MODEL` identifier. The adapter accepts Google's bare or `models/` form and LiteLLM's `gemini/` prefix. Authentication, invalid model identifiers, malformed vectors, and incompatible existing collections stop ingestion. Ordinary ingestion uses bounded Router retries. Checkpoint mode owns quota reservations and rate-limit retries instead. Embeddings never fall back to another model because that would mix vector spaces.
+Text embeddings default to local FastEmbed `intfloat/multilingual-e5-large`, a multilingual 1,024-dimensional model with explicit E5 query and passage prefixes. The model is verified against the installed registry and its ONNX weights are pinned to an immutable revision. Invalid model identifiers, oversized inputs, malformed vectors, and incompatible collections stop ingestion. There is no model fallback. See [configuration](configuration.md) for the local model's cache, CPU threads, and token limit.
 
-`EMBEDDING_DIMENSIONS` defaults to 768. The adapter's `output_dimensionality` is passed through LiteLLM's `dimensions` parameter, which serializes Gemini's native `outputDimensionality`; vectors are requested at that size rather than sliced locally. Responses must match the requested size and are normalized to unit length, as required for reduced [Gemini Embedding 1 vectors](https://ai.google.dev/gemini-api/docs/embeddings). Collection schema version 2 stores the dimension with the model identity and rejects mismatches. The earlier 3,072-dimensional, schema-version-1 pilot is retained separately and is not migrated or overwritten.
+`EMBEDDING_PROVIDER=gemini` retains the optional Google path. Its adapter accepts the bare model name, Google's `models/` form, and LiteLLM's `gemini/` prefix. With `EMBEDDING_DIMENSIONS=768`, it requests reduced output using Gemini's native `outputDimensionality` through LiteLLM's `dimensions` parameter. Responses must match the requested size and are normalized to unit length. Ordinary Gemini ingestion uses bounded Router retries; checkpoint mode owns quota reservations and rate-limit retries.
+
+Collection schema version 3 records text provider, model, dimension, sparse model, and optional image provenance. Query embedding and snapshot restore reject incompatible model identities before inference or upload. Earlier Gemini schema-version-2 checkpoints and the schema-version-1 3,072-dimensional pilot remain separate; they are not silently relabelled as local vectors.
 
 For direct Gemini, set `USE_AI_GATEWAY=false`. When enabled, AI Gateway uses its Google AI Studio endpoint, the gateway token in `cf-aig-authorization`, and the Google key separately. Authentication errors do not silently switch routes. See [Cloudflare's provider documentation](https://developers.cloudflare.com/ai-gateway/usage/providers/google-ai-studio/).
 
 Set `CF_AI_GATEWAY_URL` to `https://gateway.ai.cloudflare.com/v1/ACCOUNT/GATEWAY`. The native `/google-ai-studio`, `/google-ai-studio/v1`, and `/google-ai-studio/v1beta` suffixes are also accepted. Workers AI URLs on `api.cloudflare.com`, OpenAI-compatible `/compat` routes, and complete inference URLs are rejected before credentials are sent. The gateway token needs AI Gateway Run permission. Workers AI Edit does not change this application's Google provider route.
 
-Qdrant stores named `dense` cosine vectors and `sparse` FastEmbed `Qdrant/bm25` vectors. Both use disk storage; dense vectors also use INT8 scalar quantization. The sparse index applies Qdrant's IDF modifier. Payload indexes cover department, object ID, highlight status, gallery, begin/end dates, and source URL. Collection metadata records the embedding model, sparse model, and schema version.
+Qdrant stores named `dense` cosine vectors and `sparse` FastEmbed `Qdrant/bm25` vectors. With `--with-images`, it also stores the named cosine vector `image`. Dense and image vectors use disk storage and INT8 scalar quantization; sparse vectors use disk storage and Qdrant's IDF modifier. Payload indexes cover department, object ID, highlight status, gallery, begin/end dates, and source URL.
 
-Batch responses must contain one finite, nonzero dense vector per input with a consistent dimension. Writes pair both vectors with the same document and wait for acknowledgment. Repeating ordinary ingestion upserts stable IDs without duplicates but recomputes embeddings. For long runs, use [quota-aware checkpointing and detached execution](full-ingestion.md) to skip acknowledged batches on resume, enforce project RPM/TPM/RPD, and sleep across daily resets.
+To join published image vectors to a prepared collection:
 
-Both ingestion commands accept `--batch-delay-seconds` to pace batches without editing environment settings. For example, `--batch-delay-seconds 30` waits 30 seconds after each acknowledged batch before starting the next one. The default is zero; select a delay and `EMBEDDING_BATCH_SIZE` appropriate to the project's [Google AI Studio quotas](https://ai.google.dev/gemini-api/docs/rate-limits). Pacing reduces bursts but cannot overcome a daily quota or guarantee freedom from shared-project limits. Exhausted retries still stop the run with acknowledged earlier batches intact.
+```sh
+make prepare-images
+make ingest ARGS="--limit 20000 --reuse-prepared --with-images --batch-size 32"
+```
+
+`prepare-images` downloads only Parquet files from the pinned Met SigLIP 2 dataset, checks its immutable revision, and joins on `objectID`. It rejects duplicate selected IDs, model or dimension drift, nonfinite values, and non-normalized vectors. It writes `image_vectors.parquet` and an integrity manifest with the source dataset, revision, model, dimensions, source file hashes, and included/missing IDs. `--with-images` requires this exact artifact and selection; it never computes an image vector or substitutes a text vector. The 20,000-record selection has 19,964 published image vectors, so the older fallback dataset is unnecessary.
+
+Batch writes pair text, sparse, and available published image vectors with the same document and wait for acknowledgment. Local collection ingestion is always checkpointed, resumes by completed Object ID, and groups remaining records by text length to reduce padding work. It never schedules quota waits. Completion verifies every expected ID and payload and compares each image vector with the published source. See [detached execution and recovery](full-ingestion.md).
+
+The Phase 2 contract `find_similar_objects(object_id, k)` selects the `image` vector, excludes the source object, and bounds `k` to 1 through 50. An object without a published image vector produces `image_unavailable`; no text fallback is allowed. Only the typed tool schema is present in this phase.
 
 ## Visitor pages
 
@@ -61,10 +72,10 @@ pages:
 
 ```sh
 make ingest-visitors ARGS="--html-dir data/visitor_pages --data-dir data/pilot --prepare-only"
-make ingest-visitors ARGS="--html-dir data/visitor_pages --data-dir data/pilot --collection met_visitor_info_pilot --batch-delay-seconds 30"
+make ingest-visitors ARGS="--html-dir data/visitor_pages --data-dir data/pilot --collection met_visitor_info_pilot"
 ```
 
-`--html-dir` without a value defaults to `data/visitor_pages`. `--sources PATH` overrides the local manifest location. Saved mode makes no visitor HTTP or robots requests; it reads only listed files and never falls back to crawling when a file or manifest is missing. Indexing still contacts the configured embedding provider and Qdrant. Source URLs, capture timestamps, headings, and stable chunk IDs flow through the same pipeline as live pages. The loader rejects missing timezones, duplicate URLs, paths or symlinks outside the HTML directory, non-HTML filenames, non-UTF-8 text, and files larger than 20 MiB. It does not infer capture times from modification times or the current clock. Files, manifests, and generated chunks remain under ignored `data/`.
+`--html-dir` without a value defaults to `data/visitor_pages`. `--sources PATH` overrides the local manifest location. Saved mode makes no visitor HTTP or robots requests; it reads only listed files and never falls back to crawling when a file or manifest is missing. Indexing uses the configured text embedder and contacts Qdrant. Local inference does not contact Google. Source URLs, capture timestamps, headings, and stable chunk IDs flow through the same pipeline as live pages. The loader rejects missing timezones, duplicate URLs, paths or symlinks outside the HTML directory, non-HTML filenames, non-UTF-8 text, and files larger than 20 MiB. It does not infer capture times from modification times or the current clock. Files, manifests, and generated chunks remain under ignored `data/`.
 
 Main content becomes Markdown with headings, tables, lists, and links retained. Each section is divided into approximately 500-token windows with 50-token overlap. The deterministic Unicode-safe counter estimates tokens locally and is not a Gemini billing measure. Each chunk records its source URL, fetch timestamp, heading, and stable ID. Stale chunks for a page are removed only after all replacement chunks have been acknowledged.
 
@@ -72,7 +83,7 @@ The current [interactive museum map](https://maps.metmuseum.org/) requires JavaS
 
 ## Golden verification
 
-`make verify-golden` writes and prints `data/verify_golden.md`, including live titles, existence, sample membership, and original rows explicitly marked `verify: true`. HTTP 404 means absent; authentication, rate limits, connection failures, and malformed responses mean unknown. Unknown or absent objects produce exit status 1. An object outside the sample is reported but does not cause that exit status.
+`make verify-golden ARGS="--collection met_objects"` first verifies the actual Qdrant IDs and payloads against all prepared records. Omitting `--collection` checks only prepared membership. It then writes and prints `data/verify_golden.md`, including live titles, existence, sample membership, and original rows explicitly marked `verify: true`. HTTP 404 means absent; authentication, rate limits, connection failures, and malformed responses mean unknown. Unknown or absent objects produce exit status 1. An object outside the sample is reported but does not cause that exit status.
 
 This checks identities and membership, not retrieval accuracy. A valid ID may still identify the wrong artwork. Review the title column before changing golden expectations. The original evaluation file is not changed by verification.
 
