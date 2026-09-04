@@ -1,5 +1,6 @@
 """Validate dense provider responses and build BM25 sparse vectors without loading torch."""
 
+import json
 import math
 from collections.abc import Sequence
 from pathlib import Path
@@ -15,6 +16,49 @@ class EmbeddingError(RuntimeError):
 
 class ModelUnavailableError(EmbeddingError):
     """Stop ingestion when the configured provider model is unavailable."""
+
+
+class EmbeddingRateLimitError(EmbeddingError):
+    """Expose only safe scheduling information from a provider quota rejection."""
+
+    def __init__(self, *, retry_after: float = 61, daily: bool = False) -> None:
+        super().__init__("Embedding rate limit reached; quota scheduling must wait")
+        self.retry_after = retry_after
+        self.daily = daily
+
+
+def _rate_limit(error: Exception) -> EmbeddingRateLimitError:
+    response = getattr(error, "response", None)
+    data = getattr(error, "body", None)
+    try:
+        if response is not None:
+            data = response.json()
+        elif isinstance(data, str):
+            data = json.loads(data)
+    except (ValueError, AttributeError):
+        data = None
+    seconds = 61.0
+    daily = False
+    if isinstance(data, dict):
+        envelope = data.get("error", data)
+        details = envelope.get("details", []) if isinstance(envelope, dict) else []
+        for detail in details if isinstance(details, list) else []:
+            if not isinstance(detail, dict):
+                continue
+            delay = detail.get("retryDelay")
+            if isinstance(delay, str):
+                try:
+                    candidate = float(delay.removesuffix("s"))
+                    if math.isfinite(candidate) and candidate >= 0:
+                        seconds = max(seconds, candidate)
+                except ValueError:
+                    pass
+            violations = detail.get("violations", [])
+            for violation in violations if isinstance(violations, list) else []:
+                if isinstance(violation, dict):
+                    quota_id = str(violation.get("quotaId", "")).lower()
+                    daily |= "perday" in quota_id or "per_day" in quota_id
+    return EmbeddingRateLimitError(retry_after=seconds, daily=daily)
 
 
 class EmbeddingTransport(Protocol):
@@ -71,6 +115,11 @@ class GeminiEmbedder:
                 dimensions=self.output_dimensionality,
             )
         except Exception as error:
+            if (
+                type(error).__name__ == "RateLimitError"
+                or getattr(error, "status_code", None) == 429
+            ):
+                raise _rate_limit(error) from None
             if (
                 type(error).__name__ == "NotFoundError"
                 or getattr(error, "status_code", None) == 404

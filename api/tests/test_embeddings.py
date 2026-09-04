@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from pydantic import HttpUrl, SecretStr
 
@@ -14,6 +15,7 @@ from met_agent.llm.router import create_embedding_router, embedding_route
 from met_agent.retrieval.embeddings import (
     BM25Embedder,
     EmbeddingError,
+    EmbeddingRateLimitError,
     GeminiEmbedder,
     ModelUnavailableError,
 )
@@ -107,6 +109,54 @@ def test_dimension_mismatch_and_secret_bearing_errors_are_sanitized() -> None:
     error = type("NotFoundError", (RuntimeError,), {})("private-provider-key")
     with pytest.raises(ModelUnavailableError, match="EMBEDDING_MODEL"):
         GeminiEmbedder(ResponseTransport(error)).embed(["text"])
+
+
+@pytest.mark.parametrize(
+    "response_body",
+    [
+        {
+            "error": {
+                "details": [
+                    {"retryDelay": "120s"},
+                    {"violations": [{"quotaId": "EmbedContentRequestsPerDay-FreeTier"}]},
+                ]
+            }
+        },
+        {"details": [{"retryDelay": "120s"}, {"violations": [{"quotaId": "per_day"}]}]},
+    ],
+)
+def test_provider_quota_details_are_exposed_only_as_scheduling_fields(
+    response_body: dict[str, object],
+) -> None:
+    class RateLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("private-provider-key")
+            self.response = httpx.Response(429, json=response_body)
+
+    with pytest.raises(EmbeddingRateLimitError) as caught:
+        GeminiEmbedder(ResponseTransport(RateLimitError())).embed(["Vessel"])
+    assert caught.value.daily and caught.value.retry_after == 120
+    assert "private-provider-key" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "not JSON",
+        '{"error":{"details":[null,{"retryDelay":"invalid"},{"retryDelay":"nan"}]}}',
+        '{"error":{"details":[{"violations":[null]},{"retryDelay":"5s"}]}}',
+        '{"error":{"details":"invalid"}}',
+    ],
+)
+def test_unavailable_quota_details_use_conservative_minute_backoff(body: str) -> None:
+    class RateLimitError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("private-provider-key")
+            self.body = body
+
+    with pytest.raises(EmbeddingRateLimitError) as caught:
+        GeminiEmbedder(ResponseTransport(RateLimitError())).embed(["Vessel"])
+    assert not caught.value.daily and caught.value.retry_after == 61
 
 
 def test_direct_route_and_gateway_use_distinct_authentication(settings: Settings) -> None:
