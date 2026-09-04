@@ -14,12 +14,20 @@ from qdrant_client import QdrantClient
 from qdrant_client.conversions.common_types import PointId
 
 from met_agent.ingestion.http import SourceError
+from met_agent.ingestion.image_vectors import load_images, verify_image_index
 from met_agent.ingestion.models import IndexDocument, VisitorChunk
 from met_agent.ingestion.storage import atomic_write, load_objects, sha256_file
 from met_agent.retrieval.qdrant_store import SCHEMA_VERSION, HybridStore, IndexCompatibilityError
+from met_agent.retrieval.schema import EmbeddingProvider, ImageVectorSpec
 
 ArtifactName = Literal[
-    "objects.parquet", "collection.snapshot", "visitor_chunks.jsonl", "visitor.snapshot"
+    "objects.parquet",
+    "collection.snapshot",
+    "visitor_chunks.jsonl",
+    "visitor.snapshot",
+    "image_vectors.parquet",
+    "image_vectors.json",
+    "README.md",
 ]
 IndexKind = Literal["collection", "visitor"]
 
@@ -40,15 +48,18 @@ class IndexSpec(BaseModel):
     points: Annotated[int, Field(gt=0)]
     dimensions: Annotated[int, Field(gt=0)]
     embedding_model: str
+    embedding_provider: EmbeddingProvider = "gemini"
+    image: ImageVectorSpec | None = None
+    image_points: Annotated[int, Field(ge=0)] = 0
     sparse_model: Literal["Qdrant/bm25"] = "Qdrant/bm25"
-    schema_version: Literal[2] = SCHEMA_VERSION
+    schema_version: Literal[3] = SCHEMA_VERSION
 
 
 class Manifest(BaseModel):
     """An exact file allowlist prevents publication or download of unrelated private inputs."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    format_version: Literal[2] = 2
+    format_version: Literal[3] = 3
     created_at: datetime
     qdrant_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
     files: dict[ArtifactName, Artifact]
@@ -61,9 +72,16 @@ class Manifest(BaseModel):
             raise ValueError(
                 "Bundle requires exactly one collection index and optional visitor index"
             )
-        expected = {"objects.parquet", "collection.snapshot"}
+        expected = {"objects.parquet", "collection.snapshot", "README.md"}
         if "visitor" in kinds:
             expected |= {"visitor_chunks.jsonl", "visitor.snapshot"}
+        for index in self.indexes:
+            if index.image is not None:
+                if index.kind != "collection" or not 0 < index.image_points <= index.points:
+                    raise ValueError("Image coverage is inconsistent with its collection")
+                expected |= {"image_vectors.parquet", "image_vectors.json"}
+            elif index.image_points:
+                raise ValueError("Image coverage requires source provenance")
         if set(self.files) != expected or self.created_at.tzinfo is None:
             raise ValueError("Manifest file set or timestamp is invalid")
         return self
@@ -118,6 +136,8 @@ def export_bundle(
     collections: dict[IndexKind, str],
     embedding_model: str,
     embedding_dimensions: int = 768,
+    *,
+    embedding_provider: EmbeddingProvider = "gemini",
 ) -> Manifest:
     """Export single-node snapshots after checking source identity and model compatibility.
 
@@ -133,14 +153,34 @@ def export_bundle(
         if not isinstance(vectors, dict) or "dense" not in vectors:
             raise IndexCompatibilityError("Collection has no named dense vector")
         dimensions = vectors["dense"].size
-        HybridStore(client, collection, embedding_model, embedding_dimensions).ensure_collection(
-            dimensions
-        )
+        raw_image = (info.config.metadata or {}).get("image")
+        image = ImageVectorSpec.model_validate(raw_image) if raw_image is not None else None
+        HybridStore(
+            client,
+            collection,
+            embedding_model,
+            embedding_dimensions,
+            embedding_provider=embedding_provider,
+            image=image,
+        ).validate_collection()
         cluster = client.collection_cluster_info(collection)
         if cluster.remote_shards:
             raise IndexCompatibilityError("Export requires a single-node collection snapshot")
         documents = load_documents(data_dir, kind)
         verify_index(client, collection, documents)
+        image_points = 0
+        if image is not None:
+            selected = {int(doc.point_id) for doc in documents}
+            image_manifest, image_vectors = load_images(data_dir, selected)
+            if image_manifest.source != image:
+                raise IndexCompatibilityError("Image source differs from collection metadata")
+            image_points = verify_image_index(client, collection, selected, image_vectors)
+            for image_name in ("image_vectors.parquet", "image_vectors.json"):
+                shutil.copyfile(data_dir / image_name, output / image_name)
+                files[image_name] = Artifact(
+                    sha256=sha256_file(output / image_name),
+                    size_bytes=(output / image_name).stat().st_size,
+                )
         source_name = _source_path(kind)
         shutil.copyfile(data_dir / source_name, output / source_name)
         snapshot = client.create_snapshot(collection, wait=True)
@@ -174,8 +214,16 @@ def export_bundle(
                 points=len(documents),
                 dimensions=dimensions,
                 embedding_model=embedding_model,
+                embedding_provider=embedding_provider,
+                image=image,
+                image_points=image_points,
             )
         )
+    atomic_write(output / "README.md", dataset_card(indexes).encode())
+    files["README.md"] = Artifact(
+        sha256=sha256_file(output / "README.md"),
+        size_bytes=(output / "README.md").stat().st_size,
+    )
     manifest = Manifest(
         created_at=datetime.now(UTC),
         qdrant_version=client.info().version,
@@ -184,6 +232,57 @@ def export_bundle(
     )
     atomic_write(output / "manifest.json", manifest.model_dump_json(indent=2).encode())
     return manifest
+
+
+def dataset_card(indexes: Sequence[IndexSpec]) -> str:
+    """Publish attribution and actual modifications with every snapshot revision."""
+    lines = [
+        "---",
+        "license: cc0-1.0",
+        "pretty_name: Independent Met collection search index",
+        "---",
+        "",
+        "# Collection search index",
+        "",
+        "Collection metadata: The Metropolitan Museum of Art, "
+        "[metmuseum/openaccess](https://github.com/metmuseum/openaccess), CC0. "
+        "The [Met's Hugging Face dataset](https://huggingface.co/datasets/metmuseum/openaccess) "
+        "provides the associated attribution and usage guidance.",
+        "",
+        "This is a modified derivative: selected public-domain records, normalized fields, "
+        "assembled retrieval text, locally or remotely generated text vectors, and a Qdrant index. "
+        "Raw collection fields and original source links are retained.",
+        "",
+        "This project is not affiliated with or endorsed by The Metropolitan Museum of Art. "
+        "No Museum logos or trademarks are used as project branding.",
+        "",
+    ]
+    for index in indexes:
+        lines.append(
+            f"- {index.kind}: {index.points} records; text provider `{index.embedding_provider}`, "
+            f"model `{index.embedding_model}`, {index.dimensions} dimensions."
+        )
+        if index.image:
+            source = index.image
+            lines.append(
+                f"- Image embeddings: The Metropolitan Museum of Art, "
+                f"[{source.dataset}](https://huggingface.co/datasets/{source.dataset}), CC0; "
+                f"revision `{source.revision}`, model `{source.model}`, "
+                f"{source.dimensions} dimensions. "
+                f"{index.image_points} records have a published image vector. Vectors were joined "
+                "by Object ID; no image embeddings were computed by this project. "
+                "Objects missing a published vector remain without one."
+            )
+    lines.extend(
+        [
+            "",
+            "The manifest records file hashes, model identities, source revisions, and coverage. "
+            "See the [source repository](https://github.com/AjayKasu1/met-collection-agent) for "
+            "the pinned runtime and restore instructions.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def validate_files(directory: Path, manifest: Manifest) -> None:
@@ -195,6 +294,12 @@ def validate_files(directory: Path, manifest: Manifest) -> None:
     for index in manifest.indexes:
         if len(load_documents(directory, index.kind)) != index.points:
             raise SourceError("Source artifact count differs from manifest")
+        if index.image is not None:
+            image_manifest, vectors = load_images(
+                directory, {int(doc.point_id) for doc in load_documents(directory, index.kind)}
+            )
+            if image_manifest.source != index.image or len(vectors) != index.image_points:
+                raise SourceError("Published image provenance or coverage differs from manifest")
 
 
 def publish_bundle(directory: Path, repo: str, token: str) -> str:
@@ -244,6 +349,8 @@ def restore_bundle(
     collections: dict[IndexKind, str],
     embedding_model: str,
     embedding_dimensions: int = 768,
+    *,
+    embedding_provider: EmbeddingProvider = "gemini",
 ) -> Manifest:
     """Restore into absent collections only, after validating the entire bundle."""
     manifest = Manifest.model_validate_json((directory / "manifest.json").read_bytes())
@@ -258,6 +365,8 @@ def restore_bundle(
     if len(set(targets)) != len(targets):
         raise IndexCompatibilityError("Each index requires a distinct target collection")
     for index in manifest.indexes:
+        if index.embedding_provider != embedding_provider:
+            raise IndexCompatibilityError("EMBEDDING_PROVIDER differs from the published index")
         if index.embedding_model != embedding_model:
             raise IndexCompatibilityError("EMBEDDING_MODEL differs from the published index")
         if index.dimensions != embedding_dimensions:
@@ -276,8 +385,17 @@ def restore_bundle(
             )
         if response.status_code != 200:
             raise SourceError(f"Snapshot restore returned HTTP {response.status_code}")
-        HybridStore(client, collection, embedding_model, embedding_dimensions).ensure_collection(
-            index.dimensions
-        )
+        HybridStore(
+            client,
+            collection,
+            embedding_model,
+            embedding_dimensions,
+            embedding_provider=embedding_provider,
+            image=index.image,
+        ).validate_collection()
         verify_index(client, collection, load_documents(directory, index.kind))
+        if index.image is not None:
+            selected = {int(doc.point_id) for doc in load_documents(directory, index.kind)}
+            _, vectors = load_images(directory, selected)
+            verify_image_index(client, collection, selected, vectors)
     return manifest

@@ -194,6 +194,7 @@ def test_oversized_input_and_exhausted_retries_leave_checkpoint_retryable(
     with pytest.raises(SourceError, match="2048-token"):
         job.run([IndexDocument(point_id=1, text="x" * 2049, payload={})], destination="test")
     saved = IngestionCheckpoint.model_validate_json(path.read_bytes())
+    assert saved.quota is not None
     assert saved.next_offset == 0 and saved.quota.used_today == 0
     path.unlink()
     limited = ResumableIngestor(
@@ -209,6 +210,7 @@ def test_oversized_input_and_exhausted_retries_leave_checkpoint_retryable(
     )
     with pytest.raises(EmbeddingRateLimitError):
         limited.run(documents(1), destination="test")
-    assert IngestionCheckpoint.model_validate_json(path.read_bytes()).quota.used_today == 1
+    saved = IngestionCheckpoint.model_validate_json(path.read_bytes())
+    assert saved.quota is not None and saved.quota.used_today == 1
     with pytest.raises(ValueError, match="Batch size"):
         ResumableIngestor(store, Dense(), Sparse(), Counter(), QuotaLimits(), path, batch_size=101)

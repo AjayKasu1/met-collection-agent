@@ -27,6 +27,7 @@ def bundle(tmp_path: Path) -> Path:
     )
     save_objects(source / "objects.parquet", [obj])
     (source / "collection.snapshot").write_bytes(b"snapshot-test-data")
+    (source / "README.md").write_text("Synthetic dataset card")
     manifest = Manifest(
         created_at=datetime.now(UTC),
         qdrant_version="1.19.0",
@@ -34,7 +35,7 @@ def bundle(tmp_path: Path) -> Path:
             name: Artifact(
                 sha256=sha256_file(source / name), size_bytes=(source / name).stat().st_size
             )
-            for name in ("objects.parquet", "collection.snapshot")
+            for name in ("objects.parquet", "collection.snapshot", "README.md")
         },
         indexes=[
             IndexSpec(kind="collection", points=1, dimensions=4, embedding_model="test-model")
@@ -72,7 +73,7 @@ def test_publish_exact_allowlist_and_pin_every_download(
     monkeypatch.setattr(artifacts, "HfApi", FakeHub)
     monkeypatch.setattr(artifacts, "hf_hub_download", download)
     assert artifacts.publish_bundle(bundle, "account/dataset", "unit-token") == "b" * 40
-    assert set(uploaded) == {"manifest.json", "objects.parquet", "collection.snapshot"}
+    assert set(uploaded) == {"manifest.json", "objects.parquet", "collection.snapshot", "README.md"}
     target = tmp_path / "download"
     manifest = artifacts.download_bundle("account/dataset", "main", target)
     assert manifest.indexes[0].points == 1

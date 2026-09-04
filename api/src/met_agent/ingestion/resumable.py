@@ -140,6 +140,7 @@ class ResumableIngestor:
             destination_sha256=hashlib.sha256(destination.encode()).hexdigest(),
             collection=self.store.collection,
             embedding_model=self.store.embedding_model,
+            embedding_provider=self.store.embedding_provider,
             dimensions=self.store.embedding_dimensions,
             total=len(documents),
         )
@@ -160,6 +161,8 @@ class ResumableIngestor:
                 and self.store.client.count(self.store.collection, exact=True).count
             ):
                 raise SourceError("A new checkpoint cannot adopt a nonempty collection")
+            if checkpoint.quota is None:
+                raise SourceError("Gemini checkpoints require a persisted quota budget")
             budget = QuotaBudget(self.limits, checkpoint.quota)
             self.store.ensure_collection(self.store.embedding_dimensions)
             self._verify_prefix(documents, checkpoint.next_offset)

@@ -68,7 +68,7 @@ def test_twenty_object_hybrid_ingest_is_idempotent(local_store: HybridStore) -> 
     assert isinstance(info.config.params.vectors, dict)
     assert info.config.params.vectors["dense"].on_disk
     assert info.config.metadata and info.config.metadata["dimensions"] == 4
-    assert info.config.metadata["schema_version"] == 2
+    assert info.config.metadata["schema_version"] == 3
     sparse = info.config.params.sparse_vectors
     assert sparse and sparse["sparse"].modifier == models.Modifier.IDF
     assert sparse["sparse"].index and sparse["sparse"].index.on_disk
@@ -142,8 +142,9 @@ def test_batch_pacing_waits_only_between_batches_and_validates_delay(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("with_images", [False, True])
 def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
-    local_store: HybridStore, tmp_path: Path
+    local_store: HybridStore, tmp_path: Path, with_images: bool
 ) -> None:
     import httpx
 
@@ -168,7 +169,29 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
     ]
     save_objects(tmp_path / "objects.parquet", objects)
     documents = [obj.document() for obj in objects]
-    local_store.ingest(documents, TestDense(), TestSparse(), batch_size=7)
+    images = None
+    if with_images:
+        import polars as pl
+
+        from met_agent.ingestion.image_vectors import join_image_shards, load_images
+        from met_agent.retrieval.schema import ImageVectorSpec
+
+        source = ImageVectorSpec(
+            dataset="metmuseum/test", revision="a" * 40, model="test-image", dimensions=2
+        )
+        local_store.image = source
+        shard = tmp_path / "source.parquet"
+        pl.DataFrame(
+            {
+                "objectID": [1, 2],
+                "embedding": [[1.0, 0.0], [0.0, 1.0]],
+                "model": ["test-image"] * 2,
+                "dim": [2, 2],
+            }
+        ).write_parquet(shard)
+        join_image_shards([shard], {obj.object_id for obj in objects}, source, tmp_path)
+        _, images = load_images(tmp_path, {obj.object_id for obj in objects})
+    local_store.ingest(documents, TestDense(), TestSparse(), batch_size=7, images=images)
     restored = "test_restored_" + uuid4().hex
     client = local_store.client
     with httpx.Client(base_url="http://127.0.0.1:6333/", timeout=30) as http:
@@ -183,8 +206,20 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
         )
         assert manifest.indexes[0].points == 20
         assert manifest.indexes[0].dimensions == 4
-        assert manifest.indexes[0].schema_version == 2
+        assert manifest.indexes[0].schema_version == 3
+        assert manifest.indexes[0].image == local_store.image
+        assert manifest.indexes[0].image_points == (2 if with_images else 0)
         try:
+            with pytest.raises(IndexCompatibilityError, match="EMBEDDING_PROVIDER"):
+                restore_bundle(
+                    client,
+                    http,
+                    tmp_path / "bundle",
+                    {"collection": restored},
+                    local_store.embedding_model,
+                    4,
+                    embedding_provider="local",
+                )
             restore_bundle(
                 client,
                 http,

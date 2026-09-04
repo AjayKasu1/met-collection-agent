@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from met_agent.ingestion.http import SourceError
 from met_agent.ingestion.quota import QuotaState, quota_day
 from met_agent.ingestion.storage import atomic_write
+from met_agent.retrieval.schema import EmbeddingProvider
 
 
 class RunIdentity(BaseModel):
@@ -21,8 +22,10 @@ class RunIdentity(BaseModel):
     destination_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     collection: str = Field(min_length=1)
     embedding_model: str = Field(min_length=1)
+    embedding_provider: EmbeddingProvider = "gemini"
     dimensions: int = Field(gt=0)
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
+    image_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     total: int = Field(gt=0)
 
 
@@ -33,8 +36,10 @@ class IngestionCheckpoint(BaseModel):
     version: Literal[1] = 1
     identity: RunIdentity
     next_offset: int = Field(default=0, ge=0)
+    completed_ids: list[int | str] | None = None
     completed_tokens: int = Field(default=0, ge=0)
-    quota: QuotaState
+    quota: QuotaState | None = None
+    elapsed_seconds: float = Field(default=0, ge=0, allow_inf_nan=False)
     status: Literal["running", "waiting", "failed", "complete"] = "running"
     updated_at: float = Field(ge=0, allow_inf_nan=False)
 
@@ -44,6 +49,11 @@ class IngestionCheckpoint(BaseModel):
             self.status == "complete" and self.next_offset != self.identity.total
         ):
             raise ValueError("Checkpoint progress is inconsistent")
+        if self.completed_ids is not None and (
+            len(self.completed_ids) != self.next_offset
+            or len(set(self.completed_ids)) != self.next_offset
+        ):
+            raise ValueError("Checkpoint completed IDs are inconsistent")
         return self
 
 

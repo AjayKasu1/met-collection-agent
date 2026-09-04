@@ -31,6 +31,7 @@ def test_checkpoint_preserves_progress_and_rejects_changed_run_identity(tmp_path
     checkpoint = load_checkpoint(path, original, now=1000, initial_daily_requests=20)
     checkpoint.next_offset = 100
     checkpoint.completed_tokens = 1234
+    assert checkpoint.quota is not None
     checkpoint.quota.used_today = 120
     save_checkpoint(path, checkpoint, now=2000)
     assert load_checkpoint(path, original, now=3000) == checkpoint
