@@ -155,7 +155,7 @@ class Agent:
             reply = await self.model.complete(
                 intent.route,
                 messages,
-                tools=self.tools.schemas if tool_count < MAX_TOOL_CALLS else None,
+                tools=self.tools.schemas if tool_count < MAX_TOOL_CALLS and repairs == 0 else None,
                 response_schema=AgentDraft,
             )
             calls = reply.message.get("tool_calls") or []

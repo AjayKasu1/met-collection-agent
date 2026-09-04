@@ -348,7 +348,12 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
     schema = fmt["json_schema"]["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(schema["properties"])
-    assert schema["$defs"]["Citation"]["required"] == ["object_id", "source_url", "quote"]
+    alternatives = schema["$defs"]["Citation"]["anyOf"]
+    assert all(
+        branch["required"] == ["object_id", "source_url", "quote"] for branch in alternatives
+    )
+    assert alternatives[0]["properties"]["source_url"] == {"type": "null"}
+    assert alternatives[1]["properties"]["object_id"] == {"type": "null"}
     assert "Gallery 131" in final["messages"][1]["content"]
     assert all(message["role"] != "tool" for message in final["messages"])
 

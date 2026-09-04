@@ -22,6 +22,22 @@ def strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
                 close(item)
 
     close(result)
+    if schema.__name__ == "AgentDraft":
+        citation = result["$defs"]["Citation"]
+        alternatives = []
+        for selected in ("object_id", "source_url"):
+            branch = copy.deepcopy(citation)
+            for name in ("object_id", "source_url"):
+                if name != selected:
+                    branch["properties"][name] = {"type": "null"}
+                else:
+                    branch["properties"][name] = next(
+                        item
+                        for item in branch["properties"][name]["anyOf"]
+                        if item.get("type") != "null"
+                    )
+            alternatives.append(branch)
+        result["$defs"]["Citation"] = {"anyOf": alternatives}
     return result
 
 
