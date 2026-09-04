@@ -325,7 +325,15 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
 
     ready = response()
     ready.choices[0].message.content = "READY"
-    router = Router([ready, response()])
+    final_reply = response()
+    final_reply.choices[0].message.content = json.dumps(
+        {
+            "text": "Gallery 131",
+            "language": "en",
+            "citations": [{"source": {"object_id": 547802}, "quote": "Gallery 131"}],
+        }
+    )
+    router = Router([ready, final_reply])
     config = settings.model_copy(
         update={"llm_model": "groq/openai/gpt-oss-120b", "groq_api_key": SecretStr("synthetic")}
     )
@@ -348,12 +356,10 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
     schema = fmt["json_schema"]["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(schema["properties"])
-    alternatives = schema["$defs"]["Citation"]["anyOf"]
-    assert all(
-        branch["required"] == ["object_id", "source_url", "quote"] for branch in alternatives
-    )
-    assert alternatives[0]["properties"]["source_url"] == {"type": "null"}
-    assert alternatives[1]["properties"]["object_id"] == {"type": "null"}
+    alternatives = schema["$defs"]["CitationWire"]["properties"]["source"]["anyOf"]
+    assert len(alternatives) == 2
+    assert schema["$defs"]["ObjectSource"]["required"] == ["object_id"]
+    assert schema["$defs"]["PageSource"]["required"] == ["source_url"]
     assert "Gallery 131" in final["messages"][1]["content"]
     assert all(message["role"] != "tool" for message in final["messages"])
 
@@ -370,3 +376,32 @@ def test_groq_prices_use_reported_tokens(
 ) -> None:
     result = response().model_copy(update={"model": model})
     assert cost.estimate_cost(result) == pytest.approx((30 * input_price + 20 * output_price) / 1e6)
+
+
+def test_wire_citations_preserve_existing_source_and_quote_rules() -> None:
+    from met_agent.agent.models import AgentDraft
+    from met_agent.llm.structured_output import decode_final
+
+    for source in ({"object_id": 1}, {"source_url": "https://www.metmuseum.org/plan-your-visit"}):
+        wire = {
+            "text": "Fact",
+            "language": "en",
+            "citations": [{"source": source, "quote": "Fact"}],
+        }
+        decoded = AgentDraft.model_validate_json(decode_final(json.dumps(wire)))
+        assert decoded.citations[0].quote == "Fact"
+    for invalid_source in (
+        {},
+        {"object_id": 1, "source_url": "https://example.org"},
+        {"object_id": 0},
+    ):
+        with pytest.raises(ValueError):
+            decode_final(
+                json.dumps(
+                    {
+                        "text": "Fact",
+                        "language": "en",
+                        "citations": [{"source": invalid_source, "quote": "Fact"}],
+                    }
+                )
+            )

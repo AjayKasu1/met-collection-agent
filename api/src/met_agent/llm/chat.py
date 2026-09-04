@@ -19,7 +19,7 @@ from met_agent.llm.prompts import load_prompt
 from met_agent.llm.providers import chat_routes as chat_routes
 from met_agent.llm.providers import configured_models
 from met_agent.llm.providers import google_model as google_model
-from met_agent.llm.structured_output import response_format
+from met_agent.llm.structured_output import decode_final, response_format
 
 
 class ModelError(RuntimeError):
@@ -290,6 +290,18 @@ class LiteLLMChat:
                     "usage": call.model_dump(mode="json"),
                 },
             )
+        if (
+            response_schema is not None
+            and response_schema.__name__ == "AgentDraft"
+            and not tools
+            and options.get("response_format", {}).get("type") == "json_schema"
+        ):
+            try:
+                message["content"] = decode_final(str(message.get("content") or ""))
+            except ValueError:
+                raise ModelError(
+                    "invalid_response", "Final answer failed structured validation"
+                ) from None
         if tools and response_schema is not None and not message.get("tool_calls"):
             # Groq forbids tools with structured output. Start a separate final-answer call.
             final_messages = [

@@ -1,13 +1,17 @@
 """Adapt Pydantic schemas to Groq's strict constrained-decoding contract."""
 
 import copy
+import json
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
+
+from met_agent.agent.models import AgentDraft, Language
 
 
 def strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
-    result = copy.deepcopy(schema.model_json_schema())
+    wire_schema = FinalAnswerWire if schema is AgentDraft else schema
+    result = copy.deepcopy(wire_schema.model_json_schema())
 
     def close(value: Any) -> None:
         if isinstance(value, dict):
@@ -22,22 +26,6 @@ def strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
                 close(item)
 
     close(result)
-    if schema.__name__ == "AgentDraft":
-        citation = result["$defs"]["Citation"]
-        alternatives = []
-        for selected in ("object_id", "source_url"):
-            branch = copy.deepcopy(citation)
-            for name in ("object_id", "source_url"):
-                if name != selected:
-                    branch["properties"][name] = {"type": "null"}
-                else:
-                    branch["properties"][name] = next(
-                        item
-                        for item in branch["properties"][name]["anyOf"]
-                        if item.get("type") != "null"
-                    )
-            alternatives.append(branch)
-        result["$defs"]["Citation"] = {"anyOf": alternatives}
     return result
 
 
@@ -57,3 +45,38 @@ def response_format(schema: type[BaseModel], model: str) -> dict[str, Any]:
             },
         }
     return {"type": "json_object"}
+
+
+class ObjectSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    object_id: int = Field(gt=0)
+
+
+class PageSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_url: str
+
+
+class CitationWire(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: ObjectSource | PageSource
+    quote: str = Field(min_length=1, max_length=2000)
+
+
+class FinalAnswerWire(BaseModel):
+    """Disjoint source keys satisfy Groq's stricter anyOf decoder without weakening citations."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    text: str = Field(min_length=1, max_length=8000)
+    citations: list[CitationWire] = Field(max_length=20)
+    language: Language
+
+
+def decode_final(content: str) -> str:
+    wire = FinalAnswerWire.model_validate_json(content)
+    answer = {
+        "text": wire.text,
+        "language": wire.language,
+        "citations": [{**item.source.model_dump(), "quote": item.quote} for item in wire.citations],
+    }
+    return json.dumps(answer, ensure_ascii=False)
