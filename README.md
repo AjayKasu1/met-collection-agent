@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, visitor-page ingestion, hybrid Gemini/BM25 indexes, golden-ID verification. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
+The API foundation and ingestion pipeline are implemented: typed configuration, safe request logs, public-domain collection preparation, visitor-page ingestion, hybrid Gemini/BM25 indexes, golden-ID verification, and portable Qdrant snapshots. Retrieval, chat, evaluation scoring, MCP, and the web client are subsequent phases. No retrieval-quality or faithfulness scores are claimed yet.
 
 ## Run locally
 
@@ -41,7 +41,7 @@ make test
 make check
 ```
 
-Tests supply synthetic settings and never load the developer's `.env` or call an LLM. Start `make qdrant` to include the real index integration checks; CI supplies that service automatically. Coverage includes configuration validation, concurrent request isolation, CORS preflights, error redaction, and incremental ASGI streaming. The coverage gate is 90% with branch coverage enabled.
+Tests supply synthetic settings and never load the developer's `.env` or call an LLM. Start `make qdrant` to include the real index and snapshot integration checks; CI supplies that service automatically. Coverage includes configuration validation, concurrent request isolation, CORS preflights, error redaction, and incremental ASGI streaming. The coverage gate is 90% with branch coverage enabled.
 
 `make setup` installs pre-commit hooks. Hooks and CI use the same pinned lint, type, and test tools. The repository check inspects the Git index, rejects private file paths before reading their contents, and detects recognizable provider tokens. It is an additional safeguard, not proof that arbitrary secrets cannot be committed. Stage files explicitly and review `git diff --cached` before committing.
 
@@ -54,7 +54,7 @@ make verify-golden ARGS="--data-dir data/pilot"
 make ingest ARGS="--limit 200 --data-dir data/pilot --collection met_objects_pilot_200 --reuse-prepared"
 ```
 
-Preparation makes no model calls. The final command uses the configured embedding provider and Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md).
+Preparation makes no model calls. The final command uses the configured embedding provider and Qdrant server. Review the golden titles and membership before a larger run. See [ingestion behavior and source limitations](docs/ingestion.md) and [snapshot publication and seeding](docs/index-artifacts.md).
 
 ## Project layout
 

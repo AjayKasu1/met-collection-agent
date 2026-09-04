@@ -207,5 +207,93 @@ def run_command(command: Callable[[], int]) -> int:
     except (ValidationError, ValueError, OSError) as error:
         print(f"Ingestion failed validation or local I/O ({type(error).__name__})")
     except Exception as error:
-        print(f"Ingestion operation failed ({type(error).__name__}); no secret values were logged")
+        print(f"Ingestion operation failed ({type(error).__name__})")
     return 1
+
+
+def _snapshot_http(settings: Settings) -> httpx.Client:
+    """Use explicit Qdrant authentication for streaming snapshot endpoints."""
+    headers = (
+        {"api-key": settings.qdrant_api_key.get_secret_value()} if settings.qdrant_api_key else {}
+    )
+    return httpx.Client(
+        base_url=str(settings.qdrant_url).rstrip("/") + "/", headers=headers, timeout=600
+    )
+
+
+def publish_index(argv: Sequence[str] | None = None) -> int:
+    """Export a validated bundle; upload only when publication is explicitly requested."""
+    from met_agent.ingestion.artifacts import IndexKind, export_bundle, publish_bundle
+
+    parser = _base_parser("Export or publish verified Qdrant snapshots and source artifacts")
+    parser.add_argument("--collection", help="Override the source collection")
+    parser.add_argument("--visitor-collection", help="Override the source visitor collection")
+    parser.add_argument("--include-visitor", action="store_true")
+    parser.add_argument(
+        "--upload", action="store_true", help="Publish to the existing HF_DATASET_REPO"
+    )
+    args = parser.parse_args(argv)
+    settings = load_settings()
+    output: Path = args.data_dir or settings.data_dir
+    if args.upload and not (settings.hf_dataset_repo and settings.hf_token):
+        raise ConfigurationError("Publication requires HF_DATASET_REPO and HF_TOKEN")
+    collections: dict[IndexKind, str] = {
+        "collection": args.collection or settings.qdrant_collection
+    }
+    if args.include_visitor:
+        collections["visitor"] = args.visitor_collection or settings.qdrant_visitor_collection
+    with closing(qdrant_client(settings)) as client, _snapshot_http(settings) as http:
+        export_bundle(
+            client, http, output, output / "bundle", collections, settings.embedding_model
+        )
+    print("Verified snapshot bundle exported")
+    if args.upload:
+        if settings.hf_dataset_repo is None or settings.hf_token is None:
+            raise ConfigurationError("Publication settings are incomplete")
+        revision = publish_bundle(
+            output / "bundle", settings.hf_dataset_repo, settings.hf_token.get_secret_value()
+        )
+        print(f"Published dataset revision: {revision}")
+    return 0
+
+
+def seed(argv: Sequence[str] | None = None) -> int:
+    """Download a pinned dataset bundle and restore absent collections without LLM calls."""
+    from met_agent.ingestion.artifacts import download_bundle, restore_bundle
+
+    parser = _base_parser("Restore a published index without recomputing embeddings")
+    parser.add_argument(
+        "--revision", default="main", help="HF commit, tag, or branch resolved once"
+    )
+    parser.add_argument("--bundle", type=Path, help="Restore an already downloaded local bundle")
+    parser.add_argument("--collection", help="Override the target collection")
+    parser.add_argument("--visitor-collection", help="Override the target visitor collection")
+    args = parser.parse_args(argv)
+    settings = load_settings()
+    output: Path = args.data_dir or settings.data_dir
+    bundle: Path = args.bundle or output / "bundle"
+    if args.bundle is None:
+        if settings.hf_dataset_repo is None:
+            raise ConfigurationError("Seed requires HF_DATASET_REPO or --bundle")
+        download_bundle(
+            settings.hf_dataset_repo,
+            args.revision,
+            bundle,
+            settings.hf_token.get_secret_value() if settings.hf_token else False,
+        )
+    with closing(qdrant_client(settings)) as client, _snapshot_http(settings) as http:
+        manifest = restore_bundle(
+            client,
+            http,
+            bundle,
+            {
+                "collection": args.collection or settings.qdrant_collection,
+                "visitor": args.visitor_collection or settings.qdrant_visitor_collection,
+            },
+            settings.embedding_model,
+        )
+    for name in manifest.files:
+        if not name.endswith(".snapshot"):
+            atomic_write(output / name, (bundle / name).read_bytes())
+    print(f"Restored {len(manifest.indexes)} index(es) without embedding calls")
+    return 0

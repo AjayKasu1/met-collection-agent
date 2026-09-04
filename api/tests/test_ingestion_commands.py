@@ -175,3 +175,75 @@ def test_command_errors_never_print_untrusted_exception_bodies(
     assert commands.run_command(fail) == 1
     assert "private-input" not in capsys.readouterr().out
     assert commands.run_command(lambda: 0) == 0
+
+
+def test_snapshot_commands_export_publish_and_restore_explicit_artifacts(
+    configured_commands: Settings, stub_index: list[IndexDocument], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic import SecretStr
+
+    from met_agent.ingestion import artifacts
+
+    root = configured_commands.data_dir
+    (root / "bundle").mkdir()
+    (root / "bundle" / "objects.parquet").write_bytes(b"verified-source")
+    configured = configured_commands.model_copy(
+        update={"hf_dataset_repo": "account/dataset", "hf_token": SecretStr("unit-token")}
+    )
+    monkeypatch.setattr(commands, "load_settings", lambda: configured)
+    exports: list[dict[str, str]] = []
+    publications: list[str] = []
+    downloads: list[str] = []
+
+    def export(*args: Any) -> None:
+        exports.append(args[4])
+
+    def publish(directory: Path, repo: str, token: str) -> str:
+        publications.append(repo)
+        assert token == "unit-token"
+        return "a" * 40
+
+    def download(repo: str, *args: Any) -> None:
+        downloads.append(repo)
+
+    monkeypatch.setattr(artifacts, "export_bundle", export)
+    monkeypatch.setattr(artifacts, "publish_bundle", publish)
+    monkeypatch.setattr(artifacts, "download_bundle", download)
+    monkeypatch.setattr(
+        artifacts,
+        "restore_bundle",
+        lambda *a: SimpleNamespace(files={"objects.parquet": None}, indexes=[None]),
+    )
+    assert commands.publish_index(["--include-visitor"]) == 0
+    assert publications == []
+    assert set(exports[0]) == {"collection", "visitor"}
+    assert commands.publish_index(["--upload"]) == 0
+    assert publications == ["account/dataset"]
+    assert commands.seed([]) == 0
+    assert downloads == ["account/dataset"]
+    assert (root / "objects.parquet").read_bytes() == b"verified-source"
+    assert commands.seed(["--bundle", str(root / "bundle")]) == 0
+    assert len(downloads) == 1
+
+
+def test_snapshot_command_configuration_errors_and_explicit_qdrant_credentials(
+    configured_commands: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic import SecretStr
+
+    with pytest.raises(ConfigurationError, match="HF_DATASET_REPO"):
+        commands.publish_index(["--upload"])
+    with pytest.raises(ConfigurationError, match="HF_DATASET_REPO"):
+        commands.seed([])
+    captured: dict[str, Any] = {}
+
+    def construct(**kwargs: Any) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(commands, "QdrantClient", construct)
+    configured = configured_commands.model_copy(update={"qdrant_api_key": SecretStr("unit-qdrant")})
+    commands.qdrant_client(configured)
+    assert captured["api_key"] == "unit-qdrant"
+    with commands._snapshot_http(configured) as http:
+        assert http.headers["api-key"] == "unit-qdrant"

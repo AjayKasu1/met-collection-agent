@@ -28,7 +28,7 @@ Required strings cannot be empty or whitespace. No model name is inferred. The s
 | Hugging Face dataset | `HF_DATASET_REPO`; a public download needs no token |
 | R2 | `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` |
 
-Incomplete optional integrations remain disabled. An explicitly enabled AI Gateway with missing URL or token fails startup, avoiding an accidental switch to direct provider requests. No optional services are contacted in Phase 0. `HF_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CF_ACCOUNT_ID`, and `GCP_REGION` are retained for later publishing and deployment tooling.
+Incomplete optional integrations remain disabled. An explicitly enabled AI Gateway with missing URL or token fails startup, avoiding an accidental switch to direct provider requests. The API health endpoint does not contact optional services. Ingestion uses the configured embedding route and Qdrant server. Dataset publication and seeding use `HF_DATASET_REPO` and optional `HF_TOKEN` explicitly. `CLOUDFLARE_API_TOKEN`, `CF_ACCOUNT_ID`, and `GCP_REGION` are retained for later deployment tooling.
 
 Service URLs must use HTTP or HTTPS and cannot carry user credentials, query strings, or fragments. Keys belong in dedicated secret fields. Set `GIT_SHA` to a 7 to 40 character lowercase hexadecimal revision for a labelled build; otherwise `/health` reports `unknown`.
 
@@ -45,7 +45,7 @@ Middleware is ordered as request context, CORS, then error boundary. It is imple
 
 ## Verification and release discipline
 
-`make check` runs Ruff lint and formatting checks, `mypy --strict`, offline tests with a 90% branch-inclusive coverage gate, and the Git index privacy check. The GitHub workflow runs the same checks with Python 3.12 and an immutable revision of each action. It needs no repository secrets.
+`make check` runs Ruff lint and formatting checks, `mypy --strict`, tests with a 90% branch-inclusive coverage gate and local Qdrant integration coverage, and the Git index privacy check. The GitHub workflow runs the same checks with Python 3.12 and an immutable revision of each action. It needs no repository secrets.
 
 Application versions come from package metadata. Direct dependencies and the build backend are pinned in `api/pyproject.toml`; transitive versions and hashes live in `api/uv.lock`. Update dependencies deliberately, regenerate the lockfile, and run all checks before committing.
 

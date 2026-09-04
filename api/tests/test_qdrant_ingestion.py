@@ -1,6 +1,7 @@
 """Verify hybrid schemas, repeatable writes, and page replacement on a real local Qdrant server."""
 
 from collections.abc import Iterator, Sequence
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
@@ -111,6 +112,83 @@ def test_invalid_batch_size_is_rejected_without_network() -> None:
             )
     finally:
         client.close()
+
+
+@pytest.mark.integration
+def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
+    local_store: HybridStore, tmp_path: Path
+) -> None:
+    import httpx
+
+    from met_agent.ingestion.artifacts import (
+        export_bundle,
+        restore_bundle,
+        validate_files,
+        verify_index,
+    )
+    from met_agent.ingestion.http import SourceError
+    from met_agent.ingestion.models import CollectionObject
+    from met_agent.ingestion.storage import save_objects
+
+    objects = [
+        CollectionObject(
+            object_id=i,
+            title=f"Vessel {i}",
+            source_url=f"https://www.metmuseum.org/art/collection/search/{i}",
+            raw_fields={"Title": f"Vessel {i}"},
+        )
+        for i in range(1, 21)
+    ]
+    save_objects(tmp_path / "objects.parquet", objects)
+    documents = [obj.document() for obj in objects]
+    local_store.ingest(documents, TestDense(), TestSparse(), batch_size=7)
+    restored = "test_restored_" + uuid4().hex
+    client = local_store.client
+    with httpx.Client(base_url="http://127.0.0.1:6333/", timeout=30) as http:
+        manifest = export_bundle(
+            client,
+            http,
+            tmp_path,
+            tmp_path / "bundle",
+            {"collection": local_store.collection},
+            local_store.embedding_model,
+        )
+        assert manifest.indexes[0].points == 20
+        try:
+            restore_bundle(
+                client,
+                http,
+                tmp_path / "bundle",
+                {"collection": restored},
+                local_store.embedding_model,
+            )
+            assert client.count(restored, exact=True).count == 20
+            with pytest.raises(IndexCompatibilityError, match="overwrite"):
+                restore_bundle(
+                    client,
+                    http,
+                    tmp_path / "bundle",
+                    {"collection": restored},
+                    local_store.embedding_model,
+                )
+            with pytest.raises(IndexCompatibilityError, match="EMBEDDING_MODEL"):
+                restore_bundle(
+                    client, http, tmp_path / "bundle", {"collection": "unused"}, "different-model"
+                )
+            with pytest.raises(IndexCompatibilityError, match="payloads"):
+                verify_index(
+                    client,
+                    restored,
+                    [documents[0].model_copy(update={"payload": {"private": "unexpected"}})],
+                )
+            with pytest.raises(IndexCompatibilityError, match="empty or duplicate"):
+                verify_index(client, restored, [])
+            (tmp_path / "bundle" / "collection.snapshot").write_bytes(b"corrupt")
+            with pytest.raises(SourceError, match="integrity"):
+                validate_files(tmp_path / "bundle", manifest)
+        finally:
+            if client.collection_exists(restored):
+                client.delete_collection(restored)
 
 
 @pytest.mark.filterwarnings("ignore:Payload indexes have no effect:UserWarning")
