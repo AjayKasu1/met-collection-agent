@@ -398,4 +398,7 @@ def restore_bundle(
             selected = {int(doc.point_id) for doc in load_documents(directory, index.kind)}
             _, vectors = load_images(directory, selected)
             verify_image_index(client, collection, selected, vectors)
+        # Qdrant retains multipart uploads even after collection deletion. Remove only
+        # this upload after verification; the source bundle remains the recovery artifact.
+        client.delete_snapshot(collection, _snapshot_path(index.kind), wait=True)
     return manifest

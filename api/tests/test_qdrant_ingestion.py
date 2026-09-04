@@ -229,6 +229,7 @@ def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
                 4,
             )
             assert client.count(restored, exact=True).count == 20
+            assert client.list_snapshots(restored) == []
             with pytest.raises(IndexCompatibilityError, match="overwrite"):
                 restore_bundle(
                     client,

@@ -39,3 +39,5 @@ The target server must use the same Qdrant minor version and an equal or newer p
 A network failure during restoration can leave a newly created collection or one completed index from a two-index bundle. Inspect that target and choose unused names for a retry. The script does not delete collections automatically. Successful restoration also installs the source artifacts in `DATA_DIR` so golden verification and later exports use the same records.
 
 Hashes protect transfer integrity; they do not make an untrusted dataset authentic. Use a dataset and pinned revision that you control or have reviewed. Publishing visitor-page extracts does not change their ownership or imply that visitor website text has the collection dataset's CC0 status.
+
+After a successful restore and full vector/payload verification, the temporary snapshot upload is deleted from the target Qdrant server. Qdrant otherwise retains that uploaded file even if the collection is later deleted. The source bundle and restored collection are preserved; other server snapshots are not removed. A failed verification retains the upload for diagnosis.
