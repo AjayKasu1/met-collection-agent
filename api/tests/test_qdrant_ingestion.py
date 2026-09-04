@@ -114,6 +114,31 @@ def test_invalid_batch_size_is_rejected_without_network() -> None:
         client.close()
 
 
+def test_batch_pacing_waits_only_between_batches_and_validates_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr("met_agent.retrieval.qdrant_store.time.sleep", waits.append)
+    client = QdrantClient(location=":memory:")
+    store = HybridStore(client, "paced", "test-model")
+    monkeypatch.setattr(store, "ensure_collection", lambda _: None)
+    monkeypatch.setattr(client, "upsert", lambda *a, **kw: None)
+    documents = [IndexDocument(point_id=i, text="Vessel", payload={}) for i in range(1, 6)]
+    try:
+        assert (
+            store.ingest(documents, TestDense(), TestSparse(), batch_size=2, batch_delay_seconds=30)
+            == 5
+        )
+        assert waits == [30, 30]
+        for invalid in (-1, float("inf"), float("nan")):
+            with pytest.raises(ValueError, match="finite and nonnegative"):
+                store.ingest(
+                    documents, TestDense(), TestSparse(), batch_size=2, batch_delay_seconds=invalid
+                )
+    finally:
+        client.close()
+
+
 @pytest.mark.integration
 def test_snapshot_round_trip_without_embedding_and_refuses_overwrite(
     local_store: HybridStore, tmp_path: Path

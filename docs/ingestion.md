@@ -36,6 +36,8 @@ Qdrant stores named `dense` cosine vectors and `sparse` FastEmbed `Qdrant/bm25` 
 
 Batch responses must contain one finite, nonzero dense vector per input with a consistent dimension. Writes pair both vectors with the same document and wait for acknowledgment. Repeating a completed ingestion upserts stable IDs without duplicates. A failed run can leave acknowledged earlier batches; rerun against the same prepared artifact to finish. It recomputes embeddings and may incur provider usage again.
 
+Both ingestion commands accept `--batch-delay-seconds` to pace batches without editing environment settings. For example, `--batch-delay-seconds 30` waits 30 seconds after each acknowledged batch before starting the next one. The default is zero; select a delay and `EMBEDDING_BATCH_SIZE` appropriate to the project's [Google AI Studio quotas](https://ai.google.dev/gemini-api/docs/rate-limits). Pacing reduces bursts but cannot overcome a daily quota or guarantee freedom from shared-project limits. Exhausted retries still stop the run with acknowledged earlier batches intact.
+
 ## Visitor pages
 
 ```sh

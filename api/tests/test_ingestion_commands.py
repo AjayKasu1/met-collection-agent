@@ -75,7 +75,12 @@ def test_prepare_and_reuse_sample_without_repeating_source_calls(
         )
     monkeypatch.setattr(commands, "download_csv", lambda *a, **kw: source)
     monkeypatch.setattr(commands, "image_inventory", lambda *a, **kw: {1, 2, 3})
-    assert commands.ingest_collection(["--prepare-only", "--limit", "2"]) == 0
+    assert (
+        commands.ingest_collection(
+            ["--prepare-only", "--limit", "2", "--batch-delay-seconds", "30"]
+        )
+        == 0
+    )
     assert [obj.object_id for obj in load_objects(root / "objects.parquet")] == [1, 2]
     assert stub_index == []
     assert (
@@ -85,6 +90,8 @@ def test_prepare_and_reuse_sample_without_repeating_source_calls(
     assert [doc.point_id for doc in stub_index] == [1]
     with pytest.raises(ValueError, match="positive"):
         commands.ingest_collection(["--limit", "0"])
+    with pytest.raises(SystemExit):
+        commands.ingest_collection(["--batch-delay-seconds", "nan"])
     monkeypatch.setattr(
         commands,
         "reuse_selection",

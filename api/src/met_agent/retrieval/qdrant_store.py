@@ -1,5 +1,7 @@
 """Own the hybrid collection schema and idempotent, acknowledged batch writes."""
 
+import math
+import time
 from collections.abc import Sequence
 from typing import Literal
 
@@ -97,13 +99,18 @@ class HybridStore:
         sparse: SparseEmbedder,
         *,
         batch_size: int,
+        batch_delay_seconds: float = 0,
     ) -> int:
         """Upsert deterministic IDs; a failed batch never produces partially paired vectors."""
         if batch_size <= 0:
             raise ValueError("Embedding batch size must be positive")
+        if not math.isfinite(batch_delay_seconds) or batch_delay_seconds < 0:
+            raise ValueError("Embedding batch delay must be finite and nonnegative")
         count = 0
         dimensions: int | None = None
         for offset in range(0, len(documents), batch_size):
+            if offset and batch_delay_seconds:
+                time.sleep(batch_delay_seconds)
             batch = documents[offset : offset + batch_size]
             texts = [document.text for document in batch]
             dense_vectors = dense.embed(texts)

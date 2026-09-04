@@ -1,6 +1,7 @@
 """Compose source preparation and vector ingestion behind explicit command-line operations."""
 
 import argparse
+import math
 from collections.abc import Callable, Sequence
 from contextlib import closing
 from datetime import UTC, datetime
@@ -55,9 +56,27 @@ def _base_parser(description: str) -> argparse.ArgumentParser:
     return parser
 
 
+def _batch_delay(value: str) -> float:
+    """Validate pacing before any preparation or provider calls."""
+    delay = float(value)
+    if not math.isfinite(delay) or delay < 0:
+        raise argparse.ArgumentTypeError("Batch delay must be finite and nonnegative")
+    return delay
+
+
+def _add_batch_pacing(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--batch-delay-seconds",
+        type=_batch_delay,
+        default=0,
+        help="Wait this many seconds between embedding batches; tune to provider quota",
+    )
+
+
 def ingest_collection(argv: Sequence[str] | None = None) -> int:
     """Prepare or index a bounded collection sample; keep pilots in a separate directory/index."""
     parser = _base_parser("Prepare and ingest public-domain Met collection records")
+    _add_batch_pacing(parser)
     parser.add_argument("--limit", type=int, help="Maximum records, overriding INGEST_MAX_OBJECTS")
     parser.add_argument(
         "--golden",
@@ -139,6 +158,7 @@ def ingest_collection(argv: Sequence[str] | None = None) -> int:
                 dense,
                 sparse,
                 batch_size=settings.embedding_batch_size,
+                batch_delay_seconds=args.batch_delay_seconds,
             )
         logger.info("collection_indexed", objects=count)
     return 0
@@ -156,6 +176,7 @@ class _VisitorSources(BaseModel):
 def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
     """Fetch the explicit visitor source list, persist provenance, and replace stale page chunks."""
     parser = _base_parser("Ingest curated public visitor-information pages")
+    _add_batch_pacing(parser)
     parser.add_argument("--sources", type=Path, default=Path("api/data_sources/visitor_pages.yaml"))
     parser.add_argument(
         "--collection", help="Override the visitor collection for an isolated pilot"
@@ -199,6 +220,7 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
                 dense,
                 sparse,
                 batch_size=settings.embedding_batch_size,
+                batch_delay_seconds=args.batch_delay_seconds,
             )
             for url in {chunk.source_url for chunk in chunks}:
                 store.remove_stale_page_chunks(
