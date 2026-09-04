@@ -149,3 +149,33 @@ def test_rerank_receives_only_top_twenty_fused_candidates() -> None:
         )
         results = HybridRetriever(store, Dense(), Sparse(), BoundedRank()).search("object", k=40)
         assert len(results) == 20
+
+
+def test_small_reranker_registration_is_idempotent_and_batches_are_bounded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    registered: list[dict[str, Any]] = []
+
+    class Encoder:
+        @staticmethod
+        def list_supported_models() -> list[dict[str, Any]]:
+            return registered
+
+        @staticmethod
+        def add_custom_model(**kwargs: Any) -> None:
+            registered.append(kwargs)
+
+        def __init__(self, **kwargs: Any) -> None:
+            assert kwargs["model_name"] == rerank.MODEL
+            assert kwargs["specific_model_path"] == str(tmp_path)
+
+        def rerank(self, query: str, documents: list[str], *, batch_size: int) -> list[float]:
+            assert batch_size == 2
+            return [1.0 for _ in documents]
+
+    monkeypatch.setattr(rerank, "TextCrossEncoder", Encoder)
+    monkeypatch.setattr(rerank, "snapshot_download", lambda *args, **kwargs: str(tmp_path))
+    for _ in range(2):
+        assert rerank.LocalReranker(tmp_path).score("Query", ["A", "B"]) == [1.0, 1.0]
+    assert len(registered) == 1
+    assert registered[0]["sources"].hf == rerank.MODEL

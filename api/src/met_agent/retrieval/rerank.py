@@ -3,23 +3,34 @@
 import math
 from collections.abc import Sequence
 from pathlib import Path
+from threading import Lock
 
+from fastembed.common.model_description import ModelSource
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import LocalEntryNotFoundError
 
 from met_agent.retrieval.embeddings import EmbeddingError
 
-MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
-REVISION = "a09144355adeed5f58c8ed011d209bf8ee5a1fec"
+MODEL = "Xenova/ms-marco-MiniLM-L-2-v2"
+REVISION = "b84c4fa7efd7b4801931e75773c940f002a494f5"
+
+_REGISTRY_LOCK = Lock()
 
 
 class LocalReranker:
     """Use English query rewrites for the English records; keep inference off provider APIs."""
 
     def __init__(self, cache: Path, *, threads: int = 4) -> None:
-        if MODEL not in {entry["model"] for entry in TextCrossEncoder.list_supported_models()}:
-            raise EmbeddingError("Configured reranker is absent from the installed registry")
+        with _REGISTRY_LOCK:
+            if MODEL not in {entry["model"] for entry in TextCrossEncoder.list_supported_models()}:
+                TextCrossEncoder.add_custom_model(
+                    model=MODEL,
+                    sources=ModelSource(hf=MODEL),
+                    license="apache-2.0",
+                    size_in_gb=0.06,
+                    description="Pinned two-layer MS MARCO MiniLM ONNX cross-encoder",
+                )
         try:
             try:
                 path = snapshot_download(
@@ -54,7 +65,7 @@ class LocalReranker:
             return []
         try:
             scores = [
-                float(score) for score in self.model.rerank(query, list(documents), batch_size=8)
+                float(score) for score in self.model.rerank(query, list(documents), batch_size=2)
             ]
         except Exception as error:
             raise EmbeddingError(f"Local reranking failed ({type(error).__name__})") from None
