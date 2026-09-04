@@ -60,6 +60,8 @@ The bounded sample reserves eligible golden IDs before filling its remaining slo
 
 The [full ingestion guide](docs/full-ingestion.md) covers local inference, published SigLIP 2 image vectors, durable checkpoints, and detached execution with `nohup`. Local inference has no API quotas. Gemini remains available with token-aware pacing and persisted daily quota accounting.
 
+See the [completed Phase 1 build report](docs/phase-1-results.md) for measured duration, image coverage, golden verification, and the pinned published snapshot.
+
 ## Project layout
 
 ```text
