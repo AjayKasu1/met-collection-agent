@@ -39,9 +39,11 @@ from met_agent.ingestion.storage import (
 )
 from met_agent.ingestion.token_counting import GeminiTokenCounter
 from met_agent.ingestion.verify import read_golden, verification_markdown, verify_golden
+from met_agent.ingestion.visitor_tokens import local_passage_counter
 from met_agent.ingestion.visitors import VisitorCrawler, chunk_markdown, html_to_markdown
 from met_agent.observability.logging import configure_logging
 from met_agent.retrieval.embeddings import BM25Embedder, EmbeddingError
+from met_agent.retrieval.local_embeddings import LOCAL_TOKEN_LIMIT
 from met_agent.retrieval.providers import create_embedder
 from met_agent.retrieval.qdrant_store import HybridStore, IndexCompatibilityError
 
@@ -300,6 +302,11 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
                         provenance="live_http",
                     )
                 )
+    token_count = (
+        local_passage_counter(settings.data_dir / "models")
+        if settings.embedding_provider == "local"
+        else None
+    )
     for content in pages:
         title, markdown = html_to_markdown(content.html)
         page_chunks = chunk_markdown(
@@ -307,6 +314,8 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
             source_url=content.url,
             page_title=title or content.label,
             fetched_at=content.fetched_at,
+            token_count=token_count,
+            max_model_tokens=LOCAL_TOKEN_LIMIT,
         )
         chunks.extend(
             chunk.model_copy(update={"provenance": content.provenance}) for chunk in page_chunks

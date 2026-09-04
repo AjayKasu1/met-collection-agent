@@ -320,9 +320,22 @@ def test_visitor_prepare_and_index_preserves_provenance(
         commands.ingest_visitor_info(["--sources", str(sources)])
 
 
+@pytest.mark.parametrize("provider", ["gemini", "local"])
 def test_saved_html_command_prepares_and_indexes_without_visitor_http(
-    configured_commands: Settings, stub_index: list[IndexDocument], monkeypatch: pytest.MonkeyPatch
+    configured_commands: Settings,
+    stub_index: list[IndexDocument],
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
 ) -> None:
+    configured_commands = configured_commands.model_copy(update={"embedding_provider": provider})
+    monkeypatch.setattr(commands, "load_settings", lambda: configured_commands)
+    counted: list[str] = []
+
+    def count(text: str) -> int:
+        counted.append(text)
+        return len(text.encode("utf-8")) + 4
+
+    monkeypatch.setattr(commands, "local_passage_counter", lambda _: count)
     root = configured_commands.data_dir
     directory = root / "data" / "visitor_pages"
     directory.mkdir(parents=True)
@@ -347,6 +360,7 @@ def test_saved_html_command_prepares_and_indexes_without_visitor_http(
     assert stub_index[0].payload["fetched_at"] == "2026-09-03T18:00:00-04:00"
     assert stub_index[0].payload["section_heading"] == "Hours"
     assert artifact.read_bytes() == prepared
+    assert bool(counted) is (provider == "local")
     html.write_text("<main><script>no visitor content</script></main>")
     with pytest.raises(SourceError, match="no usable main text"):
         commands.ingest_visitor_info(["--html-dir", str(directory), "--prepare-only"])

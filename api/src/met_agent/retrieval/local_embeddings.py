@@ -16,6 +16,7 @@ from met_agent.retrieval.schema import EmbeddingIdentity
 
 LOCAL_MODEL = "intfloat/multilingual-e5-large"
 LOCAL_DIMENSIONS = 1024
+LOCAL_TOKEN_LIMIT = 512
 LOCAL_WEIGHTS_REPO = "qdrant/multilingual-e5-large-onnx"
 LOCAL_WEIGHTS_REVISION = "66076b8dc6e367337e3e90e6fb309fb0f3addaf6"
 LOCAL_FILES = (
@@ -88,7 +89,7 @@ class LocalEmbedder:
             return []
         prefix = "query: " if purpose == "query" else "passage: "
         inputs = [prefix + text for text in texts]
-        if any(len(item.ids) > 512 for item in self.tokenizer.encode_batch(inputs)):
+        if any(len(item.ids) > LOCAL_TOKEN_LIMIT for item in self.tokenizer.encode_batch(inputs)):
             raise EmbeddingError("Local embedding input exceeds E5's 512-token limit")
         try:
             vectors = [

@@ -1,6 +1,7 @@
 """Respect robots rules while converting curated visitor pages into attributed text windows."""
 
 import re
+from collections.abc import Callable
 from datetime import datetime
 from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
@@ -121,14 +122,17 @@ def chunk_markdown(
     fetched_at: datetime,
     target_tokens: int = 500,
     overlap_tokens: int = 50,
+    token_count: Callable[[str], int] | None = None,
+    max_model_tokens: int = 512,
 ) -> list[VisitorChunk]:
     """Window sections using a deterministic, Unicode-safe approximate token counter.
 
     Latin words are split into up to four-character pieces; CJK characters count
     individually. This is a local estimate, not a claim about Gemini token billing.
-    Windows preserve the original text and never split a Unicode code point.
+    When supplied, the model counter includes its prefix and special tokens and
+    bounds every emitted window. Windows never split a Unicode code point.
     """
-    if target_tokens <= 0 or not 0 <= overlap_tokens < target_tokens:
+    if target_tokens <= 0 or not 0 <= overlap_tokens < target_tokens or max_model_tokens <= 0:
         raise ValueError("Chunk size must exceed overlap and be positive")
     if fetched_at.tzinfo is None:
         raise ValueError("Fetch timestamp must have a timezone")
@@ -148,6 +152,18 @@ def chunk_markdown(
         offset = 0
         while offset < len(spans):
             end = min(offset + target_tokens, len(spans))
+            if token_count is not None:
+                low, high, fitted = offset + 1, end, None
+                while low <= high:
+                    middle = (low + high) // 2
+                    candidate = text[spans[offset].start() : spans[middle - 1].end()]
+                    if token_count(candidate) <= max_model_tokens:
+                        fitted, low = middle, middle + 1
+                    else:
+                        high = middle - 1
+                if fitted is None:
+                    raise SourceError("A visitor text span exceeds the model token limit")
+                end = fitted
             index = len(result)
             result.append(
                 VisitorChunk(
@@ -162,5 +178,5 @@ def chunk_markdown(
             )
             if end == len(spans):
                 break
-            offset = end - overlap_tokens
+            offset = max(offset + 1, end - overlap_tokens)
     return result
