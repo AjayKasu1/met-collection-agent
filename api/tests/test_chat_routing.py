@@ -330,7 +330,7 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
         {
             "text": "Gallery 131",
             "language": "en",
-            "citations": [{"source": {"object_id": 547802}, "quote": "Gallery 131"}],
+            "citations": ["q0"],
         }
     )
     router = Router([ready, final_reply])
@@ -342,7 +342,23 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
             "main",
             [
                 {"role": "user", "content": "Where?"},
-                {"role": "tool", "tool_call_id": "call", "content": "Gallery 131"},
+                {
+                    "role": "tool",
+                    "tool_call_id": "call",
+                    "content": json.dumps(
+                        {
+                            "name": "get_object",
+                            "evidence": [
+                                {
+                                    "key": "object:547802",
+                                    "object_id": 547802,
+                                    "kind": "live_object",
+                                    "text": "Gallery 131",
+                                }
+                            ],
+                        }
+                    ),
+                },
             ],
             tools=[{"type": "function"}],
             response_schema=AgentDraft,
@@ -356,10 +372,7 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
     schema = fmt["json_schema"]["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(schema["properties"])
-    alternatives = schema["$defs"]["CitationWire"]["properties"]["source"]["anyOf"]
-    assert len(alternatives) == 2
-    assert schema["$defs"]["ObjectSource"]["required"] == ["object_id"]
-    assert schema["$defs"]["PageSource"]["required"] == ["source_url"]
+    assert schema["properties"]["citations"]["items"]["enum"] == ["q0"]
     assert "Gallery 131" in final["messages"][1]["content"]
     assert all(message["role"] != "tool" for message in final["messages"])
 

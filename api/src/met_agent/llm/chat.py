@@ -11,11 +11,11 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, JsonValue
 
-from met_agent.agent.models import ModelCall, Route
+from met_agent.agent.models import Citation, ModelCall, Route
 from met_agent.config import Settings, model_provider
+from met_agent.llm.citation_spans import prepare_final
 from met_agent.llm.cost import CallLedger, estimate_cost
 from met_agent.llm.pacing import RequestBudgetError, TokenPacer, prompt_tokens
-from met_agent.llm.prompts import load_prompt
 from met_agent.llm.providers import chat_routes as chat_routes
 from met_agent.llm.providers import configured_models
 from met_agent.llm.providers import google_model as google_model
@@ -125,26 +125,14 @@ class LiteLLMChat:
     ) -> Reply:
         from litellm.exceptions import RateLimitError, Timeout
 
+        citation_catalog: dict[str, Citation] | None = None
         if (
             response_schema is not None
             and response_schema.__name__ == "AgentDraft"
             and not tools
             and any(item.get("role") == "tool" for item in messages)
         ):
-            messages = [
-                {"role": "system", "content": load_prompt("system_v2")},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "context": [
-                                item for item in messages if item.get("role") in {"user", "tool"}
-                            ]
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ]
+            messages, citation_catalog = prepare_final(messages)
         context = CURRENT_CALL.get()
         if context:
             context.audit(
@@ -184,7 +172,9 @@ class LiteLLMChat:
                 actual_route = candidate
                 model_name = self.models[candidate]
                 if response_schema is not None and not tools:
-                    options["response_format"] = response_format(response_schema, model_name)
+                    options["response_format"] = response_format(
+                        response_schema, model_name, catalog=citation_catalog
+                    )
                 if "gpt-oss" in model_name:
                     options["reasoning_effort"] = "low"
                 else:
@@ -294,29 +284,21 @@ class LiteLLMChat:
             response_schema is not None
             and response_schema.__name__ == "AgentDraft"
             and not tools
-            and options.get("response_format", {}).get("type") == "json_schema"
+            and (
+                citation_catalog is not None
+                or options.get("response_format", {}).get("type") == "json_schema"
+            )
         ):
             try:
-                message["content"] = decode_final(str(message.get("content") or ""))
+                message["content"] = decode_final(
+                    str(message.get("content") or ""), citation_catalog
+                )
             except ValueError:
                 raise ModelError(
                     "invalid_response", "Final answer failed structured validation"
                 ) from None
         if tools and response_schema is not None and not message.get("tool_calls"):
             # Groq forbids tools with structured output. Start a separate final-answer call.
-            final_messages = [
-                {"role": "system", "content": load_prompt("system_v2")},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "context": [
-                                item for item in messages if item.get("role") in {"user", "tool"}
-                            ]
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ]
+            final_messages = [item for item in messages if item.get("role") in {"user", "tool"}]
             return await self.complete(route, final_messages, response_schema=response_schema)
         return Reply(message)

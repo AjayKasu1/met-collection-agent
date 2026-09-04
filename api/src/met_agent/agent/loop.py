@@ -55,7 +55,7 @@ class Agent:
             "prompt_versions",
             {
                 name: prompt_hash(name)
-                for name in ("system_v2", "tools_v1", "intent_v2", "grounding_v1")
+                for name in ("system_v2", "tools_v1", "intent_v2", "grounding_v1", "citations_v1")
             },
         )
         try:

@@ -3,7 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from met_agent.config import ChatProvider
 from met_agent.tools.models import Handoff
@@ -32,6 +32,12 @@ class AgentDraft(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     citations: list[Citation] = Field(default_factory=list, max_length=20)
     language: Language
+
+    @field_validator("text")
+    @classmethod
+    def ordinary_display_spaces(cls, value: str) -> str:
+        """Normalize presentation-only spaces in prose; never alter verbatim citation quotes."""
+        return value.replace("\u00a0", " ").replace("\u202f", " ")
 
 
 class ModelCall(BaseModel):

@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from met_agent.agent.models import AgentDraft, Language
+from met_agent.agent.models import AgentDraft, Citation, Language
 
 
 def strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
@@ -29,19 +29,27 @@ def strict_schema(schema: type[BaseModel]) -> dict[str, Any]:
     return result
 
 
-def response_format(schema: type[BaseModel], model: str) -> dict[str, Any]:
+def response_format(
+    schema: type[BaseModel], model: str, *, catalog: dict[str, Citation] | None = None
+) -> dict[str, Any]:
     native = model in {
         "groq/openai/gpt-oss-120b",
         "groq/openai/gpt-oss-20b",
         "groq/qwen/qwen3.8-27b",
     }
     if native:
+        shape = strict_schema(FinalAnswerReferences if catalog is not None else schema)
+        if catalog is not None:
+            if catalog:
+                shape["properties"]["citations"]["items"]["enum"] = list(catalog)
+            else:
+                shape["properties"]["citations"]["maxItems"] = 0
         return {
             "type": "json_schema",
             "json_schema": {
                 "name": schema.__name__,
                 "strict": True,
-                "schema": strict_schema(schema),
+                "schema": shape,
             },
         }
     return {"type": "json_object"}
@@ -72,7 +80,23 @@ class FinalAnswerWire(BaseModel):
     language: Language
 
 
-def decode_final(content: str) -> str:
+class FinalAnswerReferences(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    text: str = Field(min_length=1, max_length=8000)
+    citations: list[str] = Field(max_length=20)
+    language: Language
+
+
+def decode_final(content: str, catalog: dict[str, Citation] | None = None) -> str:
+    if catalog is not None:
+        references = FinalAnswerReferences.model_validate_json(content)
+        if any(key not in catalog for key in references.citations):
+            raise ValueError("Unknown citation excerpt key")
+        return AgentDraft(
+            text=references.text,
+            language=references.language,
+            citations=[catalog[key] for key in references.citations],
+        ).model_dump_json()
     wire = FinalAnswerWire.model_validate_json(content)
     answer = {
         "text": wire.text,

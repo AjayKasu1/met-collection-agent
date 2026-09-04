@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Literal
 
 PromptName = Literal[
-    "system_v1", "system_v2", "tools_v1", "intent_v1", "intent_v2", "grounding_v1", "evaluation_v1"
+    "system_v1",
+    "system_v2",
+    "tools_v1",
+    "intent_v1",
+    "intent_v2",
+    "grounding_v1",
+    "evaluation_v1",
+    "citations_v1",
 ]
 
 
@@ -19,6 +26,7 @@ def load_prompt(name: PromptName) -> str:
         "intent_v2",
         "grounding_v1",
         "evaluation_v1",
+        "citations_v1",
     }:
         raise ValueError("Unknown prompt version")
     resource = files("met_agent").joinpath("prompts", name + ".md")

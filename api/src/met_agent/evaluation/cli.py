@@ -54,7 +54,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         golden_sha256=hashlib.sha256(args.golden.read_bytes()).hexdigest(),
         prompt_sha256={
             name: prompt_hash(name)
-            for name in ("system_v2", "tools_v1", "intent_v2", "grounding_v1", "evaluation_v1")
+            for name in (
+                "system_v2",
+                "tools_v1",
+                "intent_v2",
+                "grounding_v1",
+                "evaluation_v1",
+                "citations_v1",
+            )
         },
         retrieval={
             "embedding_provider": settings.embedding_provider,

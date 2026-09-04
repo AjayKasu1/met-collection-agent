@@ -11,3 +11,9 @@ Added `evaluation_v1` for an independent, evidence-only faithfulness score and a
 ## Scope and exact quoting v2, September 4, 2026
 
 The first measured quick run scored 5/10. `intent_v2` makes the workspace boundary explicit for external businesses and retail policies and selects the appropriate bounded handoff contact. `system_v2` requires contiguous quotes, preserving intervening fields, and explains how to cite confirmed HTTP 404 lookup evidence by API URL. Existing citation and atomic grounding validation remain unchanged. The original failed run and subsequent measured results are retained in `evals/reports`; score deltas are not claimed before rerunning.
+
+## Verbatim excerpt selection v1, September 4, 2026
+
+The second measured quick run scored 7/10 versus 5/10 initially. All out-of-scope handoffs passed, but quote reconstruction still failed for Van Gogh and the confirmed 404. That comparison includes reranker and evidence changes and does not isolate a prompt-only effect.
+
+`citations_v1` changes the provider-facing final contract to select an enum of server-provided excerpt keys. Excerpts are contiguous substrings of this turn's tool evidence. The server resolves keys to the original source and quote before the unchanged public citation and atomic grounding checks. Unknown keys are rejected. Answer prose normalizes nonbreaking presentation spaces; quotes retain their exact source characters. A live GPT-OSS 20B canary accepted the native schema and returned a valid Van Gogh citation in 0.95 seconds. End-to-end score deltas require the subsequent measured run.
