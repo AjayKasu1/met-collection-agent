@@ -2,6 +2,23 @@
 
 Run `make evals-quick` for the ten `verify: false` rows or `make evals` for all 32. Both use the saved settings without provider overrides. The agent and independent lite judge share one per-model pacing instance; evaluations execute sequentially. The full run can take many minutes on free-tier quotas.
 
+The latest complete reviewed report is `2026-09-05T031955-21bf3af5-quick` at commit `21bf3af5`. It is the checked-in `baseline.json` used by the pull-request gate.
+
+| Metric | Measured result |
+| --- | ---: |
+| Completed | 10/10 |
+| Overall pass | 90% |
+| Collection lookup | 100% |
+| Refusal and handoff | 100% |
+| Hallucination traps | 50% |
+| Mean independent faithfulness | 1.00 across 10 judgments |
+| Mean agent latency | 26.348 s |
+| Nearest-rank p95 | 98.623 s |
+| Mean answer-path cost | $0.0002823075 |
+| Independent judge cost | $0.0008523750 total |
+
+The later `2026-09-05T032640-21bf3af5-full` report contains five upstream HTTP 500 failures and is incomplete. It remains an incident record and is not promoted as an evaluation result.
+
 The default command preserves the interactive chat deadline. For a batch quality measurement that permits longer quota waits, use `make evals-quick ARGS="--chat-deadline-seconds 300"` or the equivalent full command. This explicit override is recorded alongside the saved interactive deadline, provider path and pacing configuration. It does not change `.env`, prompt content, providers or verification rules, and it does not demonstrate that the same questions meet the interactive deadline. Resume rejects a changed execution configuration; baseline comparison rejects differing chat deadlines. The complete 30-second run at `155fdfc` scored 5/10, with five deadline expirations. Preserve it as the interactive result rather than replacing it with a batch score.
 
 Every row starts a fresh production Runtime chat session. `contains` requires every expected substring, case-insensitively. Retrieval passes on Hit@5 and also reports Hit@1/10. Refusal requires the interpretive guardrail event, the policy-refusal flag and an independent no-opinion judgment. Handoff requires a successful handoff and its tool-call event. A failed grounding check fails the row. Faithfulness is additionally judged from model-visible evidence, without expected answers or world knowledge. It is reported separately and is not a replacement for the production grounding check.

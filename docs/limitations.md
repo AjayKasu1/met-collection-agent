@@ -1,4 +1,24 @@
-# Measured latency and operating limits
+# Limitations and production controls
+
+## Provider data policy
+
+The active default route is Groq and Gemini fallback is disabled. If Gemini is enabled without an associated billing account, Google's current [Gemini API terms](https://ai.google.dev/gemini-api/terms) classify it as an unpaid service: submitted content and generated responses may be used to improve products, and human reviewers may process them. Do not send personal, confidential, or sensitive information through that route. Google's [pricing table](https://ai.google.dev/gemini-api/docs/pricing) marks free-tier content as used for product improvement and paid-tier content as excluded from that use. Recheck the current terms before enabling Gemini because provider policies can change.
+
+Session audits and optional Langfuse traces also contain conversation content and retrieved excerpts. They need documented retention, deletion, access, and incident-response controls. Secret redaction reduces credential exposure but does not anonymize user questions.
+
+## Source freshness
+
+Gallery numbers and `on_view` values in `search_collection` reflect ingestion time. Displays move. A gallery claim is current only when the same turn calls `get_object`, which reads The Met's live object endpoint and caches the result for at most five minutes. If that endpoint is unavailable, the system must state that it cannot verify the current gallery.
+
+Visitor answers come from saved public pages and include canonical URL plus capture time. Hours, admission, exhibitions, access guidance, maps, and policies can change after capture. Production should schedule recapture, retain source revisions, alert on stale pages, and route high-impact or conflicting answers to staff review.
+
+## Version 0 deployment boundary
+
+The v0 API has no user authentication, tenant isolation, distributed rate limiting, abuse controls, or authorization on session-event reads. CORS limits browser origins but is not access control. The SQLite audit store and in-process locks support one API process only. Ephemeral cloud disks can discard audits, and multiple instances do not share circuit-breaker or pacing state.
+
+A public institutional deployment should add identity-aware authentication, per-user and global quotas, a durable encrypted audit store, distributed pacing and circuit-breaker state, a staff review queue for unresolved or high-impact questions, paid provider capacity with contractual data controls, source-freshness jobs, latency and error SLOs, provider and ingestion alerts, dashboards, runbooks, and tested rollback procedures.
+
+## Measured latency
 
 Initial L6 measurement, September 4, 2026, using the saved configuration without model overrides: Groq GPT-OSS 120B main, GPT-OSS 20B lite, Gemini fallback, local multilingual E5 embeddings and AI Gateway. All three demo answers passed citation and grounding checks. No retry or fallback occurred.
 

@@ -1,6 +1,6 @@
 # Phase 2: retrieval and the constrained agent
 
-The HTTP service and MCP server share five validated tools. Chat adds a bounded model loop, multilingual routing, citation checks, and claim verification. Evaluation scoring, the web client, and deployment remain later phases.
+The HTTP service and MCP server share five validated tools. Chat adds a bounded model loop, multilingual routing, citation checks, and claim verification. Evaluation scoring, the web client, and deployment are documented separately in their current guides.
 
 ## Retrieval
 
@@ -72,4 +72,4 @@ This calls the real FastAPI `/chat` route through an ASGI HTTP transport for `co
 
 On September 4, 2026, live collection, visitor, and image searches worked. The visitor index contains nine pages and 191 verified chunks; the object collection remains at 20,000. Tables in complementary HTML sections are preserved, including the saved opening-hours table. Only three newly extracted texts required embedding during the repair; unchanged texts reused byte-identical vectors after index identity validation.
 
-The final Groq demo passed all three golden questions: Dendur in Gallery 131, Fifth Avenue closed on Wednesdays, and the non-interpretive refusal. Both factual answers passed the existing citation and atomic grounding checks. Earlier failures are preserved in local session logs. Final answers use Groq's native strict schema in a separate no-tool call; the wire citation source maps back to the original public citation type before verification. See the [README measurement](../README.md#phase-2-demo-measurement) for latency, costs, and limitations. Phase 3 adds [evaluation scoring](evaluations.md); web UI and deployment remain later phases.
+The final Groq demo passed all three golden questions: Dendur in Gallery 131, Fifth Avenue closed on Wednesdays, and the non-interpretive refusal. Both factual answers passed the existing citation and atomic grounding checks. Earlier failures are preserved in local session logs. Final answers use Groq's native strict schema in a separate no-tool call; the wire citation source maps back to the original public citation type before verification. See the [measured latency](limitations.md) for timing, costs, and operational constraints, plus [evaluation scoring](evals.md) for the reviewed regression baseline.
