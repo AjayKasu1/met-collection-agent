@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev lint typecheck test check check-repository ingest ingest-visitors prepare-images verify-golden publish-index seed qdrant demo-check
+.PHONY: setup dev lint typecheck test check check-all check-repository web-install web-dev web-check ingest ingest-visitors prepare-images verify-golden publish-index seed qdrant demo-check
 
 setup:
 	$(UV) sync --project api --locked
@@ -23,6 +23,17 @@ check-repository:
 	$(UV) run --project api --locked python api/scripts/check_repository.py
 
 check: lint typecheck test check-repository
+
+check-all: check web-check
+
+web-install:
+	pnpm --dir web install --frozen-lockfile
+
+web-dev:
+	pnpm --dir web dev
+
+web-check:
+	pnpm --dir web check
 
 # Additional arguments remain explicit, for example: make ingest ARGS="--limit 200".
 ARGS ?=

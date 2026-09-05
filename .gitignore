@@ -38,6 +38,7 @@ node_modules/
 .next/
 .open-next/
 .wrangler/
+/web/coverage/
 *.tsbuildinfo
 
 # Local editor, runtime, and operating-system files.

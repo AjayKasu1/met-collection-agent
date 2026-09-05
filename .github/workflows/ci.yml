@@ -39,6 +39,24 @@ jobs:
       - name: Lint, type check, test, and inspect tracked files
         run: make check
 
+  web:
+    name: Node 20 web and Workers checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "20"
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@11.19.0
+      - name: Install locked dependencies
+        run: pnpm --dir web install --frozen-lockfile
+      - name: Lint, type check, test, and build the Worker
+        run: make web-check
+
   evals:
     name: Live golden regression gate
     if: github.event_name == 'pull_request'
