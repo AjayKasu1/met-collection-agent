@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: setup dev lint typecheck test check check-all check-repository web-install web-dev web-check ingest ingest-visitors prepare-images verify-golden publish-index seed qdrant demo-check
+.PHONY: setup dev lint typecheck test check check-all check-repository web-install web-dev web-check ingest ingest-visitors prepare-images verify-golden publish-index seed qdrant demo demo-check compose-check build-containers
 
 setup:
 	$(UV) sync --project api --locked
@@ -40,6 +40,17 @@ ARGS ?=
 
 qdrant:
 	docker compose --env-file /dev/null up -d qdrant
+	curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:6333/readyz >/dev/null
+
+demo: qdrant
+	QDRANT_URL=http://127.0.0.1:6333 $(MAKE) seed
+	docker compose up --build api web
+
+compose-check:
+	docker compose config --quiet
+
+build-containers:
+	docker compose build api web
 
 ingest:
 	$(UV) run --project api --locked python api/scripts/ingest_collection.py $(ARGS)

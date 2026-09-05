@@ -1,0 +1,8 @@
+.env*
+.next/
+.open-next/
+.wrangler/
+coverage/
+node_modules/
+*.log
+*.tsbuildinfo

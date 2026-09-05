@@ -9,6 +9,7 @@ import subprocess
 from pathlib import PurePosixPath
 
 _PRIVATE_DIRECTORIES = frozenset({"node_modules", "__pycache__"})
+_PUBLISHABLE_HIDDEN_DIRECTORIES = frozenset({".devcontainer", ".github"})
 _CREDENTIAL_PATTERNS = (
     re.compile(rb"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b"),
     re.compile(rb"\bAIza[0-9A-Za-z_-]{35}\b"),
@@ -28,7 +29,10 @@ def is_private_path(path: str) -> bool:
         or path == "golden.jsonl"
         or file.parts[0] == "data"
         or bool(_PRIVATE_DIRECTORIES.intersection(file.parts))
-        or any(part.startswith(".") and part != ".github" for part in file.parts[:-1])
+        or any(
+            part.startswith(".") and part not in _PUBLISHABLE_HIDDEN_DIRECTORIES
+            for part in file.parts[:-1]
+        )
         or file.suffix.lower() in {".pem", ".key", ".log", ".snapshot", ".sqlite", ".db"}
         or (name.startswith(("credentials", "service-account")) and name.endswith(".json"))
     )

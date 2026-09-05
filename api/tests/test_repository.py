@@ -47,6 +47,7 @@ def test_private_paths_are_rejected(path: str) -> None:
         ".env.example",
         "evals/golden.jsonl",
         "api/prompts/system_v1.md",
+        ".devcontainer/devcontainer.json",
         "api/data_sources/pages.yaml",
     ],
 )

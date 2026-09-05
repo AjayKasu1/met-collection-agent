@@ -1,0 +1,34 @@
+{
+  "name": "Met Collection Agent",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "forwardPorts": [3000, 8000, 6333],
+  "portsAttributes": {
+    "3000": {
+      "label": "Web client"
+    },
+    "8000": {
+      "label": "FastAPI"
+    },
+    "6333": {
+      "label": "Qdrant"
+    }
+  },
+  "postCreateCommand": "make setup && make web-install && make qdrant && make seed",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}
