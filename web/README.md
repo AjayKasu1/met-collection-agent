@@ -4,7 +4,7 @@ This Next.js client presents the verified FastAPI agent as an accessible collect
 
 ## Local development
 
-Use Node.js 20 and pnpm 11.19.0. Start the API from the repository root, then run the client in a second terminal:
+Use Node.js 20 and pnpm 10.34.5. Start the API from the repository root, then run the client in a second terminal:
 
 ```sh
 make dev

@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: "20"
       - name: Install pinned pnpm
-        run: npm install --global pnpm@11.19.0
+        run: npm install --global pnpm@10.34.5
       - name: Install locked dependencies
         run: pnpm --dir web install --frozen-lockfile
       - name: Lint, type check, test, and build the Worker
