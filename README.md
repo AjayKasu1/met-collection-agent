@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API now provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. The last published three-question demo passed through Groq and AI Gateway with native structured final answers and unchanged citation/grounding checks. Fallback providers are now explicitly opt-in; stored Gemini settings remain inactive while its access is unresolved. See [provider routing](docs/provider-routing.md). A typed golden evaluator now measures factual contracts, retrieval Hit@k, independent faithfulness, latency and token cost. See [evaluation commands and scoring](docs/evaluations.md). The web client and deployment remain later phases.
+The API provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. A typed golden evaluator measures factual contracts, retrieval Hit@k, independent faithfulness, latency, and token cost. The Next.js client translates verified API events into a streaming, cited interface with per-answer provenance. See [provider routing](docs/provider-routing.md), [evaluation scoring](docs/evaluations.md), and the [web client guide](web/README.md).
 
 ## Run locally
 
@@ -39,6 +39,8 @@ make lint
 make typecheck
 make test
 make check
+make web-check
+make check-all
 ```
 
 Tests supply synthetic settings and never load the developer's `.env` or call an LLM. Start `make qdrant` to include the real index and snapshot integration checks; CI supplies that service automatically. Coverage includes configuration validation, concurrent request isolation, CORS preflights, error redaction, and incremental ASGI streaming. The coverage gate is 90% with branch coverage enabled.
@@ -106,11 +108,12 @@ evals/golden.jsonl             Versioned questions and reviewed relevance seeds
 evals/run_evals.py             Full and ten-question quick evaluation entry point
 evals/reports/                 Measured reports and reviewed regression baseline
 docs/configuration.md         Settings and operational behavior
+web/                         Next.js chat UI and OpenNext Workers adapter
 ```
 
 ## Boundaries
 
-The current service has no authentication or rate limiting. The development server binds to loopback. CORS restricts browser origins and is not an authorization mechanism. Request logs omit bodies, raw paths, query strings, and headers; application code must continue to avoid interpolating sensitive values into free-form log messages. Session audits under `DATA_DIR` and optional Langfuse traces contain conversation content. They require access and retention controls before a public deployment. Phase 2 uses one API process with local session locks.
+The current service has no authentication or public rate limiting. The API development server binds to loopback. CORS restricts browser origins and is not an authorization mechanism. Request logs omit bodies, raw paths, query strings, and headers; application code must continue to avoid interpolating sensitive values into free-form log messages. Session audits under `DATA_DIR` and optional Langfuse traces contain conversation content. They require access and retention controls before a public deployment. The API uses one process with local session locks.
 
 ## Data and attribution
 
