@@ -38,3 +38,54 @@ jobs:
         run: curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:6333/readyz
       - name: Lint, type check, test, and inspect tracked files
         run: make check
+
+  evals:
+    name: Live golden regression gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: evaluations
+    timeout-minutes: 30
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+      LLM_MODEL: groq/openai/gpt-oss-120b
+      LLM_MODEL_LITE: groq/openai/gpt-oss-20b
+      LLM_FALLBACK_ENABLED: 'false'
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_MODEL: intfloat/multilingual-e5-large
+      EMBEDDING_DIMENSIONS: '1024'
+      USE_AI_GATEWAY: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.17"
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - name: Read the reviewed baseline from the target commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline-reference
+          sparse-checkout: evals/reports/baseline.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Require evaluation credentials and baseline
+        run: |
+          test -n "$GROQ_API_KEY" || { echo 'Missing GROQ_API_KEY evaluation secret'; exit 1; }
+          test -n "$QDRANT_URL" || { echo 'Missing QDRANT_URL evaluation secret'; exit 1; }
+          test -n "$QDRANT_API_KEY" || { echo 'Missing read-only QDRANT_API_KEY evaluation secret'; exit 1; }
+          test -f baseline-reference/evals/reports/baseline.json
+      - name: Install locked dependencies
+        run: uv sync --project api --locked
+      - name: Compare ten golden questions with the reviewed baseline
+        run: make evals-quick ARGS="--chat-deadline-seconds 300 --baseline baseline-reference/evals/reports/baseline.json --output-dir data/eval-ci"
+      - name: Print measured report to the job summary
+        if: always()
+        run: |
+          for report in data/eval-ci/*-quick.md; do
+            test -f "$report" && cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          done
