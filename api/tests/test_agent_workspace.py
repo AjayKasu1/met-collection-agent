@@ -18,6 +18,7 @@ from met_agent.guardrails.interpretive import POLICY
 from met_agent.ingestion.verify import read_golden
 from met_agent.llm.chat import ModelError, Reply
 from met_agent.llm.prompts import load_prompt, prompt_hash
+from met_agent.tools.get_object import ObjectNotFound
 from met_agent.tools.handoff import handoff
 from met_agent.tools.models import (
     Evidence,
@@ -292,6 +293,43 @@ def test_model_error_malformed_envelope_and_honest_no_claims(tmp_path: Path) -> 
         )
     )
     assert answer.route == "main" and answer.grounding_score == 1
+
+
+def test_confirmed_missing_object_returns_verified_answer_without_third_model_call(
+    tmp_path: Path,
+) -> None:
+    registry = ToolRegistry()
+
+    def missing(_: GetObjectArguments) -> LiveObject:
+        raise ObjectNotFound(
+            "missing",
+            evidence=Evidence(
+                key="lookup:999",
+                source_url="https://collectionapi.metmuseum.org/public/collection/v1/objects/999",
+                text=(
+                    "Met API lookup for Object ID 999: not found (HTTP 404).\n"
+                    "No object record was returned for this requested ID."
+                ),
+                kind="lookup_status",
+            ),
+        )
+
+    registry.register("get_object", "Lookup", GetObjectArguments, LiveObject, missing)
+    model = ScriptedModel([intent(), calls("get_object", arguments='{"object_id":999}')])
+    store = EventStore(tmp_path / "missing.sqlite3")
+    answer = asyncio.run(
+        Agent(model, registry, store).run(ChatRequest(message="What gallery is object 999 in?"))
+    )
+    assert (
+        answer.text == "The requested object was not found. The Met API returned no object record."
+    )
+    assert answer.grounding_score == 1 and len(answer.citations) == 1
+    assert len(model.calls) == 2
+    assert any(
+        event.kind == "guardrail" and event.data.get("policy") == "deterministic_lookup_status"
+        for event in store.read(answer.session_id)
+        if isinstance(event.data, dict)
+    )
 
 
 def test_quote_identity_and_append_only_redacted_audit(tmp_path: Path) -> None:

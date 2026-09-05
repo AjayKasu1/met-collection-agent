@@ -21,6 +21,12 @@ from met_agent.tools.models import Evidence, Handoff
 from met_agent.tools.registry import ToolRegistry
 
 MAX_TOOL_CALLS = 6
+NOT_FOUND: dict[Language, str] = {
+    "en": "The requested object was not found. The Met API returned no object record.",
+    "fr": "L'objet demandé est introuvable. L'API du Met n'a renvoyé aucune notice d'objet.",
+    "es": "No se encontró el objeto solicitado. La API del Met no devolvió ningún registro.",
+    "zh": "未找到所请求的藏品。大都会艺术博物馆 API 未返回藏品记录。",
+}
 
 
 class Agent:
@@ -209,6 +215,45 @@ class Agent:
                         "evidence_context",
                         [item.model_dump(mode="json", exclude_none=True) for item in evidence],
                     )
+                    lookup = next(
+                        (
+                            item
+                            for item in evidence
+                            if result.error
+                            and result.error.code == "not_found"
+                            and item.kind == "lookup_status"
+                            and item.source_url is not None
+                        ),
+                        None,
+                    )
+                    if lookup is not None:
+                        citation = Citation(source_url=lookup.source_url, quote=lookup.text)
+                        lookup_draft = AgentDraft(
+                            text=NOT_FOUND[intent.language],
+                            language=intent.language,
+                            citations=[citation],
+                        )
+                        if not valid_citations(lookup_draft, evidence):
+                            raise RuntimeError("Server-produced lookup citation is invalid")
+                        audit(
+                            "guardrail",
+                            {
+                                "policy": "deterministic_lookup_status",
+                                "score": 1.0,
+                                "evidence_key": lookup.key,
+                            },
+                        )
+                        return self._answer(
+                            session,
+                            turn,
+                            started,
+                            intent.language,
+                            intent.route,
+                            context,
+                            lookup_draft.text,
+                            lookup_draft.citations,
+                            1.0,
+                        )
                     if isinstance(result.output, Handoff):
                         audit("terminal_handoff", result.output.model_dump(mode="json"))
                         return self._answer(
