@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 FROM ghcr.io/astral-sh/uv:0.11.17 AS uv
 
 FROM python:3.12.11-slim-bookworm AS builder
@@ -11,13 +9,11 @@ WORKDIR /app
 
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-install-project
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY src ./src
 COPY prompts ./prompts
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --no-editable
+RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.12.11-slim-bookworm AS runtime
 
