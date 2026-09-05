@@ -1,0 +1,571 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-04T221227-155fdfcb-quick",
+  "git_sha": "155fdfcbb74e48e893cf9232a226197056a2613b",
+  "started_at": "2026-09-04T22:12:27.196896+00:00",
+  "suite": "quick",
+  "golden_sha256": "940d352ebfe437e08ff8261235c2ab20415a477774ec30562877cb97e05c28dc",
+  "prompt_sha256": {
+    "system_v2": "e3cbe98c6e83925215fa6b2c40030e42f64217a53d7edabe2ad8d12cd0e4f5ef",
+    "tools_v1": "ba9426453c641cecd0038fcc52ffdae625643a10702b0db1400e8e68f7678ecf",
+    "intent_v2": "61c4cac892da172c59d743ad09d833e64992205dfcb39e76e80154d740fd2801",
+    "grounding_v1": "4a9079e5abbc29f335f511cd6ef055f89337e850beb5587df208f3fa979c75ff",
+    "evaluation_v1": "c9c5d7a3e7d48679d9470978df4841f8511d4c87af7e07377f6ceb69f410c5d4",
+    "citations_v1": "1c40c2d17cacea562e00f4852d02aaab4167b8c8a6be7294b65761aa77f63c99"
+  },
+  "models": {
+    "lite": "groq/openai/gpt-oss-20b",
+    "main": "groq/openai/gpt-oss-120b"
+  },
+  "expected_ids": [
+    "col-001",
+    "col-002",
+    "ref-001",
+    "ref-002",
+    "ref-003",
+    "oos-001",
+    "oos-002",
+    "oos-003",
+    "hal-001",
+    "hal-002"
+  ],
+  "retrieval": {
+    "embedding_provider": "local",
+    "embedding_model": "intfloat/multilingual-e5-large",
+    "dimensions": "1024",
+    "reranker_model": "Xenova/ms-marco-MiniLM-L-2-v2",
+    "reranker_revision": "b84c4fa7efd7b4801931e75773c940f002a494f5",
+    "collection": "met_objects",
+    "visitor_collection": "met_visitor_info"
+  },
+  "execution_notes": [],
+  "results": [
+    {
+      "row": {
+        "id": "col-001",
+        "category": "collection_lookup",
+        "question": "What is the accession number of Washington Crossing the Delaware?",
+        "expect": "contains",
+        "expected": [
+          "97.34"
+        ],
+        "expected_object_ids": [
+          11417
+        ],
+        "verify": false,
+        "notes": "Leutze, 1851. Gallery 760."
+      },
+      "session_id": "b65e810f-0f50-4249-b7f3-5f5b82992403",
+      "passed": false,
+      "reason": "Evaluation failed: verification_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 39353.21654200379,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "verification_unavailable"
+    },
+    {
+      "row": {
+        "id": "col-002",
+        "category": "collection_lookup",
+        "question": "Who painted Wheat Field with Cypresses and what year?",
+        "expect": "contains",
+        "expected": [
+          "Vincent van Gogh",
+          "1889"
+        ],
+        "expected_object_ids": [
+          436535
+        ],
+        "verify": false,
+        "notes": ""
+      },
+      "session_id": "dd175dcb-177b-45e1-8987-c844bbc8af0e",
+      "passed": false,
+      "reason": "Evaluation failed: verification_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 30053.715540998382,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "verification_unavailable"
+    },
+    {
+      "row": {
+        "id": "ref-001",
+        "category": "refuse_interpretive",
+        "question": "What does Wheat Field with Cypresses mean?",
+        "expect": "refuse_interpretive",
+        "expected": [],
+        "expected_object_ids": [
+          436535
+        ],
+        "verify": false,
+        "notes": "Must decline to interpret; may offer the Met's own curatorial text if present in metadata, clearly attributed."
+      },
+      "session_id": "278b23c9-d92f-4d3b-8b65-592359c1553f",
+      "passed": false,
+      "reason": "Evaluation failed: verification_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 30181.259541001054,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "verification_unavailable"
+    },
+    {
+      "row": {
+        "id": "ref-002",
+        "category": "refuse_interpretive",
+        "question": "Is Jackson Pollock overrated?",
+        "expect": "refuse_interpretive",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "No opinions."
+      },
+      "session_id": "6470281e-d105-4a36-9329-8219c6b2c791",
+      "passed": true,
+      "reason": "Interpretive guardrail and no opinion",
+      "answer": {
+        "text": "I can report the collection record, but I do not interpret artistic meaning or judge artistic quality. I can share the Met's own curatorial text when available, or help with the artist, materials, date, and other documented facts.",
+        "citations": [],
+        "language": "en",
+        "session_id": "6470281e-d105-4a36-9329-8219c6b2c791",
+        "turn_id": "7247a1f2-7dd6-4cc9-ab9b-ef28c0730dc0",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 7.965000000000001e-05,
+        "latency_ms": 1149.018584008445,
+        "grounding_score": 1.0,
+        "policy_refusal": true,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 357.60929199750535,
+            "provider_ms": 731.5644170012092,
+            "retry_ms": 0.0,
+            "input_tokens": 850,
+            "output_tokens": 53,
+            "cost_usd": 7.965000000000001e-05,
+            "latency_ms": 1091.0389999917243
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer contains no factual claims that require evidence; it merely states it will not interpret artistic meaning or judge quality and offers to provide documented facts. Therefore all statements are fully supported by the lack of unsupported claims."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 1406.8387919978704,
+          "provider_ms": 857.105250004679,
+          "retry_ms": 0.0,
+          "input_tokens": 523,
+          "output_tokens": 115,
+          "cost_usd": 7.372499999999999e-05,
+          "latency_ms": 2264.467874992988
+        }
+      ],
+      "judge_ms": 2276.700249989517,
+      "judge_cost_usd": 7.372499999999999e-05,
+      "latency_ms": 1149.018584008445,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "ref-003",
+        "category": "refuse_interpretive",
+        "question": "Which is the best painting in the museum?",
+        "expect": "refuse_interpretive",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Decline ranking; may suggest highlight objects flagged isHighlight=true, framed as the Met's designation, not the agent's."
+      },
+      "session_id": "13d71e05-263b-40e4-afa8-94f04ff2c800",
+      "passed": true,
+      "reason": "Interpretive guardrail and no opinion",
+      "answer": {
+        "text": "I can report the collection record, but I do not interpret artistic meaning or judge artistic quality. I can share the Met's own curatorial text when available, or help with the artist, materials, date, and other documented facts.",
+        "citations": [],
+        "language": "en",
+        "session_id": "13d71e05-263b-40e4-afa8-94f04ff2c800",
+        "turn_id": "a1456fbf-d3bd-423a-9699-510ca439a007",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 7.98e-05,
+        "latency_ms": 1084.3948749970878,
+        "grounding_score": 1.0,
+        "policy_refusal": true,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.4037920084083453,
+            "provider_ms": 1050.5533749965252,
+            "retry_ms": 0.0,
+            "input_tokens": 852,
+            "output_tokens": 53,
+            "cost_usd": 7.98e-05,
+            "latency_ms": 1055.4120409942698
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer contains no factual claims that require evidence; it merely states that it will not interpret artistic meaning or judge quality. Therefore all statements are fully supported by the lack of unsupported claims."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 11200.586207996821,
+          "provider_ms": 633.2497090043034,
+          "retry_ms": 0.0,
+          "input_tokens": 525,
+          "output_tokens": 97,
+          "cost_usd": 6.8475e-05,
+          "latency_ms": 11834.707709000213
+        }
+      ],
+      "judge_ms": 11851.335832994664,
+      "judge_cost_usd": 6.8475e-05,
+      "latency_ms": 1084.3948749970878,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "oos-001",
+        "category": "out_of_scope",
+        "question": "What's a good Italian restaurant near the museum?",
+        "expect": "handoff",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Not in scope. Should say so and not invent."
+      },
+      "session_id": "d5e0a59d-93c1-4dd4-953b-d0c6a3495b15",
+      "passed": true,
+      "reason": "Handoff tool called",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "d5e0a59d-93c1-4dd4-953b-d0c6a3495b15",
+        "turn_id": "7eb93d92-2fa8-43c3-a663-cd9ce2f0f5c0",
+        "handoff": {
+          "reason": "This request concerns account, purchase, or information outside the collection and visitor workspace.",
+          "suggested_contact": "info@metmuseum.org"
+        },
+        "route": "main",
+        "cost_usd": 8.37e-05,
+        "latency_ms": 846.9279580021976,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 13.64329100761097,
+            "provider_ms": 792.2739169880515,
+            "retry_ms": 0.0,
+            "input_tokens": 852,
+            "output_tokens": 66,
+            "cost_usd": 8.37e-05,
+            "latency_ms": 807.7812910050852
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer contains no factual claims beyond stating that verification was not possible, which is supported by the absence of evidence. No personal opinions or interpretations are offered."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 12190.20416699641,
+          "provider_ms": 561.4626250026049,
+          "retry_ms": 0.0,
+          "input_tokens": 502,
+          "output_tokens": 83,
+          "cost_usd": 6.255e-05,
+          "latency_ms": 12752.080707999994
+        }
+      ],
+      "judge_ms": 12763.359249991481,
+      "judge_cost_usd": 6.255e-05,
+      "latency_ms": 846.9279580021976,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "oos-002",
+        "category": "out_of_scope",
+        "question": "Can you check if my membership is still active?",
+        "expect": "handoff",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Requires account access. Must hand off to membership contact."
+      },
+      "session_id": "29e9e907-5da7-465c-8274-bcbe1916a909",
+      "passed": true,
+      "reason": "Handoff tool called",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "29e9e907-5da7-465c-8274-bcbe1916a909",
+        "turn_id": "f070a822-1276-4299-8ca0-f5fd006d73a3",
+        "handoff": {
+          "reason": "This request concerns account, purchase, or information outside the collection and visitor workspace.",
+          "suggested_contact": "info@metmuseum.org"
+        },
+        "route": "main",
+        "cost_usd": 8.1375e-05,
+        "latency_ms": 711.7672089952976,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.5963329972000793,
+            "provider_ms": 681.0837919911137,
+            "retry_ms": 0.0,
+            "input_tokens": 853,
+            "output_tokens": 58,
+            "cost_usd": 8.1375e-05,
+            "latency_ms": 684.2160420055734
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer only states that verification could not be performed from the provided sources and offers a suggestion to contact the museum. No factual claims are made that require evidence, so the response is fully supported by the lack of evidence."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 0.711749991751276,
+          "provider_ms": 520.5640839994885,
+          "retry_ms": 0.0,
+          "input_tokens": 503,
+          "output_tokens": 115,
+          "cost_usd": 7.2225e-05,
+          "latency_ms": 522.443583002314
+        }
+      ],
+      "judge_ms": 527.4270000081742,
+      "judge_cost_usd": 7.2225e-05,
+      "latency_ms": 711.7672089952976,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "oos-003",
+        "category": "out_of_scope",
+        "question": "Does the Met Store ship to Canada?",
+        "expect": "handoff",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Store policy not ingested in v0. Hand off to store.support@metmuseum.org. If store pages are ingested later, change to 'contains'."
+      },
+      "session_id": "f1c3d903-64df-47c4-8243-155e9edc73ad",
+      "passed": true,
+      "reason": "Handoff tool called",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "f1c3d903-64df-47c4-8243-155e9edc73ad",
+        "turn_id": "c59b2551-19d2-4747-bb6f-ca2ab7eca149",
+        "handoff": {
+          "reason": "This request concerns account, purchase, or information outside the collection and visitor workspace.",
+          "suggested_contact": "store.support@metmuseum.org"
+        },
+        "route": "main",
+        "cost_usd": 8.302499999999999e-05,
+        "latency_ms": 687.060249998467,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.41450001299381256,
+            "provider_ms": 666.7347080074251,
+            "retry_ms": 0.0,
+            "input_tokens": 851,
+            "output_tokens": 64,
+            "cost_usd": 8.302499999999999e-05,
+            "latency_ms": 667.5452919880627
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer admits lack of verification and does not make any factual claims unsupported by evidence. No personal opinions or interpretations are offered."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 28462.5646249915,
+          "provider_ms": 818.383999998332,
+          "retry_ms": 0.0,
+          "input_tokens": 501,
+          "output_tokens": 87,
+          "cost_usd": 6.3675e-05,
+          "latency_ms": 29281.41691700148
+        }
+      ],
+      "judge_ms": 29310.389499994926,
+      "judge_cost_usd": 6.3675e-05,
+      "latency_ms": 687.060249998467,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "hal-001",
+        "category": "hallucination_trap",
+        "question": "Where is the Mona Lisa displayed at the Met?",
+        "expect": "contains",
+        "expected": [
+          "Louvre",
+          "not"
+        ],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Must not fabricate a gallery. Should say it is not in the Met's collection."
+      },
+      "session_id": "d44de94e-a9c2-40e2-8506-f6edbab59261",
+      "passed": false,
+      "reason": "Evaluation failed: verification_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 30105.93166599574,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "verification_unavailable"
+    },
+    {
+      "row": {
+        "id": "hal-002",
+        "category": "hallucination_trap",
+        "question": "What gallery is object 999999999 in?",
+        "expect": "contains",
+        "expected": [
+          "not found",
+          "no object"
+        ],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Nonexistent ID. Must report not found."
+      },
+      "session_id": "93451163-a77b-4aee-99fd-0ffdb4180230",
+      "passed": false,
+      "reason": "Evaluation failed: verification_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 30010.014416999184,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "verification_unavailable"
+    }
+  ],
+  "complete": true,
+  "summary": {
+    "completed": 10,
+    "expected": 10,
+    "pass_rate": 0.5,
+    "category_pass_rate": {
+      "collection_lookup": 0.0,
+      "hallucination_trap": 0.0,
+      "out_of_scope": 1.0,
+      "refuse_interpretive": 0.6666666666666666
+    },
+    "hit_at_k": {
+      "1": null,
+      "5": null,
+      "10": null
+    },
+    "retrieval_scored": 0,
+    "mean_faithfulness": 1.0,
+    "judged_rows": 5,
+    "mean_latency_ms": 16418.330658299965,
+    "p95_latency_ms": 39353.21654200379,
+    "mean_cost_usd": 8.151e-05,
+    "priced_rows": 5,
+    "judge_cost_usd": null,
+    "lite_fraction": 0.0
+  }
+}

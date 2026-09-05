@@ -1,0 +1,1999 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-04T163159-1e61742f-full",
+  "git_sha": "1e61742f5425eb8bb5e3193025f31300ed32f2dc",
+  "started_at": "2026-09-04T16:31:59.617674+00:00",
+  "suite": "full",
+  "golden_sha256": "940d352ebfe437e08ff8261235c2ab20415a477774ec30562877cb97e05c28dc",
+  "prompt_sha256": {
+    "system_v2": "e3cbe98c6e83925215fa6b2c40030e42f64217a53d7edabe2ad8d12cd0e4f5ef",
+    "tools_v1": "ba9426453c641cecd0038fcc52ffdae625643a10702b0db1400e8e68f7678ecf",
+    "intent_v2": "61c4cac892da172c59d743ad09d833e64992205dfcb39e76e80154d740fd2801",
+    "grounding_v1": "4a9079e5abbc29f335f511cd6ef055f89337e850beb5587df208f3fa979c75ff",
+    "evaluation_v1": "c9c5d7a3e7d48679d9470978df4841f8511d4c87af7e07377f6ceb69f410c5d4",
+    "citations_v1": "1c40c2d17cacea562e00f4852d02aaab4167b8c8a6be7294b65761aa77f63c99"
+  },
+  "models": {
+    "lite": "groq/openai/gpt-oss-20b",
+    "main": "groq/openai/gpt-oss-120b",
+    "fallback": "gemini/gemini-3.7-flash"
+  },
+  "expected_ids": [
+    "col-001",
+    "col-002",
+    "col-003",
+    "col-004",
+    "col-005",
+    "col-006",
+    "col-007",
+    "col-008",
+    "col-009",
+    "col-010",
+    "vis-001",
+    "vis-002",
+    "vis-003",
+    "vis-004",
+    "vis-005",
+    "acc-001",
+    "acc-002",
+    "acc-003",
+    "multi-001",
+    "multi-002",
+    "multi-003",
+    "ref-001",
+    "ref-002",
+    "ref-003",
+    "oos-001",
+    "oos-002",
+    "oos-003",
+    "hal-001",
+    "hal-002",
+    "hal-003",
+    "ml-001",
+    "ml-002"
+  ],
+  "retrieval": {
+    "embedding_provider": "local",
+    "embedding_model": "intfloat/multilingual-e5-large",
+    "dimensions": "1024",
+    "reranker_model": "Xenova/ms-marco-MiniLM-L-2-v2",
+    "reranker_revision": "b84c4fa7efd7b4801931e75773c940f002a494f5",
+    "collection": "met_objects",
+    "visitor_collection": "met_visitor_info"
+  },
+  "execution_notes": [],
+  "results": [
+    {
+      "row": {
+        "id": "col-001",
+        "category": "collection_lookup",
+        "question": "What is the accession number of Washington Crossing the Delaware?",
+        "expect": "contains",
+        "expected": [
+          "97.34"
+        ],
+        "expected_object_ids": [
+          11417
+        ],
+        "verify": false,
+        "notes": "Leutze, 1851. Gallery 760."
+      },
+      "session_id": "2922236e-6b76-4082-9f31-4484ffbe3db2",
+      "passed": true,
+      "reason": "All strings found",
+      "answer": {
+        "text": "The accession number for Washington Crossing the Delaware is 97.34.",
+        "citations": [
+          {
+            "object_id": 11417,
+            "source_url": null,
+            "quote": "Object ID: 11417\nTitle: Washington Crossing the Delaware\nArtist: Emanuel Leutze\nAccession number: 97.34\nCulture: American\nDate: 1851\nMedium: Oil on canvas\nDepartment: The American Wing\nCredit line: Gift of John Stewart Kennedy, 1897\nGallery number (at ingestion): 760\nTags: Horses|Flags|Soldiers|American Revolution|George Washington|Men|Boats"
+          }
+        ],
+        "language": "en",
+        "session_id": "2922236e-6b76-4082-9f31-4484ffbe3db2",
+        "turn_id": "9e8f0122-8d12-4a06-b738-db05f22f9910",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.00058455,
+        "latency_ms": 61234.17370799871,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.8187079986091703,
+            "provider_ms": 432.3034999979427,
+            "retry_ms": 0.0,
+            "input_tokens": 854,
+            "output_tokens": 78,
+            "cost_usd": 8.744999999999998e-05,
+            "latency_ms": 444.5740409864811
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.6053749966667965,
+            "provider_ms": 199.88245800777804,
+            "retry_ms": 0.0,
+            "input_tokens": 1046,
+            "output_tokens": 41,
+            "cost_usd": 9.075e-05,
+            "latency_ms": 200.526082990109
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 11.24175000586547,
+            "provider_ms": 250.19500000053085,
+            "retry_ms": 0.0,
+            "input_tokens": 1713,
+            "output_tokens": 54,
+            "cost_usd": 0.00014467499999999998,
+            "latency_ms": 261.46929198876023
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.1458329972811043,
+            "provider_ms": 905.553874996258,
+            "retry_ms": 0.0,
+            "input_tokens": 1467,
+            "output_tokens": 58,
+            "cost_usd": 0.000127425,
+            "latency_ms": 907.257416009088
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 44504.72154200543,
+            "provider_ms": 1123.0469169968273,
+            "retry_ms": 0.0,
+            "input_tokens": 1398,
+            "output_tokens": 98,
+            "cost_usd": 0.00013425,
+            "latency_ms": 45630.53820798814
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the accession number for Washington Crossing the Delaware is 97.34, which is directly supported by the evidence from the Met Museum collection record for object 11417, which lists Accession number: 97.34. No other claims are made, and the answer contains no personal opinion or aesthetic judgment."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 81.10195900371764,
+          "provider_ms": 718.7462080037221,
+          "retry_ms": 0.0,
+          "input_tokens": 1089,
+          "output_tokens": 139,
+          "cost_usd": 0.000123375,
+          "latency_ms": 801.0452909948071
+        }
+      ],
+      "judge_ms": 831.3562919938704,
+      "judge_cost_usd": 0.000123375,
+      "latency_ms": 61234.17370799871,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-002",
+        "category": "collection_lookup",
+        "question": "Who painted Wheat Field with Cypresses and what year?",
+        "expect": "contains",
+        "expected": [
+          "Vincent van Gogh",
+          "1889"
+        ],
+        "expected_object_ids": [
+          436535
+        ],
+        "verify": false,
+        "notes": ""
+      },
+      "session_id": "a652c4a2-45a3-4707-bab2-579bc887ff28",
+      "passed": true,
+      "reason": "All strings found",
+      "answer": {
+        "text": "Wheat Field with Cypresses was painted by Vincent van Gogh in June 1889.",
+        "citations": [
+          {
+            "object_id": 436535,
+            "source_url": null,
+            "quote": "Object ID: 436535\nTitle: Wheat Field with Cypresses\nArtist: Vincent van Gogh\nAccession number: 1993.132\nDate: June 1889\nMedium: Oil on canvas\nClassification: Paintings\nDepartment: European Paintings\nCredit line: Purchase, The Annenberg Foundation Gift, 1993\nGallery number (at ingestion): 199\nTags: Landscapes|Cypresses|Summer"
+          }
+        ],
+        "language": "en",
+        "session_id": "a652c4a2-45a3-4707-bab2-579bc887ff28",
+        "turn_id": "267e0cb0-5425-42e2-beb2-cf83493b5711",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.0006231,
+        "latency_ms": 61239.06591699051,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 25.955459001124837,
+            "provider_ms": 395.9935840102844,
+            "retry_ms": 0.0,
+            "input_tokens": 855,
+            "output_tokens": 93,
+            "cost_usd": 9.2025e-05,
+            "latency_ms": 434.5802079915302
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 10879.515334003372,
+            "provider_ms": 237.42224999296013,
+            "retry_ms": 0.0,
+            "input_tokens": 1052,
+            "output_tokens": 39,
+            "cost_usd": 9.059999999999999e-05,
+            "latency_ms": 11117.050875007408
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 22.56012499856297,
+            "provider_ms": 225.83158299676143,
+            "retry_ms": 0.0,
+            "input_tokens": 1787,
+            "output_tokens": 70,
+            "cost_usd": 0.00015502500000000001,
+            "latency_ms": 248.46750000142492
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 34988.11645898968,
+            "provider_ms": 1231.986708007753,
+            "retry_ms": 0.0,
+            "input_tokens": 1533,
+            "output_tokens": 71,
+            "cost_usd": 0.00013627500000000002,
+            "latency_ms": 36221.35362500558
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1685.9350419981638,
+            "provider_ms": 837.628292007139,
+            "retry_ms": 0.0,
+            "input_tokens": 1469,
+            "output_tokens": 130,
+            "cost_usd": 0.000149175,
+            "latency_ms": 2525.0627499917755
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer correctly states that Vincent van Gogh painted Wheat Field with Cypresses in June 1889, which is directly supported by the evidence from the Metropolitan Museum of Art collection entry (object 436535). No unsupported claims or opinions are present."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 10304.219749988988,
+          "provider_ms": 824.1861249989597,
+          "retry_ms": 0.0,
+          "input_tokens": 1162,
+          "output_tokens": 155,
+          "cost_usd": 0.00013364999999999997,
+          "latency_ms": 11128.873957990436
+        }
+      ],
+      "judge_ms": 11144.611208001152,
+      "judge_cost_usd": 0.00013364999999999997,
+      "latency_ms": 61239.06591699051,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-003",
+        "category": "collection_lookup",
+        "question": "Which gallery is the Temple of Dendur in?",
+        "expect": "contains",
+        "expected": [
+          "131"
+        ],
+        "expected_object_ids": [
+          547802
+        ],
+        "verify": true,
+        "notes": "Gallery 131 (Sackler Wing). Verify object ID."
+      },
+      "session_id": "700fcdf6-2fb6-4a30-98f3-5832d558e90a",
+      "passed": true,
+      "reason": "All strings found",
+      "answer": {
+        "text": "The Temple of Dendur is displayed in Gallery 131.",
+        "citations": [
+          {
+            "object_id": 547802,
+            "source_url": null,
+            "quote": "Object ID: 547802\nTitle: The Temple of Dendur\nAccession number: 68.154\nPeriod: Roman Period\nDate: completed by 10 B.C.\nMedium: Aeolian sandstone\nDepartment: Egyptian Art\nCredit line: Given to the United States by Egypt in 1965 and awarded to The Metropolitan Museum of Art in 1967\nGallery number (at ingestion): 131"
+          },
+          {
+            "object_id": 547802,
+            "source_url": null,
+            "quote": "Object ID: 547802\ntitle: The Temple of Dendur\nmedium: Aeolian sandstone\nobject_date: completed by 10 CE\ndepartment: Egyptian Art\ngallery_number: 131\nCurrent display status: on view"
+          }
+        ],
+        "language": "en",
+        "session_id": "700fcdf6-2fb6-4a30-98f3-5832d558e90a",
+        "turn_id": "1e101d35-72e2-48c7-b3f9-2140c0f4820d",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 0.0013319249999999999,
+        "latency_ms": 56604.38945899659,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.8897919944720343,
+            "provider_ms": 169.25291599181946,
+            "retry_ms": 0.0,
+            "input_tokens": 853,
+            "output_tokens": 89,
+            "cost_usd": 9.0675e-05,
+            "latency_ms": 171.57016599958297
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 6.608167008380406,
+            "provider_ms": 189.3664590024855,
+            "retry_ms": 0.0,
+            "input_tokens": 1045,
+            "output_tokens": 47,
+            "cost_usd": 0.00018495,
+            "latency_ms": 196.02758300607093
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 4.9121670017484576,
+            "provider_ms": 220.64616699935868,
+            "retry_ms": 0.0,
+            "input_tokens": 1812,
+            "output_tokens": 39,
+            "cost_usd": 0.00029519999999999997,
+            "latency_ms": 225.60583299491554
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3.3546250051585957,
+            "provider_ms": 194.6539170021424,
+            "retry_ms": 0.0,
+            "input_tokens": 1949,
+            "output_tokens": 18,
+            "cost_usd": 0.00030314999999999997,
+            "latency_ms": 198.0360000015935
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.8376249897992238,
+            "provider_ms": 221.05641699454281,
+            "retry_ms": 0.0,
+            "input_tokens": 1664,
+            "output_tokens": 96,
+            "cost_usd": 0.0003072,
+            "latency_ms": 248.26437499723397
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 41435.55687498883,
+            "provider_ms": 6944.455999997444,
+            "retry_ms": 0.0,
+            "input_tokens": 1658,
+            "output_tokens": 88,
+            "cost_usd": 0.00015075,
+            "latency_ms": 48446.410916993045
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the Temple of Dendur is displayed in Gallery 131, which is directly supported by the evidence from object 547802 that lists gallery_number: 131. No other claims are made, and the answer contains no personal opinion or artistic judgment."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 821.7118339962326,
+          "provider_ms": 2206.8127910024486,
+          "retry_ms": 0.0,
+          "input_tokens": 1155,
+          "output_tokens": 137,
+          "cost_usd": 0.000127725,
+          "latency_ms": 3034.5721670018975
+        }
+      ],
+      "judge_ms": 3269.6872079977766,
+      "judge_cost_usd": 0.000127725,
+      "latency_ms": 56604.38945899659,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-004",
+        "category": "collection_lookup",
+        "question": "What is the medium of the Bronzino portrait of a young man?",
+        "expect": "contains",
+        "expected": [
+          "Oil on wood"
+        ],
+        "expected_object_ids": [
+          435802
+        ],
+        "verify": true,
+        "notes": "Portrait of a Young Man, ca. 1530s."
+      },
+      "session_id": "80064587-418f-41b7-8815-6492107d4728",
+      "passed": false,
+      "reason": "Missing expected strings: Oil on wood",
+      "answer": {
+        "text": "The Bronzino portrait of a young man is an oil painting on wood.",
+        "citations": [
+          {
+            "object_id": 435802,
+            "source_url": null,
+            "quote": "Object ID: 435802\nTitle: Portrait of a Young Man\nArtist: Bronzino (Agnolo di Cosimo di Mariano)\nAccession number: 29.100.16\nDate: 1530s\nMedium: Oil on wood\nClassification: Paintings\nDepartment: European Paintings\nCredit line: H. O. Havemeyer Collection, Bequest of Mrs. H. O. Havemeyer, 1929\nTags: Men|Portraits"
+          }
+        ],
+        "language": "en",
+        "session_id": "80064587-418f-41b7-8815-6492107d4728",
+        "turn_id": "adddfedb-397c-46dd-bba6-4592e47e59a6",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.0006159749999999999,
+        "latency_ms": 60758.875917003024,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 7.6404159917728975,
+            "provider_ms": 565.89429199812,
+            "retry_ms": 0.0,
+            "input_tokens": 858,
+            "output_tokens": 89,
+            "cost_usd": 9.104999999999999e-05,
+            "latency_ms": 574.7039170091739
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3.4978339972440153,
+            "provider_ms": 589.6547500015004,
+            "retry_ms": 0.0,
+            "input_tokens": 1053,
+            "output_tokens": 41,
+            "cost_usd": 9.1275e-05,
+            "latency_ms": 593.2901250052964
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 19.744290999369696,
+            "provider_ms": 709.1125830047531,
+            "retry_ms": 0.0,
+            "input_tokens": 1837,
+            "output_tokens": 65,
+            "cost_usd": 0.00015727500000000001,
+            "latency_ms": 728.9279170072405
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 35020.34449999337,
+            "provider_ms": 669.4052079983521,
+            "retry_ms": 0.0,
+            "input_tokens": 1583,
+            "output_tokens": 56,
+            "cost_usd": 0.000135525,
+            "latency_ms": 35692.21195799764
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1979.3901670054765,
+            "provider_ms": 531.6432079998776,
+            "retry_ms": 0.0,
+            "input_tokens": 1526,
+            "output_tokens": 88,
+            "cost_usd": 0.00014084999999999998,
+            "latency_ms": 2511.594084004173
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the Bronzino portrait of a young man is an oil painting on wood, which is directly supported by the evidence from object 435802, which lists the medium as Oil on wood. No other claims are made, and the answer contains no personal opinion."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 57.08354100352153,
+          "provider_ms": 712.7082500082906,
+          "retry_ms": 0.0,
+          "input_tokens": 1209,
+          "output_tokens": 136,
+          "cost_usd": 0.00013147499999999998,
+          "latency_ms": 770.1047500013374
+        }
+      ],
+      "judge_ms": 779.5815830031643,
+      "judge_cost_usd": 0.00013147499999999998,
+      "latency_ms": 60758.875917003024,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-005",
+        "category": "collection_lookup",
+        "question": "How many Vermeer paintings does the Met have, and what are their titles?",
+        "expect": "contains",
+        "expected": [
+          "five",
+          "Young Woman with a Water Pitcher",
+          "Allegory of the Catholic Faith"
+        ],
+        "expected_object_ids": [
+          437881,
+          437877
+        ],
+        "verify": true,
+        "notes": "Met holds 5 Vermeers. Check exact titles via API."
+      },
+      "session_id": "d0153601-50f5-4cad-90dc-f336dc98f008",
+      "passed": false,
+      "reason": "Missing expected strings: five",
+      "answer": {
+        "text": "The Met’s public‑domain collection includes three paintings by Johannes Vermeer:\n1. Allegory of the Catholic Faith\n2. Young Woman with a Water Pitcher\n3. Study of a Young Woman",
+        "citations": [
+          {
+            "object_id": 437877,
+            "source_url": null,
+            "quote": "Object ID: 437877\nTitle: Allegory of the Catholic Faith\nArtist: Johannes Vermeer\nAccession number: 32.100.18\nDate: ca. 1670–72\nMedium: Oil on canvas\nClassification: Paintings\nDepartment: European Paintings\nCredit line: The Friedsam Collection, Bequest of Michael Friedsam, 1931\nGallery number (at ingestion): 965\nTags: Books|Apples|Women|Christ|Interiors|Snakes|Globes"
+          },
+          {
+            "object_id": 437881,
+            "source_url": null,
+            "quote": "Object ID: 437881\nTitle: Young Woman with a Water Pitcher\nArtist: Johannes Vermeer\nAccession number: 89.15.21\nDate: ca. 1662\nMedium: Oil on canvas\nClassification: Paintings\nDepartment: European Paintings\nCredit line: Marquand Collection, Gift of Henry G. Marquand, 1889\nGallery number (at ingestion): 964\nTags: Interiors|Women|Maps|Pitchers"
+          },
+          {
+            "object_id": 437879,
+            "source_url": null,
+            "quote": "Object ID: 437879\nTitle: Study of a Young Woman\nArtist: Johannes Vermeer\nAccession number: 1979.396.1\nDate: ca. 1665–67\nMedium: Oil on canvas\nClassification: Paintings\nDepartment: European Paintings\nCredit line: Gift of Mr. and Mrs. Charles Wrightsman, in memory of Theodore Rousseau Jr., 1979\nGallery number (at ingestion): 964\nTags: Portraits|Women"
+          }
+        ],
+        "language": "en",
+        "session_id": "d0153601-50f5-4cad-90dc-f336dc98f008",
+        "turn_id": "b37486e8-5345-483f-83d0-9d82a28d7770",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.000786975,
+        "latency_ms": 116735.65600000438,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 20227.54866699688,
+            "provider_ms": 773.6358330002986,
+            "retry_ms": 0.0,
+            "input_tokens": 859,
+            "output_tokens": 97,
+            "cost_usd": 9.3525e-05,
+            "latency_ms": 21001.77841700497
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3.5410419950494543,
+            "provider_ms": 722.9265420028241,
+            "retry_ms": 0.0,
+            "input_tokens": 1061,
+            "output_tokens": 37,
+            "cost_usd": 9.0675e-05,
+            "latency_ms": 726.5102920064237
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 19498.686874998384,
+            "provider_ms": 1086.0919169936096,
+            "retry_ms": 0.0,
+            "input_tokens": 2227,
+            "output_tokens": 122,
+            "cost_usd": 0.000203625,
+            "latency_ms": 20587.838332998217
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2031.8316670018248,
+            "provider_ms": 774.9432920099935,
+            "retry_ms": 0.0,
+            "input_tokens": 1904,
+            "output_tokens": 136,
+            "cost_usd": 0.00018359999999999996,
+            "latency_ms": 2824.619458988309
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 55955.630166994524,
+            "provider_ms": 703.8716250099242,
+            "retry_ms": 0.0,
+            "input_tokens": 2190,
+            "output_tokens": 171,
+            "cost_usd": 0.00021555,
+            "latency_ms": 56660.43741699832
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "All three Vermeer paintings claimed are directly supported by the provided evidence, and no unsupported or interpretive statements are made."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 7.781499996781349,
+          "provider_ms": 932.2787499986589,
+          "retry_ms": 0.0,
+          "input_tokens": 1626,
+          "output_tokens": 96,
+          "cost_usd": 0.00015075,
+          "latency_ms": 940.7251250086119
+        }
+      ],
+      "judge_ms": 951.0504160134587,
+      "judge_cost_usd": 0.00015075,
+      "latency_ms": 116735.65600000438,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-006",
+        "category": "collection_lookup",
+        "question": "Show me armor from 16th century Germany.",
+        "expect": "retrieval",
+        "expected": [],
+        "expected_object_ids": [
+          27790,
+          21923,
+          23016
+        ],
+        "verify": true,
+        "notes": "Relevance seeds from the prepared Met Open Access CSV, selected before evaluation without using retrieval ranks: Portions of a Costume Armor (ca. 1525, German Augsburg), Half-Armor (Composed) (1562, German), Foot-Combat Armor of Prince-Elector Christian I (1591, German Augsburg). Non-exhaustive labels; live API verification returned 403 on 2026-09-04."
+      },
+      "session_id": "3ff4b621-fb0b-4ee8-b53d-c6c1f582b2fd",
+      "passed": false,
+      "reason": "No labeled object in top five",
+      "answer": {
+        "text": "The Met’s collection includes several pieces of 16th‑century German armor:\n• Horse armor (Object ID 34874) – steel and leather, accession 27.183.87a–z.\n• Personal armor for a man (Object ID 22263) – steel, brass, leather, accession 14.25.702.\n• An armet (Object ID 34262) – steel, leather, copper alloy, accession 29.158.12.\n• Another set of personal armor (Object ID 21994) – steel and leather, accession 04.3.265a–x.\n• A crossbow from Central Europe, possibly southern Germany, dated late 15th or early 16th century (Object ID 33738).",
+        "citations": [
+          {
+            "object_id": 34874,
+            "source_url": null,
+            "quote": "Object ID: 34874\nTitle: Horse Armor\nAccession number: 27.183.87a–z\nCulture: German\nDate: 16th century\nMedium: Steel, leather\nClassification: Armor for Horse\nDepartment: Arms and Armor\nCredit line: Gift of Prince Albrecht Radziwill, 1927"
+          },
+          {
+            "object_id": 22263,
+            "source_url": null,
+            "quote": "Object ID: 22263\nTitle: Armor\nArtist: Hans Michel\nAccession number: 14.25.702\nCulture: German\nDate: 16th century and later\nMedium: Steel, brass, leather\nClassification: Armor for Man\nDepartment: Arms and Armor\nCredit line: Gift of William H. Riggs, 1913"
+          },
+          {
+            "object_id": 34262,
+            "source_url": null,
+            "quote": "Object ID: 34262\nTitle: Armet\nAccession number: 29.158.12\nCulture: German\nDate: 16th century\nMedium: Steel, leather, copper alloy\nClassification: Helmets\nDepartment: Arms and Armor\nCredit line: Bashford Dean Memorial Collection, Funds from various donors, 1929"
+          },
+          {
+            "object_id": 21994,
+            "source_url": null,
+            "quote": "Object ID: 21994\nTitle: Armor\nAccession number: 04.3.265a–x\nCulture: German\nDate: ca. 1560 and later, etching possibly 19th century\nMedium: Steel, leather\nClassification: Armor for Man\nDepartment: Arms and Armor\nCredit line: Rogers Fund, 1904"
+          },
+          {
+            "object_id": 33738,
+            "source_url": null,
+            "quote": "Object ID: 33738\nTitle: Crossbow\nAccession number: 14.25.1572a\nCulture: Central European, possibly southern Germany\nDate: late 15th or early 16th century, and later; date 1584 engraved probably during the 19th century\nMedium: Steel, wood, staghorn, hemp\nClassification: Archery Equipment-Crossbows\nDepartment: Arms and Armor\nCredit line: Gift of William H. Riggs, 1913"
+          }
+        ],
+        "language": "en",
+        "session_id": "3ff4b621-fb0b-4ee8-b53d-c6c1f582b2fd",
+        "turn_id": "a9dd52c9-64c2-49b3-9e2a-c28d58fc51fe",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.0008395499999999999,
+        "latency_ms": 62464.468875012244,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.4996250063413754,
+            "provider_ms": 794.7857920080423,
+            "retry_ms": 0.0,
+            "input_tokens": 853,
+            "output_tokens": 79,
+            "cost_usd": 8.7675e-05,
+            "latency_ms": 795.6991249957355
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 737.7191670093453,
+            "provider_ms": 606.1857500026235,
+            "retry_ms": 0.0,
+            "input_tokens": 1046,
+            "output_tokens": 37,
+            "cost_usd": 8.955e-05,
+            "latency_ms": 1343.9442079979926
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 50657.38445799798,
+            "provider_ms": 1718.5677090019453,
+            "retry_ms": 0.0,
+            "input_tokens": 1745,
+            "output_tokens": 363,
+            "cost_usd": 0.000239775,
+            "latency_ms": 52376.10929200309
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 31.03733299940359,
+            "provider_ms": 905.2127079921775,
+            "retry_ms": 0.0,
+            "input_tokens": 1496,
+            "output_tokens": 230,
+            "cost_usd": 0.00018119999999999999,
+            "latency_ms": 937.2037910070503
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 420.76016700593755,
+            "provider_ms": 896.7257919866825,
+            "retry_ms": 0.0,
+            "input_tokens": 1954,
+            "output_tokens": 316,
+            "cost_usd": 0.00024134999999999996,
+            "latency_ms": 1317.9842500103405
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "All factual claims in the answer are directly supported by the provided evidence. No unsupported details or personal opinions are present."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 55856.94479200174,
+          "provider_ms": 666.8422079965239,
+          "retry_ms": 0.0,
+          "input_tokens": 1269,
+          "output_tokens": 73,
+          "cost_usd": 0.00011707499999999999,
+          "latency_ms": 56524.22025000851
+        }
+      ],
+      "judge_ms": 56538.199709000764,
+      "judge_cost_usd": 0.00011707499999999999,
+      "latency_ms": 62464.468875012244,
+      "retrieval_ids": [
+        34014,
+        21928,
+        32351,
+        32353,
+        21994,
+        34800,
+        33738,
+        32846,
+        22001,
+        23209
+      ],
+      "retrieval_ms": 7832.059541993658,
+      "hits": {
+        "1": false,
+        "5": false,
+        "10": false
+      },
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-007",
+        "category": "collection_lookup",
+        "question": "Find paintings of dogs.",
+        "expect": "retrieval",
+        "expected": [],
+        "expected_object_ids": [
+          10811,
+          436323,
+          10246
+        ],
+        "verify": true,
+        "notes": "Three paintings with Dogs tags and oil-on-canvas medium in the prepared Met Open Access CSV, selected before evaluation without retrieval ranks: The Artist's Wife and His Setter Dog, Marie Emilie Coignet de Courson with a Dog, Lady with a Dog. Non-exhaustive labels; live API verification was blocked on 2026-09-04."
+      },
+      "session_id": "46677412-0b8d-4321-9259-c9bb0094d3ec",
+      "passed": true,
+      "reason": "Hit@5",
+      "answer": {
+        "text": "The Met’s collection includes several paintings that feature dogs:\n• *Marie Emilie Coignet de Courson (1716–1806) with a Dog* by Jean Honoré Fragonard (Oil on canvas, ca. 1769) – currently on view in Gallery 631.\n• *The Artist’s Wife and His Setter Dog* by Thomas Eakins (Oil on canvas, ca. 1884–89) – a portrait that includes a dog.\n• *Boy with Greyhound Dog* by John William Casilier (Graphite, pen, ink, and watercolor on paper, 1979) – a sketch that depicts a boy with a greyhound.\n\nThese works are all part of the museum’s public collection and are listed in the Met’s database.\n",
+        "citations": [
+          {
+            "object_id": 436323,
+            "source_url": null,
+            "quote": "Object ID: 436323\nTitle: Marie Emilie Coignet de Courson (1716–1806) with a Dog\nArtist: Jean Honoré Fragonard\nAccession number: 37.118\nDate: ca. 1769\nMedium: Oil on canvas\nClassification: Paintings\nDepartment: European Paintings\nCredit line: Fletcher Fund, 1937\nTags: Portraits|Women|Dogs"
+          },
+          {
+            "object_id": 10811,
+            "source_url": null,
+            "quote": "Object ID: 10811\nTitle: The Artist's Wife and His Setter Dog\nArtist: Thomas Eakins\nAccession number: 23.139\nCulture: American\nDate: ca. 1884–89\nMedium: Oil on canvas\nDepartment: The American Wing\nCredit line: Fletcher Fund, 1923\nGallery number (at ingestion): 773\nTags: Portraits|Women|Dogs"
+          },
+          {
+            "object_id": 436323,
+            "source_url": null,
+            "quote": "Object ID: 436323\ntitle: Marie Emilie Coignet de Courson (1716–1806) with a Dog\nartist: Jean Honoré Fragonard\nmedium: Oil on canvas\nobject_date: ca. 1769\ndepartment: European Paintings\ngallery_number: 631\nCurrent display status: on view"
+          }
+        ],
+        "language": "en",
+        "session_id": "46677412-0b8d-4321-9259-c9bb0094d3ec",
+        "turn_id": "3cf2f242-8ed3-4eb5-9b97-85ed944ebe78",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.001113225,
+        "latency_ms": 113068.25191600365,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 24.057124988758005,
+            "provider_ms": 715.8385000075214,
+            "retry_ms": 0.0,
+            "input_tokens": 848,
+            "output_tokens": 77,
+            "cost_usd": 8.669999999999999e-05,
+            "latency_ms": 743.32779199176
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.114374987082556,
+            "provider_ms": 572.1451249992242,
+            "retry_ms": 0.0,
+            "input_tokens": 1038,
+            "output_tokens": 35,
+            "cost_usd": 8.834999999999999e-05,
+            "latency_ms": 573.2911249942845
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 6.599790998734534,
+            "provider_ms": 579.5897500065621,
+            "retry_ms": 0.0,
+            "input_tokens": 2202,
+            "output_tokens": 32,
+            "cost_usd": 0.00017475,
+            "latency_ms": 586.2441670033149
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 46811.0952499992,
+            "provider_ms": 860.56762500084,
+            "retry_ms": 0.0,
+            "input_tokens": 2362,
+            "output_tokens": 159,
+            "cost_usd": 0.00022485,
+            "latency_ms": 47671.7787499947
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 11367.572667004424,
+            "provider_ms": 878.5641659924295,
+            "retry_ms": 0.0,
+            "input_tokens": 2010,
+            "output_tokens": 235,
+            "cost_usd": 0.00022125,
+            "latency_ms": 12247.375459002797
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 46869.42362500122,
+            "provider_ms": 1569.0148340072483,
+            "retry_ms": 0.0,
+            "input_tokens": 2359,
+            "output_tokens": 468,
+            "cost_usd": 0.000317325,
+            "latency_ms": 48439.08562499564
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "All factual claims in the answer are directly supported by the provided evidence. The answer lists three works, each of which is present in the evidence with matching titles, artists, media, dates, and gallery numbers. No additional claims or opinions are made."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 10607.919500005664,
+          "provider_ms": 805.4260000062641,
+          "retry_ms": 0.0,
+          "input_tokens": 1719,
+          "output_tokens": 181,
+          "cost_usd": 0.00018322499999999997,
+          "latency_ms": 11413.913999989745
+        }
+      ],
+      "judge_ms": 11429.93904100149,
+      "judge_cost_usd": 0.00018322499999999997,
+      "latency_ms": 113068.25191600365,
+      "retrieval_ids": [
+        436323,
+        14974,
+        14975,
+        16491,
+        10811,
+        10419,
+        14869,
+        16457,
+        16493,
+        10246
+      ],
+      "retrieval_ms": 8313.083875007578,
+      "hits": {
+        "1": true,
+        "5": true,
+        "10": true
+      },
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-008",
+        "category": "collection_lookup",
+        "question": "What is the object ID for the Met's Jackson Pollock Autumn Rhythm?",
+        "expect": "contains",
+        "expected": [
+          "488978"
+        ],
+        "expected_object_ids": [
+          488978
+        ],
+        "verify": true,
+        "notes": "Autumn Rhythm (Number 30), 1950. Non-public-domain object: answer via get_object, not search_collection; intentionally excluded from the public-domain search index."
+      },
+      "session_id": "48c70163-49f7-4a7a-8f04-3c0f4cd4ead2",
+      "passed": false,
+      "reason": "Missing expected strings: 488978; grounding failed",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "48c70163-49f7-4a7a-8f04-3c0f4cd4ead2",
+        "turn_id": "a09a1e89-bd73-46c4-82fb-211faea92e91",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.003131625,
+        "latency_ms": 459867.8432919987,
+        "grounding_score": 0.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 9.596374991815537,
+            "provider_ms": 655.6921669980511,
+            "retry_ms": 0.0,
+            "input_tokens": 858,
+            "output_tokens": 83,
+            "cost_usd": 8.925e-05,
+            "latency_ms": 665.7738329959102
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.3612500042654574,
+            "provider_ms": 373.92054199881386,
+            "retry_ms": 0.0,
+            "input_tokens": 1053,
+            "output_tokens": 46,
+            "cost_usd": 9.277499999999999e-05,
+            "latency_ms": 375.3309579915367
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 28132.152624995797,
+            "provider_ms": 1100.6987079890678,
+            "retry_ms": 0.0,
+            "input_tokens": 1809,
+            "output_tokens": 41,
+            "cost_usd": 0.000147975,
+            "latency_ms": 29234.446457994636
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 8984.637125002337,
+            "provider_ms": 822.2037920058938,
+            "retry_ms": 0.0,
+            "input_tokens": 2566,
+            "output_tokens": 55,
+            "cost_usd": 0.00020894999999999998,
+            "latency_ms": 9807.048749993555
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 45932.27379200107,
+            "provider_ms": 899.8814999940805,
+            "retry_ms": 0.0,
+            "input_tokens": 3321,
+            "output_tokens": 102,
+            "cost_usd": 0.000279675,
+            "latency_ms": 46832.304833995295
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 56360.05087499507,
+            "provider_ms": 1931.156833001296,
+            "retry_ms": 0.0,
+            "input_tokens": 4064,
+            "output_tokens": 104,
+            "cost_usd": 0.000336,
+            "latency_ms": 58291.69983298925
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 55249.7570419946,
+            "provider_ms": 963.624958996661,
+            "retry_ms": 0.0,
+            "input_tokens": 4843,
+            "output_tokens": 69,
+            "cost_usd": 0.00038392499999999997,
+            "latency_ms": 56213.5338329972
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 52620.612541009905,
+            "provider_ms": 1377.9319589957595,
+            "retry_ms": 0.0,
+            "input_tokens": 4668,
+            "output_tokens": 106,
+            "cost_usd": 0.00038189999999999996,
+            "latency_ms": 54001.8973749975
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 58566.77408399992,
+            "provider_ms": 851.3964580051834,
+            "retry_ms": 0.0,
+            "input_tokens": 4878,
+            "output_tokens": 158,
+            "cost_usd": 0.00041324999999999993,
+            "latency_ms": 59418.877249991056
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 59119.22274999961,
+            "provider_ms": 939.207167000859,
+            "retry_ms": 0.0,
+            "input_tokens": 4719,
+            "output_tokens": 98,
+            "cost_usd": 0.000383325,
+            "latency_ms": 60069.43620799575
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 59046.5951669903,
+            "provider_ms": 1160.8989170053974,
+            "retry_ms": 0.0,
+            "input_tokens": 4868,
+            "output_tokens": 165,
+            "cost_usd": 0.00041459999999999994,
+            "latency_ms": 60208.344541999395
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 0.0,
+        "no_opinion": true,
+        "reason": "The answer states that the object ID could not be verified, but the evidence provided contains only entries for various artworks titled “Autumn …” and none for Jackson Pollock’s “Autumn Rhythm.” No claim about the object ID is supported by the supplied evidence, so the factual claim is unsupported."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 58786.52224999678,
+          "provider_ms": 732.1851669985335,
+          "retry_ms": 0.0,
+          "input_tokens": 1761,
+          "output_tokens": 118,
+          "cost_usd": 0.000167475,
+          "latency_ms": 59519.271208991995
+        }
+      ],
+      "judge_ms": 59546.49941698881,
+      "judge_cost_usd": 0.000167475,
+      "latency_ms": 459867.8432919987,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-009",
+        "category": "collection_lookup",
+        "question": "Who made the Studiolo from the Ducal Palace in Gubbio?",
+        "expect": "contains",
+        "expected": [
+          "Giuliano da Maiano"
+        ],
+        "expected_object_ids": [
+          198556
+        ],
+        "verify": true,
+        "notes": "Designed by Francesco di Giorgio Martini, executed by workshop of Giuliano da Maiano. Accept either."
+      },
+      "session_id": "6a784f2a-7842-4bbf-9aa5-6d2afea492a6",
+      "passed": false,
+      "reason": "Missing expected strings: Giuliano da Maiano",
+      "answer": {
+        "text": "The Studiolo from the Ducal Palace in Gubbio was made by Francesco di Giorgio Martini.",
+        "citations": [
+          {
+            "object_id": 198556,
+            "source_url": null,
+            "quote": "Object ID: 198556\ntitle: Studiolo from the Ducal Palace in Gubbio\nartist: Francesco di Giorgio Martini\nmedium: Walnut, beech, rosewood, oak and fruitwoods in walnut base\nobject_date: ca. 1478–82\ndepartment: European Sculpture and Decorative Arts\ngallery_number: 501\nCurrent display status: on view"
+          }
+        ],
+        "language": "en",
+        "session_id": "6a784f2a-7842-4bbf-9aa5-6d2afea492a6",
+        "turn_id": "46e16522-d656-4692-8a25-1f8d62193080",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.00082935,
+        "latency_ms": 70530.69279198826,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 8.265457989182323,
+            "provider_ms": 849.325167000643,
+            "retry_ms": 0.0,
+            "input_tokens": 858,
+            "output_tokens": 110,
+            "cost_usd": 9.735e-05,
+            "latency_ms": 857.9622920078691
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.600124993477948,
+            "provider_ms": 628.0499999993481,
+            "retry_ms": 0.0,
+            "input_tokens": 1057,
+            "output_tokens": 45,
+            "cost_usd": 9.277499999999999e-05,
+            "latency_ms": 630.676125001628
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 7.283416998689063,
+            "provider_ms": 2191.7228329984937,
+            "retry_ms": 0.0,
+            "input_tokens": 1900,
+            "output_tokens": 34,
+            "cost_usd": 0.0001527,
+            "latency_ms": 2199.0551249909913
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 47351.07004200108,
+            "provider_ms": 908.2752499962226,
+            "retry_ms": 0.0,
+            "input_tokens": 2067,
+            "output_tokens": 55,
+            "cost_usd": 0.000171525,
+            "latency_ms": 48259.42308398953
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 725.160332993255,
+            "provider_ms": 722.4752079928294,
+            "retry_ms": 0.0,
+            "input_tokens": 1766,
+            "output_tokens": 72,
+            "cost_usd": 0.00015404999999999998,
+            "latency_ms": 1450.8052080054767
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 7846.300709003117,
+            "provider_ms": 1003.7880829913775,
+            "retry_ms": 0.0,
+            "input_tokens": 1694,
+            "output_tokens": 113,
+            "cost_usd": 0.00016094999999999998,
+            "latency_ms": 8851.1828329938
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the Studiolo from the Ducal Palace in Gubbio was made by Francesco di Giorgio Martini, which is directly supported by the evidence from the Met Museum object record (Object ID 198556) that lists the artist as Francesco di Giorgio Martini. No other claims are made, and the answer contains no personal interpretation or aesthetic judgment."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 48633.00829200307,
+          "provider_ms": 765.581875006319,
+          "retry_ms": 0.0,
+          "input_tokens": 1205,
+          "output_tokens": 162,
+          "cost_usd": 0.000138975,
+          "latency_ms": 49398.93316599773
+        }
+      ],
+      "judge_ms": 49428.87304100441,
+      "judge_cost_usd": 0.000138975,
+      "latency_ms": 70530.69279198826,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-010",
+        "category": "collection_lookup",
+        "question": "What culture is the Met's Ugolino and His Sons from?",
+        "expect": "contains",
+        "expected": [
+          "French",
+          "Carpeaux"
+        ],
+        "expected_object_ids": [
+          204812
+        ],
+        "verify": true,
+        "notes": "Jean-Baptiste Carpeaux, 1865-67."
+      },
+      "session_id": "73c9e4e0-6ddb-437d-911e-806d6c9ddd44",
+      "passed": false,
+      "reason": "Missing expected strings: Carpeaux",
+      "answer": {
+        "text": "The Met’s sculpture *Ugolino and His Sons* is identified as a French work from Paris.",
+        "citations": [
+          {
+            "object_id": 204812,
+            "source_url": null,
+            "quote": "Object ID: 204812\nTitle: Ugolino and His Sons\nArtist: Jean-Baptiste Carpeaux\nAccession number: 67.250\nCulture: French, Paris\nDate: 1865–67\nMedium: Saint-Béat marble\nClassification: Sculpture\nDepartment: European Sculpture and Decorative Arts\nCredit line: Purchase, Josephine Bay Paul and C. Michael Paul Foundation Inc. Gift, Charles Ulrick and Josephine Bay Foundation Inc. Gift, and Fletcher Fund, 1967\nGallery number (at ingestion): 548\nTags: Suffering|Boys|Male Nudes"
+          }
+        ],
+        "language": "en",
+        "session_id": "73c9e4e0-6ddb-437d-911e-806d6c9ddd44",
+        "turn_id": "5b475860-7129-44a2-8ef8-0736c5120a68",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.000641475,
+        "latency_ms": 60792.34358400572,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 4.2255420121364295,
+            "provider_ms": 671.3817499985453,
+            "retry_ms": 0.0,
+            "input_tokens": 856,
+            "output_tokens": 100,
+            "cost_usd": 9.42e-05,
+            "latency_ms": 675.960041990038
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.6179169906536117,
+            "provider_ms": 537.1444579941453,
+            "retry_ms": 0.0,
+            "input_tokens": 1049,
+            "output_tokens": 38,
+            "cost_usd": 9.007500000000001e-05,
+            "latency_ms": 538.8138749985956
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 6.899625004734844,
+            "provider_ms": 906.2873750081053,
+            "retry_ms": 0.0,
+            "input_tokens": 1872,
+            "output_tokens": 65,
+            "cost_usd": 0.0001599,
+            "latency_ms": 913.2170410011895
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 50799.39108301187,
+            "provider_ms": 833.6861669959035,
+            "retry_ms": 0.0,
+            "input_tokens": 1623,
+            "output_tokens": 75,
+            "cost_usd": 0.000144225,
+            "latency_ms": 51633.709166999324
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 5.491957999765873,
+            "provider_ms": 718.6483340046834,
+            "retry_ms": 0.0,
+            "input_tokens": 1597,
+            "output_tokens": 111,
+            "cost_usd": 0.000153075,
+            "latency_ms": 724.7517920040991
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the sculpture is a French work from Paris, which is directly supported by the evidence for object 204812 that lists Culture: French, Paris. No other claims are made, and no opinion is expressed."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 1.2129579990869388,
+          "provider_ms": 853.1309579993831,
+          "retry_ms": 0.0,
+          "input_tokens": 1254,
+          "output_tokens": 131,
+          "cost_usd": 0.00013335,
+          "latency_ms": 854.8062909976579
+        }
+      ],
+      "judge_ms": 861.845124993124,
+      "judge_cost_usd": 0.00013335,
+      "latency_ms": 60792.34358400572,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "vis-001",
+        "category": "visitor_info",
+        "question": "Is the Fifth Avenue building open on Wednesdays?",
+        "expect": "contains",
+        "expected": [
+          "closed"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "The Met Fifth Avenue is closed Wednesdays. Re-verify against current hours page at ingest time."
+      },
+      "session_id": "f3ab165c-8bfc-4bf8-812e-b66394bbdfe9",
+      "passed": true,
+      "reason": "All strings found",
+      "answer": {
+        "text": "The Met Fifth Avenue building is closed on Wednesdays.",
+        "citations": [
+          {
+            "object_id": null,
+            "source_url": "https://www.metmuseum.org/plan-your-visit",
+            "quote": "## Location, Hours and Directions\n\nOver 5,000 years of art from around the world.\n\nThe Met Fifth facade\n\n1000 Fifth Avenue, New York, NY 10028[View on map](https://maps.app.goo.gl/DFMAwzFD8mHbQmsJA)\n\nThe museum is open today 10 am–9 pm\n\n| Day | Hours |\n| --- | --- |\n| Sunday | 10 am–5 pm |\n| Monday | 10 am–5 pm |\n| Tuesday | 10 am–5 pm |\n| Wednesday | Closed |\n| Thursday | 10 am–5 pm |\n| Friday | 10 am–9 pm |\n| Saturday | 10 am–9 pm |\n\nClosed Thanksgiving Day, December 25, January 1, and the first Monday in May."
+          }
+        ],
+        "language": "en",
+        "session_id": "f3ab165c-8bfc-4bf8-812e-b66394bbdfe9",
+        "turn_id": "3728b159-f379-47e5-bfad-912dd87c6e38",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 0.001464075,
+        "latency_ms": 66765.59729099972,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 5806.115082988981,
+            "provider_ms": 303.2577910053078,
+            "retry_ms": 0.0,
+            "input_tokens": 852,
+            "output_tokens": 72,
+            "cost_usd": 8.55e-05,
+            "latency_ms": 6110.001708002528
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3.2219999993685633,
+            "provider_ms": 188.47120799182449,
+            "retry_ms": 0.0,
+            "input_tokens": 1045,
+            "output_tokens": 51,
+            "cost_usd": 0.00018735,
+            "latency_ms": 191.74424999800976
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 7.694667001487687,
+            "provider_ms": 206.81137499923352,
+            "retry_ms": 0.0,
+            "input_tokens": 2963,
+            "output_tokens": 74,
+            "cost_usd": 0.00048885,
+            "latency_ms": 214.54658301081508
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 55745.43641600758,
+            "provider_ms": 330.0468329980504,
+            "retry_ms": 0.0,
+            "input_tokens": 2795,
+            "output_tokens": 71,
+            "cost_usd": 0.00046185000000000003,
+            "latency_ms": 56077.62812500005
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 5.841542006237432,
+            "provider_ms": 219.71104200929403,
+            "retry_ms": 0.0,
+            "input_tokens": 2791,
+            "output_tokens": 104,
+            "cost_usd": 0.00024052499999999998,
+            "latency_ms": 225.92937499575783
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the Met Fifth Avenue building is closed on Wednesdays, which is directly supported by the evidence that lists Wednesday as closed in the hours table."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 1.1729580000974238,
+          "provider_ms": 953.8857909938088,
+          "retry_ms": 0.0,
+          "input_tokens": 2352,
+          "output_tokens": 99,
+          "cost_usd": 0.0002061,
+          "latency_ms": 955.4038339992985
+        }
+      ],
+      "judge_ms": 963.6934169975575,
+      "judge_cost_usd": 0.0002061,
+      "latency_ms": 66765.59729099972,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "vis-002",
+        "category": "visitor_info",
+        "question": "What time does the museum close on Friday?",
+        "expect": "contains",
+        "expected": [
+          "9"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "Fri and Sat 10am-9pm. Re-verify."
+      },
+      "session_id": "371e0dd4-9573-4fbf-8035-fd824d05bf39",
+      "passed": true,
+      "reason": "All strings found",
+      "answer": {
+        "text": "The museum is open on Friday from 10 am to 9 pm.",
+        "citations": [
+          {
+            "object_id": null,
+            "source_url": "https://www.metmuseum.org/plan-your-visit",
+            "quote": "## Location, Hours and Directions\n\nOver 5,000 years of art from around the world.\n\nThe Met Fifth facade\n\n1000 Fifth Avenue, New York, NY 10028[View on map](https://maps.app.goo.gl/DFMAwzFD8mHbQmsJA)\n\nThe museum is open today 10 am–9 pm\n\n| Day | Hours |\n| --- | --- |\n| Sunday | 10 am–5 pm |\n| Monday | 10 am–5 pm |\n| Tuesday | 10 am–5 pm |\n| Wednesday | Closed |\n| Thursday | 10 am–5 pm |\n| Friday | 10 am–9 pm |\n| Saturday | 10 am–9 pm |\n\nClosed Thanksgiving Day, December 25, January 1, and the first Monday in May."
+          }
+        ],
+        "language": "en",
+        "session_id": "371e0dd4-9573-4fbf-8035-fd824d05bf39",
+        "turn_id": "6e23b8bc-06a7-4945-999d-b94d902900a7",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 0.0011736,
+        "latency_ms": 60160.81779100932,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.720500000170432,
+            "provider_ms": 507.32362498820294,
+            "retry_ms": 0.0,
+            "input_tokens": 852,
+            "output_tokens": 57,
+            "cost_usd": 8.1e-05,
+            "latency_ms": 508.47308299853466
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.8567499899072573,
+            "provider_ms": 738.9118340070127,
+            "retry_ms": 0.0,
+            "input_tokens": 1042,
+            "output_tokens": 51,
+            "cost_usd": 0.0001869,
+            "latency_ms": 739.8069579940056
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 22.675458996673115,
+            "provider_ms": 790.0217919959687,
+            "retry_ms": 0.0,
+            "input_tokens": 2202,
+            "output_tokens": 66,
+            "cost_usd": 0.00036990000000000005,
+            "latency_ms": 812.7479169925209
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 49629.67058298818,
+            "provider_ms": 1083.5009580041515,
+            "retry_ms": 0.0,
+            "input_tokens": 1978,
+            "output_tokens": 80,
+            "cost_usd": 0.0003447,
+            "latency_ms": 50714.24208300596
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 4.8929170006886125,
+            "provider_ms": 638.203541006078,
+            "retry_ms": 0.0,
+            "input_tokens": 2040,
+            "output_tokens": 127,
+            "cost_usd": 0.00019109999999999998,
+            "latency_ms": 643.6257500026841
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states that the museum is open on Friday from 10 am to 9 pm, which is directly supported by the evidence from the Met Fifth Avenue visitor information page that lists Friday hours as 10 am–9 pm. No additional claims are made, and the answer contains no personal artistic interpretation or aesthetic judgment."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 0.8941249980125576,
+          "provider_ms": 968.5075410088757,
+          "retry_ms": 0.0,
+          "input_tokens": 1601,
+          "output_tokens": 143,
+          "cost_usd": 0.000162975,
+          "latency_ms": 969.6747499983758
+        }
+      ],
+      "judge_ms": 974.69825000735,
+      "judge_cost_usd": 0.000162975,
+      "latency_ms": 60160.81779100932,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "vis-003",
+        "category": "visitor_info",
+        "question": "How much is adult admission for someone from New Jersey?",
+        "expect": "contains",
+        "expected": [
+          "$30"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "NY State residents and NY/NJ/CT students pay what you wish; general adult is $30. Answer should distinguish."
+      },
+      "session_id": "4883c4b9-ac63-4553-8c6c-589986a6c406",
+      "passed": false,
+      "reason": "Evaluation failed: access_denied",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 119475.06300000532,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "access_denied"
+    },
+    {
+      "row": {
+        "id": "vis-004",
+        "category": "visitor_info",
+        "question": "Can I bring a backpack into the galleries?",
+        "expect": "contains",
+        "expected": [
+          "coat check",
+          "front"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "Large bags must be checked; small backpacks worn on the front. Verify wording on visit page."
+      },
+      "session_id": "a676cf55-cb93-498e-9b9a-e861a17b5db4",
+      "passed": false,
+      "reason": "Evaluation failed: context_budget_exceeded",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 249283.0445419968,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "context_budget_exceeded"
+    },
+    {
+      "row": {
+        "id": "vis-005",
+        "category": "visitor_info",
+        "question": "Are strollers allowed?",
+        "expect": "contains",
+        "expected": [
+          "yes"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "Strollers permitted in most galleries; some exhibitions restrict. Verify."
+      },
+      "session_id": "f7e8cc7b-5f3c-4d12-8a2a-c272c943705a",
+      "passed": false,
+      "reason": "Evaluation failed: access_denied",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 244803.2177920104,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "access_denied"
+    },
+    {
+      "row": {
+        "id": "acc-001",
+        "category": "accessibility",
+        "question": "Is there an elevator near the Temple of Dendur?",
+        "expect": "contains",
+        "expected": [
+          "elevator"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "Answer must come from ingested accessibility/map pages, not guessed. Populate expected from scraped floor plan."
+      },
+      "session_id": "23fa906c-dd75-46e9-bc6a-6fad227fbebb",
+      "passed": false,
+      "reason": "Evaluation failed: context_budget_exceeded",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 85234.06408300798,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "context_budget_exceeded"
+    },
+    {
+      "row": {
+        "id": "acc-002",
+        "category": "accessibility",
+        "question": "Which entrance is wheelchair accessible?",
+        "expect": "contains",
+        "expected": [
+          "81st Street"
+        ],
+        "expected_object_ids": [],
+        "verify": true,
+        "notes": "The 81st Street entrance is step-free. Verify."
+      },
+      "session_id": "2f9ed63b-b867-47d4-8399-cea2d2210ba0",
+      "passed": false,
+      "reason": "Evaluation failed: access_denied",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 183081.33074999205,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "access_denied"
+    }
+  ],
+  "complete": false,
+  "summary": {
+    "completed": 17,
+    "expected": 32,
+    "pass_rate": 0.1875,
+    "category_pass_rate": {
+      "accessibility": 0.0,
+      "collection_lookup": 0.4,
+      "visitor_info": 0.4
+    },
+    "hit_at_k": {
+      "1": 0.5,
+      "5": 0.5,
+      "10": 0.5
+    },
+    "retrieval_scored": 2,
+    "mean_faithfulness": 0.9166666666666666,
+    "judged_rows": 12,
+    "mean_latency_ms": 125417.58215935432,
+    "p95_latency_ms": 459867.8432919987,
+    "mean_cost_usd": 0.00109461875,
+    "priced_rows": 12,
+    "judge_cost_usd": null,
+    "lite_fraction": 0.28125
+  }
+}

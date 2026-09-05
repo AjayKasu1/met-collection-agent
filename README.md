@@ -5,7 +5,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API now provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. Live retrieval and all three golden demo questions pass through Groq and AI Gateway, with native structured final answers and unchanged citation/grounding checks. See [provider routing](docs/provider-routing.md). Evaluation scoring, the web client, and deployment remain later phases. No retrieval-quality or faithfulness scores are claimed yet.
+The API now provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. The last published three-question demo passed through Groq and AI Gateway with native structured final answers and unchanged citation/grounding checks. Fallback providers are now explicitly opt-in; stored Gemini settings remain inactive while its access is unresolved. See [provider routing](docs/provider-routing.md). A typed golden evaluator now measures factual contracts, retrieval Hit@k, independent faithfulness, latency and token cost. See [evaluation commands and scoring](docs/evaluations.md). The web client and deployment remain later phases.
 
 ## Run locally
 
@@ -72,6 +72,8 @@ make demo-check
 
 The demo exercises three golden questions through the actual HTTP chat route and prints answer, citations, route, latency, and estimated cost. It exits nonzero if the provider is unavailable or answer verification fails. See [Phase 2 behavior and verification status](docs/phase-2.md) for the API contract, retrieval scores, guardrails, and current limitations.
 
+The reviewed Phase 3 quick baseline passes 9 of 10 end-to-end cases at commit `21bf3af`. All collection, refusal, and handoff cases pass. The confirmed missing-object trap now returns a cited 404 result without asking a model to restate it. The Mona Lisa trap fails closed because the local collection search cannot prove an external location. That failure and its complete redacted session audit are retained locally rather than being counted as a factual success. See [golden evaluation results](docs/evaluations.md) for the measured quality, latency, and cost summary.
+
 ```sh
 uv run --project api --locked met-agent-mcp
 uv run --project api --locked met-agent-mcp --transport sse --port 8001
@@ -100,7 +102,9 @@ api/
   tests/                      Offline tests and local Qdrant integration tests
   pyproject.toml              Exact direct dependency pins and tool settings
   uv.lock                     Reproducible transitive dependency resolution
-evals/golden.jsonl             Original evaluation questions, not yet scored
+evals/golden.jsonl             Versioned questions and reviewed relevance seeds
+evals/run_evals.py             Full and ten-question quick evaluation entry point
+evals/reports/                 Measured reports and reviewed regression baseline
 docs/configuration.md         Settings and operational behavior
 ```
 
@@ -120,14 +124,32 @@ This project is not affiliated with or endorsed by The Metropolitan Museum of Ar
 
 ## Phase 2 demo measurement
 
-Measured September 4, 2026 with GPT-OSS 120B main, GPT-OSS 20B lite, local E5 retrieval, and free-tier pacing:
+Measured September 4, 2026 with GPT-OSS 120B main, GPT-OSS 20B lite, local E5 retrieval, the two-layer reranker, and free-tier pacing (commit `1e61742`):
 
 | Question | Verified result | Route | End-to-end latency | Standard-price estimate |
 | --- | --- | --- | --- | --- |
-| Temple of Dendur gallery | Gallery 131, Object 547802 | lite | 76.156 s | $0.000763275 |
-| Fifth Avenue on Wednesdays | Closed, captured Plan Your Visit hours table | main | 7.168 s | $0.001022625 |
-| Meaning of Wheat Field with Cypresses | Non-interpretive policy refusal | main policy, lite classification | 0.147 s | $0.000061200 |
+| Temple of Dendur gallery | Gallery 131, Object 547802 | main | 15.721 s | $0.001331925 |
+| Fifth Avenue on Wednesdays | Closed, captured Plan Your Visit hours table | main | 105.909 s | $0.001464075 |
+| Meaning of Wheat Field with Cypresses | Non-interpretive policy refusal | main policy, lite classification | 0.204 s | $0.000080175 |
 
-Dendur spent 58.209 s waiting for the 8,000-TPM model budget, 2.602 s in provider calls, and 15.342 s in tools/service overhead including cold model startup. No retries or fallback occurred. These results do not imply sub-second end-to-end retrieval or unlimited free throughput. The checked-in [price table](api/src/met_agent/llm/cost.py) uses Groq's published standard input/output rates and reported tokens for every model call, including guardrails; it estimates equivalent inference cost, not a charge on the free tier. Local CPU and infrastructure costs are excluded.
+Dendur spent 0.013 s pacing, 2.996 s in provider calls, and 12.710 s in tools/service overhead including cold model startup. The following visitor question shared the main model's 8,000-TPM budget and spent 100.136 s pacing across multiple calls, 2.432 s in provider calls, and 3.337 s in tools/service work. No retries or fallback occurred. These results do not imply sub-second end-to-end retrieval or unlimited free throughput. The checked-in [price table](api/src/met_agent/llm/cost.py) uses Groq's published standard input/output rates and reported tokens for every model call, including guardrails; it estimates equivalent inference cost, not a charge on the free tier. Local CPU and infrastructure costs are excluded.
 
 See [measured latency and operating limits](docs/limitations.md) for the timing breakdown and paid-tier pacing configuration.
+
+## Phase 3 evaluation baseline
+
+The reviewed ten-case batch baseline was measured September 4, 2026 with an explicit 300-second batch deadline, Groq GPT-OSS 120B main, GPT-OSS 20B lite, AI Gateway, and fallback disabled. The saved interactive deadline remained 30 seconds.
+
+| Metric | Measured result |
+| --- | ---: |
+| End-to-end pass rate | 90% (9/10) |
+| Collection lookup | 100% (2/2) |
+| Refusal and handoff | 100% (6/6) |
+| Hallucination traps | 50% (1/2) |
+| Mean independent faithfulness | 1.00 (10 judged) |
+| Mean latency | 26.348 s |
+| p95 latency | 98.623 s |
+| Mean answer-path model cost | $0.0002823075 |
+| Independent judge cost | $0.0008523750 total |
+
+The latency is dominated by the configured free-tier token pacer. This batch result does not claim that factual answers meet the 30-second interactive deadline. The [reviewed baseline](evals/reports/baseline.json) contains row-level answers, citations, routes, token usage, costs, and timings.

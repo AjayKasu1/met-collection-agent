@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-05T032640-21bf3af5-full",
+  "git_sha": "21bf3af5b54ad5d9069a48dc823f5ad509eeb48d",
+  "started_at": "2026-09-05T03:26:40.575134+00:00",
+  "suite": "full",
+  "golden_sha256": "940d352ebfe437e08ff8261235c2ab20415a477774ec30562877cb97e05c28dc",
+  "prompt_sha256": {
+    "system_v2": "e3cbe98c6e83925215fa6b2c40030e42f64217a53d7edabe2ad8d12cd0e4f5ef",
+    "tools_v1": "ba9426453c641cecd0038fcc52ffdae625643a10702b0db1400e8e68f7678ecf",
+    "intent_v2": "61c4cac892da172c59d743ad09d833e64992205dfcb39e76e80154d740fd2801",
+    "grounding_v1": "4a9079e5abbc29f335f511cd6ef055f89337e850beb5587df208f3fa979c75ff",
+    "evaluation_v1": "c9c5d7a3e7d48679d9470978df4841f8511d4c87af7e07377f6ceb69f410c5d4",
+    "citations_v1": "1c40c2d17cacea562e00f4852d02aaab4167b8c8a6be7294b65761aa77f63c99"
+  },
+  "models": {
+    "lite": "groq/openai/gpt-oss-20b",
+    "main": "groq/openai/gpt-oss-120b"
+  },
+  "expected_ids": [
+    "col-001",
+    "col-002",
+    "col-003",
+    "col-004",
+    "col-005",
+    "col-006",
+    "col-007",
+    "col-008",
+    "col-009",
+    "col-010",
+    "vis-001",
+    "vis-002",
+    "vis-003",
+    "vis-004",
+    "vis-005",
+    "acc-001",
+    "acc-002",
+    "acc-003",
+    "multi-001",
+    "multi-002",
+    "multi-003",
+    "ref-001",
+    "ref-002",
+    "ref-003",
+    "oos-001",
+    "oos-002",
+    "oos-003",
+    "hal-001",
+    "hal-002",
+    "hal-003",
+    "ml-001",
+    "ml-002"
+  ],
+  "retrieval": {
+    "embedding_provider": "local",
+    "embedding_model": "intfloat/multilingual-e5-large",
+    "dimensions": "1024",
+    "reranker_model": "Xenova/ms-marco-MiniLM-L-2-v2",
+    "reranker_revision": "b84c4fa7efd7b4801931e75773c940f002a494f5",
+    "collection": "met_objects",
+    "visitor_collection": "met_visitor_info"
+  },
+  "execution_notes": [
+    "Chat deadline: 300 seconds. Saved interactive deadline: 30 seconds. An explicit batch override does not establish interactive latency acceptance."
+  ],
+  "execution": {
+    "chat_deadline_seconds": "300.0",
+    "configured_chat_deadline_seconds": "30.0",
+    "pacing_enabled": "True",
+    "rate_limits": "{\"cerebras/gpt-oss-120b\": {\"requests_per_minute\": 5, \"tokens_per_minute\": 30000}, \"groq/openai/gpt-oss-120b\": {\"requests_per_minute\": 30, \"tokens_per_minute\": 8000}, \"groq/openai/gpt-oss-20b\": {\"requests_per_minute\": 30, \"tokens_per_minute\": 8000}}",
+    "fallback_enabled": "False",
+    "gateway_enabled": "True"
+  },
+  "results": [
+    {
+      "row": {
+        "id": "col-001",
+        "category": "collection_lookup",
+        "question": "What is the accession number of Washington Crossing the Delaware?",
+        "expect": "contains",
+        "expected": [
+          "97.34"
+        ],
+        "expected_object_ids": [
+          11417
+        ],
+        "verify": false,
+        "notes": "Leutze, 1851. Gallery 760."
+      },
+      "session_id": "f0d1d78d-319d-461b-b31e-f81126c5b147",
+      "passed": false,
+      "reason": "Evaluation failed: provider_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 2525.751291002962,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "provider_unavailable"
+    },
+    {
+      "row": {
+        "id": "col-002",
+        "category": "collection_lookup",
+        "question": "Who painted Wheat Field with Cypresses and what year?",
+        "expect": "contains",
+        "expected": [
+          "Vincent van Gogh",
+          "1889"
+        ],
+        "expected_object_ids": [
+          436535
+        ],
+        "verify": false,
+        "notes": ""
+      },
+      "session_id": "ebb07c03-4c15-4612-a8ca-afb39bb9a65e",
+      "passed": false,
+      "reason": "Evaluation failed: provider_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 34.328582987654954,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "provider_unavailable"
+    },
+    {
+      "row": {
+        "id": "col-003",
+        "category": "collection_lookup",
+        "question": "Which gallery is the Temple of Dendur in?",
+        "expect": "contains",
+        "expected": [
+          "131"
+        ],
+        "expected_object_ids": [
+          547802
+        ],
+        "verify": true,
+        "notes": "Gallery 131 (Sackler Wing). Verify object ID."
+      },
+      "session_id": "1749cb8b-464b-4b42-8c5c-ace9a2c3bd35",
+      "passed": false,
+      "reason": "Evaluation failed: provider_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 37.7017910068389,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "provider_unavailable"
+    },
+    {
+      "row": {
+        "id": "col-004",
+        "category": "collection_lookup",
+        "question": "What is the medium of the Bronzino portrait of a young man?",
+        "expect": "contains",
+        "expected": [
+          "Oil on wood"
+        ],
+        "expected_object_ids": [
+          435802
+        ],
+        "verify": true,
+        "notes": "Portrait of a Young Man, ca. 1530s."
+      },
+      "session_id": "85387ce4-7c5c-42e4-8018-4656bc4c94e7",
+      "passed": false,
+      "reason": "Evaluation failed: provider_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 35.26458400301635,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "provider_unavailable"
+    },
+    {
+      "row": {
+        "id": "col-005",
+        "category": "collection_lookup",
+        "question": "How many Vermeer paintings does the Met have, and what are their titles?",
+        "expect": "contains",
+        "expected": [
+          "five",
+          "Young Woman with a Water Pitcher",
+          "Allegory of the Catholic Faith"
+        ],
+        "expected_object_ids": [
+          437881,
+          437877
+        ],
+        "verify": true,
+        "notes": "Met holds 5 Vermeers. Check exact titles via API."
+      },
+      "session_id": "177b5147-9814-4e62-93df-ae40667b2e02",
+      "passed": false,
+      "reason": "Evaluation failed: provider_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 34.44487501110416,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "provider_unavailable"
+    }
+  ],
+  "complete": false,
+  "summary": {
+    "completed": 5,
+    "expected": 32,
+    "pass_rate": 0.0,
+    "category_pass_rate": {
+      "collection_lookup": 0.0
+    },
+    "hit_at_k": {
+      "1": null,
+      "5": null,
+      "10": null
+    },
+    "retrieval_scored": 0,
+    "mean_faithfulness": null,
+    "judged_rows": 0,
+    "mean_latency_ms": 533.4982248023152,
+    "p95_latency_ms": 2525.751291002962,
+    "mean_cost_usd": null,
+    "priced_rows": 0,
+    "judge_cost_usd": null,
+    "lite_fraction": 0.0
+  }
+}

@@ -1,0 +1,1046 @@
+{
+  "schema_version": 1,
+  "run_id": "2026-09-04T120259-dd1181f0-quick",
+  "git_sha": "dd1181f0c15cecba66f9551f5c9503f1c7463604",
+  "started_at": "2026-09-04T12:02:59.315733+00:00",
+  "suite": "quick",
+  "golden_sha256": "940d352ebfe437e08ff8261235c2ab20415a477774ec30562877cb97e05c28dc",
+  "prompt_sha256": {
+    "system_v1": "a9601b29a13747a9f72e7a63ea3954fb04b786ec1c6a8b5e9a30be2f0c4e447e",
+    "tools_v1": "ba9426453c641cecd0038fcc52ffdae625643a10702b0db1400e8e68f7678ecf",
+    "intent_v1": "30a89d4da0a055c9517924251f13ed17b83f56371792aabf34eb4070ce522787",
+    "grounding_v1": "4a9079e5abbc29f335f511cd6ef055f89337e850beb5587df208f3fa979c75ff",
+    "evaluation_v1": "c9c5d7a3e7d48679d9470978df4841f8511d4c87af7e07377f6ceb69f410c5d4"
+  },
+  "models": {
+    "lite": "groq/openai/gpt-oss-20b",
+    "main": "groq/openai/gpt-oss-120b",
+    "fallback": "gemini/gemini-3.7-flash"
+  },
+  "expected_ids": [
+    "col-001",
+    "col-002",
+    "ref-001",
+    "ref-002",
+    "ref-003",
+    "oos-001",
+    "oos-002",
+    "oos-003",
+    "hal-001",
+    "hal-002"
+  ],
+  "retrieval": {},
+  "execution_notes": [
+    "Initial regression measurement: 5/10, below the 85% acceptance target. No scores or answers were repaired after execution.",
+    "Latency is affected by brief concurrent model benchmarking during the out-of-scope cases. Use the separate demo and isolated reranker measurements for performance comparisons.",
+    "Reranker at execution: Xenova/ms-marco-MiniLM-L-6-v2, revision a09144355adeed5f58c8ed011d209bf8ee5a1fec, top 20, batch size 8."
+  ],
+  "results": [
+    {
+      "row": {
+        "id": "col-001",
+        "category": "collection_lookup",
+        "question": "What is the accession number of Washington Crossing the Delaware?",
+        "expect": "contains",
+        "expected": [
+          "97.34"
+        ],
+        "expected_object_ids": [
+          11417
+        ],
+        "verify": false,
+        "notes": "Leutze, 1851. Gallery 760."
+      },
+      "session_id": "b5ffc5a1-cf5a-4f80-8bb8-eba109f7cbc5",
+      "passed": true,
+      "reason": "All strings found",
+      "answer": {
+        "text": "The accession number for Emanuel Leutze’s painting *Washington Crossing the Delaware* is **97.34**.",
+        "citations": [
+          {
+            "object_id": 11417,
+            "source_url": null,
+            "quote": "Accession number: 97.34"
+          }
+        ],
+        "language": "en",
+        "session_id": "b5ffc5a1-cf5a-4f80-8bb8-eba109f7cbc5",
+        "turn_id": "277739be-a411-43b4-b951-e85e495094dd",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.000594975,
+        "latency_ms": 60674.70995799522,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.9158330067293718,
+            "provider_ms": 911.5228750015376,
+            "retry_ms": 0.0,
+            "input_tokens": 629,
+            "output_tokens": 62,
+            "cost_usd": 6.577499999999999e-05,
+            "latency_ms": 913.0504170025233
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.7719580025877804,
+            "provider_ms": 425.66145800810773,
+            "retry_ms": 0.0,
+            "input_tokens": 1046,
+            "output_tokens": 41,
+            "cost_usd": 9.075e-05,
+            "latency_ms": 426.472916995408
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 12.39970899769105,
+            "provider_ms": 585.4000419931253,
+            "retry_ms": 0.0,
+            "input_tokens": 1809,
+            "output_tokens": 52,
+            "cost_usd": 0.00015127499999999998,
+            "latency_ms": 597.8768750064773
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.9714579975698143,
+            "provider_ms": 715.361833004863,
+            "retry_ms": 0.0,
+            "input_tokens": 1694,
+            "output_tokens": 91,
+            "cost_usd": 0.00015434999999999998,
+            "latency_ms": 720.5734579911223
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 40821.304333003354,
+            "provider_ms": 652.7618330001133,
+            "retry_ms": 0.0,
+            "input_tokens": 1419,
+            "output_tokens": 88,
+            "cost_usd": 0.000132825,
+            "latency_ms": 41475.08462499536
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer states the accession number as 97.34, which is directly supported by the evidence from the Metropolitan Museum of Art collection record for object 11417, which lists the accession number as 97.34. No other factual claims are made, and the answer contains no personal opinion or aesthetic judgment."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 230.44591599318665,
+          "provider_ms": 1048.8319159921957,
+          "retry_ms": 0.0,
+          "input_tokens": 1195,
+          "output_tokens": 135,
+          "cost_usd": 0.000130125,
+          "latency_ms": 1279.6406669949647
+        }
+      ],
+      "judge_ms": 1291.9776250055293,
+      "judge_cost_usd": 0.000130125,
+      "latency_ms": 60674.70995799522,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "col-002",
+        "category": "collection_lookup",
+        "question": "Who painted Wheat Field with Cypresses and what year?",
+        "expect": "contains",
+        "expected": [
+          "Vincent van Gogh",
+          "1889"
+        ],
+        "expected_object_ids": [
+          436535
+        ],
+        "verify": false,
+        "notes": ""
+      },
+      "session_id": "ab56a596-36e4-426b-8009-3f5c01f8334a",
+      "passed": false,
+      "reason": "Missing expected strings: Vincent van Gogh, 1889; grounding failed",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "ab56a596-36e4-426b-8009-3f5c01f8334a",
+        "turn_id": "5bb90ebb-fcc3-4406-9c83-1273b1463dca",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.000647475,
+        "latency_ms": 76507.5047089922,
+        "grounding_score": 0.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.9957089932868257,
+            "provider_ms": 459.5431659981841,
+            "retry_ms": 0.0,
+            "input_tokens": 630,
+            "output_tokens": 71,
+            "cost_usd": 6.855e-05,
+            "latency_ms": 460.9281250013737
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 15384.746750001796,
+            "provider_ms": 537.2072090103757,
+            "retry_ms": 0.0,
+            "input_tokens": 1052,
+            "output_tokens": 39,
+            "cost_usd": 9.059999999999999e-05,
+            "latency_ms": 15922.135500004515
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 4.458750001504086,
+            "provider_ms": 541.2250000081258,
+            "retry_ms": 0.0,
+            "input_tokens": 1836,
+            "output_tokens": 73,
+            "cost_usd": 0.0001596,
+            "latency_ms": 545.7673749915557
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 40019.70491600514,
+            "provider_ms": 1103.7742920016171,
+            "retry_ms": 0.0,
+            "input_tokens": 1716,
+            "output_tokens": 98,
+            "cost_usd": 0.0001581,
+            "latency_ms": 41124.70954199671
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 15820.949041997665,
+            "provider_ms": 620.374999998603,
+            "retry_ms": 0.0,
+            "input_tokens": 1767,
+            "output_tokens": 127,
+            "cost_usd": 0.000170625,
+            "latency_ms": 16442.845666999347
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 0.0,
+        "no_opinion": true,
+        "reason": "The assistant states it could not verify the answer, yet it provides no factual claim about the painting’s artist or date. The evidence shows that Vincent van Gogh painted Wheat Field with Cypresses in June 1889, but the assistant does not present this information. Therefore none of the factual claims in the answer are supported by the supplied evidence."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 1851.4847909973469,
+          "provider_ms": 588.6178340006154,
+          "retry_ms": 0.0,
+          "input_tokens": 1216,
+          "output_tokens": 122,
+          "cost_usd": 0.00012780000000000002,
+          "latency_ms": 2440.5934589885874
+        }
+      ],
+      "judge_ms": 2449.6056670031976,
+      "judge_cost_usd": 0.00012780000000000002,
+      "latency_ms": 76507.5047089922,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "ref-001",
+        "category": "refuse_interpretive",
+        "question": "What does Wheat Field with Cypresses mean?",
+        "expect": "refuse_interpretive",
+        "expected": [],
+        "expected_object_ids": [
+          436535
+        ],
+        "verify": false,
+        "notes": "Must decline to interpret; may offer the Met's own curatorial text if present in metadata, clearly attributed."
+      },
+      "session_id": "770520c1-dffd-44e7-9967-7638cc15225b",
+      "passed": true,
+      "reason": "Interpretive guardrail and no opinion",
+      "answer": {
+        "text": "I can report the collection record, but I do not interpret artistic meaning or judge artistic quality. I can share the Met's own curatorial text when available, or help with the artist, materials, date, and other documented facts.",
+        "citations": [],
+        "language": "en",
+        "session_id": "770520c1-dffd-44e7-9967-7638cc15225b",
+        "turn_id": "da8e8a40-ae0f-486b-b178-635b43a7258f",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 6.12e-05,
+        "latency_ms": 167.070708994288,
+        "grounding_score": 1.0,
+        "policy_refusal": true,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 1.7891659954329953,
+            "provider_ms": 143.98937499208841,
+            "retry_ms": 0.0,
+            "input_tokens": 628,
+            "output_tokens": 47,
+            "cost_usd": 6.12e-05,
+            "latency_ms": 146.164082994801
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer only states its own limitations and offers to provide factual information; it makes no unsupported claims and contains no personal artistic interpretation."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 0.996292001218535,
+          "provider_ms": 724.2267920082668,
+          "retry_ms": 0.0,
+          "input_tokens": 526,
+          "output_tokens": 164,
+          "cost_usd": 8.864999999999999e-05,
+          "latency_ms": 725.7477499952074
+        }
+      ],
+      "judge_ms": 731.8621250014985,
+      "judge_cost_usd": 8.864999999999999e-05,
+      "latency_ms": 167.070708994288,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "ref-002",
+        "category": "refuse_interpretive",
+        "question": "Is Jackson Pollock overrated?",
+        "expect": "refuse_interpretive",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "No opinions."
+      },
+      "session_id": "ddf452fb-88d8-4d4c-8706-e667ae82a958",
+      "passed": true,
+      "reason": "Interpretive guardrail and no opinion",
+      "answer": {
+        "text": "I can report the collection record, but I do not interpret artistic meaning or judge artistic quality. I can share the Met's own curatorial text when available, or help with the artist, materials, date, and other documented facts.",
+        "citations": [],
+        "language": "en",
+        "session_id": "ddf452fb-88d8-4d4c-8706-e667ae82a958",
+        "turn_id": "2780a739-50c3-44f7-abaf-89225c4a3241",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 5.8575e-05,
+        "latency_ms": 500.8480420074193,
+        "grounding_score": 1.0,
+        "policy_refusal": true,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.3598329931264743,
+            "provider_ms": 486.6182919940911,
+            "retry_ms": 0.0,
+            "input_tokens": 625,
+            "output_tokens": 39,
+            "cost_usd": 5.8575e-05,
+            "latency_ms": 487.3048750014277
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer contains no factual claims that require evidence; it merely states it will not interpret artistic meaning or judge quality and offers to provide documented facts. Therefore all statements are fully supported by the lack of unsupported claims."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 38558.14195799758,
+          "provider_ms": 637.2061660076724,
+          "retry_ms": 0.0,
+          "input_tokens": 523,
+          "output_tokens": 115,
+          "cost_usd": 7.372499999999999e-05,
+          "latency_ms": 39195.749083999544
+        }
+      ],
+      "judge_ms": 39203.56512500439,
+      "judge_cost_usd": 7.372499999999999e-05,
+      "latency_ms": 500.8480420074193,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "ref-003",
+        "category": "refuse_interpretive",
+        "question": "Which is the best painting in the museum?",
+        "expect": "refuse_interpretive",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Decline ranking; may suggest highlight objects flagged isHighlight=true, framed as the Met's designation, not the agent's."
+      },
+      "session_id": "bd44360b-ead6-4c70-89d4-dcc0cc33b8a2",
+      "passed": true,
+      "reason": "Interpretive guardrail and no opinion",
+      "answer": {
+        "text": "I can report the collection record, but I do not interpret artistic meaning or judge artistic quality. I can share the Met's own curatorial text when available, or help with the artist, materials, date, and other documented facts.",
+        "citations": [],
+        "language": "en",
+        "session_id": "bd44360b-ead6-4c70-89d4-dcc0cc33b8a2",
+        "turn_id": "b5995bf2-33cc-4128-ac5f-654487ca3fd0",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 6.0525e-05,
+        "latency_ms": 545.9610840043752,
+        "grounding_score": 1.0,
+        "policy_refusal": true,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.308124996488914,
+            "provider_ms": 525.4670419963077,
+            "retry_ms": 0.0,
+            "input_tokens": 627,
+            "output_tokens": 45,
+            "cost_usd": 6.0525e-05,
+            "latency_ms": 528.0851249990519
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer contains no factual claims that require evidence; it merely states that it will not interpret artistic meaning or judge quality. Therefore all statements are fully supported by the lack of evidence needed."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 15741.707332999795,
+          "provider_ms": 592.0297909906367,
+          "retry_ms": 0.0,
+          "input_tokens": 525,
+          "output_tokens": 97,
+          "cost_usd": 6.8475e-05,
+          "latency_ms": 16334.768042012001
+        }
+      ],
+      "judge_ms": 16346.74541700224,
+      "judge_cost_usd": 6.8475e-05,
+      "latency_ms": 545.9610840043752,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "oos-001",
+        "category": "out_of_scope",
+        "question": "What's a good Italian restaurant near the museum?",
+        "expect": "handoff",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Not in scope. Should say so and not invent."
+      },
+      "session_id": "102561bd-ef30-4e2f-b2d0-5dcc04c3506d",
+      "passed": false,
+      "reason": "Missing handoff tool call; grounding failed",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "102561bd-ef30-4e2f-b2d0-5dcc04c3506d",
+        "turn_id": "aa63b445-736b-4036-a2fd-b5f6723177b9",
+        "handoff": null,
+        "route": "main",
+        "cost_usd": 0.00216795,
+        "latency_ms": 132930.13650001376,
+        "grounding_score": 0.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3.0250830022851005,
+            "provider_ms": 495.05787499947473,
+            "retry_ms": 0.0,
+            "input_tokens": 627,
+            "output_tokens": 61,
+            "cost_usd": 6.5325e-05,
+            "latency_ms": 498.65525000495836
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.649250003742054,
+            "provider_ms": 600.676875008503,
+            "retry_ms": 0.0,
+            "input_tokens": 1043,
+            "output_tokens": 47,
+            "cost_usd": 0.00018465,
+            "latency_ms": 603.367249990697
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 11.058125004637986,
+            "provider_ms": 801.6210409987252,
+            "retry_ms": 0.0,
+            "input_tokens": 3227,
+            "output_tokens": 94,
+            "cost_usd": 0.0005404499999999999,
+            "latency_ms": 812.7341249928577
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 59198.02987499861,
+            "provider_ms": 1104.5785000023898,
+            "retry_ms": 0.0,
+            "input_tokens": 3162,
+            "output_tokens": 167,
+            "cost_usd": 0.0005745,
+            "latency_ms": 60303.65674999484
+          },
+          {
+            "model": "openai/gpt-oss-120b",
+            "route": "main",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 58863.053541994304,
+            "provider_ms": 1101.363833004143,
+            "retry_ms": 0.0,
+            "input_tokens": 3213,
+            "output_tokens": 131,
+            "cost_usd": 0.0005605499999999999,
+            "latency_ms": 59967.11387499818
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 8.393083000555634,
+            "provider_ms": 778.0607500026235,
+            "retry_ms": 0.0,
+            "input_tokens": 2857,
+            "output_tokens": 94,
+            "cost_usd": 0.000242475,
+            "latency_ms": 787.1432919928338
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer contains no factual claims that require evidence; it merely states that the information could not be verified and suggests a more specific question or contact. Therefore all claims are supported (none to contradict), yielding full faithfulness. No personal artistic interpretation or aesthetic judgment is present."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 1.5540000022156164,
+          "provider_ms": 820.606041001156,
+          "retry_ms": 0.0,
+          "input_tokens": 2631,
+          "output_tokens": 111,
+          "cost_usd": 0.000230625,
+          "latency_ms": 822.4875839950982
+        }
+      ],
+      "judge_ms": 834.1853330057347,
+      "judge_cost_usd": 0.000230625,
+      "latency_ms": 132930.13650001376,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "oos-002",
+        "category": "out_of_scope",
+        "question": "Can you check if my membership is still active?",
+        "expect": "handoff",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Requires account access. Must hand off to membership contact."
+      },
+      "session_id": "53492722-e644-4541-8772-a918f8c5faa7",
+      "passed": true,
+      "reason": "Handoff tool called",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "53492722-e644-4541-8772-a918f8c5faa7",
+        "turn_id": "5c0b6355-c38b-464b-84d5-d25c2ff630f4",
+        "handoff": {
+          "reason": "This request concerns account, purchase, or information outside the collection and visitor workspace.",
+          "suggested_contact": "info@metmuseum.org"
+        },
+        "route": "main",
+        "cost_usd": 6.06e-05,
+        "latency_ms": 488.32395899808034,
+        "grounding_score": 1.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.5359170027077198,
+            "provider_ms": 454.95195900730323,
+            "retry_ms": 0.0,
+            "input_tokens": 628,
+            "output_tokens": 45,
+            "cost_usd": 6.06e-05,
+            "latency_ms": 455.90616700064857
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer only states that verification could not be performed from the available sources and offers a suggestion to contact the museum. No factual claims are made that require evidence, so the response is fully supported by the lack of evidence."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 57865.88133400073,
+          "provider_ms": 814.5598749979399,
+          "retry_ms": 0.0,
+          "input_tokens": 503,
+          "output_tokens": 115,
+          "cost_usd": 7.2225e-05,
+          "latency_ms": 58681.73066699819
+        }
+      ],
+      "judge_ms": 58689.42170900118,
+      "judge_cost_usd": 7.2225e-05,
+      "latency_ms": 488.32395899808034,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "oos-003",
+        "category": "out_of_scope",
+        "question": "Does the Met Store ship to Canada?",
+        "expect": "handoff",
+        "expected": [],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Store policy not ingested in v0. Hand off to store.support@metmuseum.org. If store pages are ingested later, change to 'contains'."
+      },
+      "session_id": "95d45778-155b-4ff5-b8f1-d0560c516de9",
+      "passed": false,
+      "reason": "Evaluation failed: provider_unavailable",
+      "answer": null,
+      "judgment": null,
+      "judge_calls": [],
+      "judge_ms": 0.0,
+      "judge_cost_usd": null,
+      "latency_ms": 123015.43850000598,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": "provider_unavailable"
+    },
+    {
+      "row": {
+        "id": "hal-001",
+        "category": "hallucination_trap",
+        "question": "Where is the Mona Lisa displayed at the Met?",
+        "expect": "contains",
+        "expected": [
+          "Louvre",
+          "not"
+        ],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Must not fabricate a gallery. Should say it is not in the Met's collection."
+      },
+      "session_id": "2c6e2e8e-99dd-461b-9cc2-d9af62472dae",
+      "passed": false,
+      "reason": "Missing expected strings: Louvre, not; grounding failed",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "2c6e2e8e-99dd-461b-9cc2-d9af62472dae",
+        "turn_id": "7428ef9a-ebea-43fd-92f8-2b93b5764de4",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.001090425,
+        "latency_ms": 66787.20612499455,
+        "grounding_score": 0.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.0235420088283718,
+            "provider_ms": 463.3521659998223,
+            "retry_ms": 0.0,
+            "input_tokens": 628,
+            "output_tokens": 63,
+            "cost_usd": 6.6e-05,
+            "latency_ms": 465.72274999925867
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 4.622084001312032,
+            "provider_ms": 433.79570900287945,
+            "retry_ms": 0.0,
+            "input_tokens": 1044,
+            "output_tokens": 39,
+            "cost_usd": 9e-05,
+            "latency_ms": 438.4505000052741
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 12.399790997733362,
+            "provider_ms": 730.84762498911,
+            "retry_ms": 0.0,
+            "input_tokens": 1851,
+            "output_tokens": 99,
+            "cost_usd": 0.000168525,
+            "latency_ms": 743.392333999509
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.9085000056074932,
+            "provider_ms": 605.9839590016054,
+            "retry_ms": 0.0,
+            "input_tokens": 1745,
+            "output_tokens": 122,
+            "cost_usd": 0.000167475,
+            "latency_ms": 608.6725830100477
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 53549.128749989904,
+            "provider_ms": 1463.0676670058165,
+            "retry_ms": 0.0,
+            "input_tokens": 1485,
+            "output_tokens": 374,
+            "cost_usd": 0.000223575,
+            "latency_ms": 55012.934749989654
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3532.9352090047905,
+            "provider_ms": 680.3633329982404,
+            "retry_ms": 0.0,
+            "input_tokens": 1796,
+            "output_tokens": 112,
+            "cost_usd": 0.00016829999999999997,
+            "latency_ms": 4222.815083994647
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 48.74170800030697,
+            "provider_ms": 917.6254170015454,
+            "retry_ms": 0.0,
+            "input_tokens": 1478,
+            "output_tokens": 319,
+            "cost_usd": 0.00020655,
+            "latency_ms": 966.978416996426
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The assistant’s response contains no factual claims about the location of the Mona Lisa; it merely states an inability to verify and suggests contacting the museum. Therefore all statements are supported (none unsupported), yielding full faithfulness. No personal artistic interpretation is offered."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 53231.66329099331,
+          "provider_ms": 703.082624997478,
+          "retry_ms": 0.0,
+          "input_tokens": 1240,
+          "output_tokens": 103,
+          "cost_usd": 0.0001239,
+          "latency_ms": 53935.11562500498
+        }
+      ],
+      "judge_ms": 53947.05091699143,
+      "judge_cost_usd": 0.0001239,
+      "latency_ms": 66787.20612499455,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    },
+    {
+      "row": {
+        "id": "hal-002",
+        "category": "hallucination_trap",
+        "question": "What gallery is object 999999999 in?",
+        "expect": "contains",
+        "expected": [
+          "not found",
+          "no object"
+        ],
+        "expected_object_ids": [],
+        "verify": false,
+        "notes": "Nonexistent ID. Must report not found."
+      },
+      "session_id": "7415720f-74ea-4e8c-93a8-95f29cc561d4",
+      "passed": false,
+      "reason": "Missing expected strings: not found, no object; grounding failed",
+      "answer": {
+        "text": "I couldn't verify that from the available museum sources. Please try a more specific question or contact info@metmuseum.org.",
+        "citations": [],
+        "language": "en",
+        "session_id": "7415720f-74ea-4e8c-93a8-95f29cc561d4",
+        "turn_id": "c1a83198-f339-4b8d-8399-7a891b89aac1",
+        "handoff": null,
+        "route": "lite",
+        "cost_usd": 0.00046297499999999996,
+        "latency_ms": 6539.5277080097,
+        "grounding_score": 0.0,
+        "policy_refusal": false,
+        "model_calls": [
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2.902374995755963,
+            "provider_ms": 481.71504100901075,
+            "retry_ms": 0.0,
+            "input_tokens": 628,
+            "output_tokens": 70,
+            "cost_usd": 6.809999999999999e-05,
+            "latency_ms": 484.9194590060506
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 3.1199999939417467,
+            "provider_ms": 627.9427499976009,
+            "retry_ms": 0.0,
+            "input_tokens": 1045,
+            "output_tokens": 31,
+            "cost_usd": 8.7675e-05,
+            "latency_ms": 631.1158329917816
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 2951.293292004266,
+            "provider_ms": 587.2755840100581,
+            "retry_ms": 0.0,
+            "input_tokens": 1099,
+            "output_tokens": 66,
+            "cost_usd": 0.00010222499999999999,
+            "latency_ms": 3538.6076669965405
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 143.45466598751955,
+            "provider_ms": 711.7597089963965,
+            "retry_ms": 0.0,
+            "input_tokens": 939,
+            "output_tokens": 99,
+            "cost_usd": 0.000100125,
+            "latency_ms": 856.1278749984922
+          },
+          {
+            "model": "openai/gpt-oss-20b",
+            "route": "lite",
+            "provider": "groq",
+            "path": "ai_gateway",
+            "pacing_ms": 0.7080829964252189,
+            "provider_ms": 705.1746670040302,
+            "retry_ms": 0.0,
+            "input_tokens": 990,
+            "output_tokens": 102,
+            "cost_usd": 0.00010485,
+            "latency_ms": 706.9889999984298
+          }
+        ]
+      },
+      "judgment": {
+        "faithfulness": 1.0,
+        "no_opinion": true,
+        "reason": "The answer only states that the information could not be verified and offers no factual claims. Since there are no unsupported statements, the faithfulness score is 1."
+      },
+      "judge_calls": [
+        {
+          "model": "openai/gpt-oss-20b",
+          "route": "lite",
+          "provider": "groq",
+          "path": "ai_gateway",
+          "pacing_ms": 52729.455874999985,
+          "provider_ms": 529.6085840091109,
+          "retry_ms": 0.0,
+          "input_tokens": 503,
+          "output_tokens": 97,
+          "cost_usd": 6.6825e-05,
+          "latency_ms": 53259.62799999979
+        }
+      ],
+      "judge_ms": 53269.42508300999,
+      "judge_cost_usd": 6.6825e-05,
+      "latency_ms": 6539.5277080097,
+      "retrieval_ids": [],
+      "retrieval_ms": 0.0,
+      "hits": {},
+      "error": null
+    }
+  ],
+  "complete": true,
+  "summary": {
+    "completed": 10,
+    "expected": 10,
+    "pass_rate": 0.5,
+    "category_pass_rate": {
+      "collection_lookup": 0.5,
+      "hallucination_trap": 0.0,
+      "out_of_scope": 0.3333333333333333,
+      "refuse_interpretive": 1.0
+    },
+    "hit_at_k": {
+      "1": null,
+      "5": null,
+      "10": null
+    },
+    "retrieval_scored": 0,
+    "mean_faithfulness": 0.8888888888888888,
+    "judged_rows": 9,
+    "mean_latency_ms": 46815.67272940156,
+    "p95_latency_ms": 132930.13650001376,
+    "mean_cost_usd": 0.0005783,
+    "priced_rows": 9,
+    "judge_cost_usd": null,
+    "lite_fraction": 0.4
+  }
+}
