@@ -1,0 +1,55 @@
+name: Deploy web Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy to Cloudflare
+    if: vars.ENABLE_WEB_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "20"
+      - name: Require production deployment configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          test -n "$NEXT_PUBLIC_API_URL" || { echo 'Missing NEXT_PUBLIC_API_URL production variable'; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN production secret'; exit 1; }
+          test -n "$CF_ACCOUNT_ID" || { echo 'Missing CF_ACCOUNT_ID production secret'; exit 1; }
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@10.34.5
+      - name: Install locked dependencies
+        run: pnpm --dir web install --frozen-lockfile
+      - name: Build the production Worker
+        run: pnpm --dir web build:worker
+      - name: Deploy the verified Worker bundle
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          workingDirectory: web
+          command: deploy
