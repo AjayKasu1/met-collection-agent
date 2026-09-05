@@ -38,7 +38,7 @@
     "@types/react-dom": "19.2.7",
     "eslint": "9.39.2",
     "eslint-config-next": "15.5.25",
-    "jsdom": "30.0.1",
+    "jsdom": "26.1.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.0.18",
