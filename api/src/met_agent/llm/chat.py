@@ -1,4 +1,4 @@
-"""Route chat through LiteLLM with explicit credentials, bounded retries, and narrow fallback."""
+"""Route chat through LiteLLM with explicit credentials and bounded transient recovery."""
 
 import asyncio
 import json
@@ -82,7 +82,7 @@ async def structured[T: BaseModel](
 
 
 class LiteLLMChat:
-    """Fallback only after rate-limit or timeout exhaustion, never after authentication failure."""
+    """Recover from bounded transient failures without retrying client or access errors."""
 
     def __init__(self, settings: Settings, *, router: Any = None, callback: Any = None) -> None:
         self.settings, self.callback = settings, callback
@@ -206,9 +206,17 @@ class LiteLLMChat:
                         provider_ms += (time.monotonic() - provider_started) * 1000
                         await self.pacer.reconcile(reservation, int(response.usage.total_tokens))
                         break
-                    except (RateLimitError, Timeout) as error:
+                    except Exception as error:
                         provider_ms += (time.monotonic() - provider_started) * 1000
                         details = failure_details(error, model=model_name, route=candidate)
+                        status = details.get("status")
+                        retryable = (
+                            isinstance(error, (RateLimitError, Timeout))
+                            or status in (408, 429)
+                            or (isinstance(status, int) and 500 <= status <= 599)
+                        )
+                        if not retryable:
+                            raise
                         details["attempt"] = attempt + 1
                         if context:
                             context.audit("provider_attempt_failed", details)

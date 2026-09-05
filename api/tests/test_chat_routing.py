@@ -324,6 +324,50 @@ def test_retry_reserves_each_attempt_and_respects_retry_after(
     assert len(reservations) == 2 and reservations[0] == reservations[1]
 
 
+def test_gateway_500_is_retried_with_safe_telemetry(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class GatewayInternalError(RuntimeError):
+        def __init__(self) -> None:
+            super().__init__("private provider body")
+            self.response = httpx.Response(
+                500,
+                headers={"retry-after": "2", "authorization": "private-header"},
+                request=httpx.Request("POST", "https://test.local"),
+            )
+
+    sleeps: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    events: list[tuple[str, Any]] = []
+    model = LiteLLMChat(
+        settings.model_copy(update={"llm_max_retries": 1}),
+        router=Router([GatewayInternalError(), response()]),
+    )
+    token = CURRENT_CALL.set(CallContext(audit=lambda k, d: events.append((k, d))))
+    monkeypatch.setattr(asyncio, "sleep", sleep)
+    try:
+        asyncio.run(model.complete("lite", []))
+    finally:
+        CURRENT_CALL.reset(token)
+    assert sleeps == [2]
+    assert len(model.router.calls) == 2
+    attempts = [data for kind, data in events if kind == "provider_attempt_failed"]
+    assert attempts == [
+        {
+            "model": model.models["lite"],
+            "route": "lite",
+            "error_type": "GatewayInternalError",
+            "status": 500,
+            "retry_after": "2",
+            "attempt": 1,
+        }
+    ]
+    assert "private" not in json.dumps(events)
+
+
 def test_native_final_schema_is_separate_from_tool_selection(settings: Settings) -> None:
     from met_agent.agent.models import AgentDraft
 
