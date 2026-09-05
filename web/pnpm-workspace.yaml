@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@ai-sdk/gateway@4.0.75'
+  - '@ai-sdk/mcp@2.0.45'
+  - '@ai-sdk/react@4.0.96'
+  - ai@7.0.93
