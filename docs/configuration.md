@@ -14,7 +14,7 @@ Run development commands from the repository root. The loader reads `.env` in th
 
 Required strings cannot be empty or whitespace. Chat model names have no defaults. Configuration validation does not call providers to check model availability. A later model-not-found response must be resolved by checking the configured provider model.
 
-`.env.example` lists every supported setting and documents defaults. A test checks the set of keys against the settings schema. Blank optional environment values are ignored. `LOG_LEVEL` accepts upper or lower case and is normalized before logging setup. Settings are immutable after loading; restart the process after changing configuration.
+`.env.example` lists every supported setting and documents defaults. A test checks the set of keys against the settings schema. Blank optional environment values are ignored. `LOG_LEVEL` accepts upper or lower case and is normalized before logging setup. Settings are immutable after loading; restart the process after changing configuration. Deployment workflows and required production variables are documented in the [deployment runbook](deploy.md).
 
 ## Embedding provider
 
@@ -41,7 +41,7 @@ To use Gemini embeddings, explicitly set `EMBEDDING_PROVIDER=gemini`, `EMBEDDING
 | Hugging Face dataset | `HF_DATASET_REPO`; a public download needs no token |
 | R2 | `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` |
 
-Incomplete optional integrations remain disabled. An explicitly enabled AI Gateway with missing URL or token fails startup, avoiding an accidental switch to direct provider requests. The API health endpoint does not contact optional services. Ingestion uses the configured embedding route and Qdrant server. Dataset publication and seeding use `HF_DATASET_REPO` and optional `HF_TOKEN` explicitly. `CLOUDFLARE_API_TOKEN`, `CF_ACCOUNT_ID`, and `GCP_REGION` are retained for later deployment tooling.
+Incomplete optional integrations remain disabled. An explicitly enabled AI Gateway with missing URL or token fails startup, avoiding an accidental switch to direct provider requests. The API health endpoint does not contact optional services. Ingestion uses the configured embedding route and Qdrant server. Dataset publication and seeding use `HF_DATASET_REPO` and optional `HF_TOKEN` explicitly. `CLOUDFLARE_API_TOKEN`, `CF_ACCOUNT_ID`, and `GCP_REGION` are consumed only by explicit deployment tooling.
 
 Service URLs must use HTTP or HTTPS and cannot carry user credentials, query strings, or fragments. Keys belong in dedicated secret fields. Set `GIT_SHA` to a 7 to 40 character lowercase hexadecimal revision for a labelled build; otherwise `/health` reports `unknown`.
 

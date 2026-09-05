@@ -1,6 +1,6 @@
 # Collection and visitor ingestion
 
-Run commands from the repository root after `make setup`. Configuration loads only through `met_agent.config`; no script searches a parent directory for credentials. Set the required provider fields in local `.env`. Start a local index with `make qdrant`, or configure an existing Qdrant server. Docker Compose currently supplies the Phase 1 Qdrant service; API and web containers belong to later phases.
+Run commands from the repository root after `make setup`. Configuration loads only through `met_agent.config`; no script searches a parent directory for credentials. Set the required provider fields in local `.env`. Start a local index with `make qdrant`, or configure an existing Qdrant server. Docker Compose also packages the API and local web client; `make demo` restores the verified snapshots before starting the full stack.
 
 ## A bounded pilot
 

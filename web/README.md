@@ -34,4 +34,6 @@ pnpm build:worker
 
 ## Cloudflare Workers
 
-OpenNext produces `.open-next/worker.js` and static assets according to `wrangler.jsonc`. `pnpm preview` runs the generated Worker locally. `pnpm deploy` performs a live deployment and belongs to the deployment phase; it requires an authenticated Wrangler session or scoped Cloudflare CI credentials.
+OpenNext produces `.open-next/worker.js` and static assets according to `wrangler.jsonc`. `pnpm preview` runs the generated Worker locally. `pnpm deploy` performs a live deployment and requires an authenticated Wrangler session or scoped Cloudflare CI credentials.
+
+The production Worker is named `met-collection-agent-web`. `NEXT_PUBLIC_API_URL` must be a public HTTPS API origin when the Worker is built. The complete [deployment runbook](../docs/deploy.md) gives exact Cloudflare Git integration and GitHub Actions settings, including the expected `workers.dev` URL.

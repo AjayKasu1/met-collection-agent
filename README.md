@@ -4,6 +4,7 @@ An independent, grounded collection assistant being built over The Metropolitan 
 
 [![CI](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AjayKasu1/met-collection-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/AjayKasu1/met-collection-agent?quickstart=1)
 
 The API provides hybrid retrieval, five typed tools, a constrained multilingual chat loop, verified-answer SSE, session audits, and MCP over stdio and SSE. The local index contains 20,000 objects, published image vectors, and captured visitor information. A typed golden evaluator measures factual contracts, retrieval Hit@k, independent faithfulness, latency, and token cost. The Next.js client translates verified API events into a streaming, cited interface with per-answer provenance. See [provider routing](docs/provider-routing.md), [evaluation scoring](docs/evaluations.md), and the [web client guide](web/README.md).
 
@@ -21,6 +22,8 @@ Edit `.env` locally and supply `LLM_MODEL`, `LLM_MODEL_LITE`, and the correspond
 ```sh
 make dev
 ```
+
+For the containerized stack, set `HF_DATASET_REPO=AJAYKASU/met-collection-index` and run `make demo`. This restores the published, verified Qdrant snapshots before starting the API and web client. See the [deployment runbook](docs/deploy.md) for Docker, Cloud Run, Cloudflare Workers, and release automation.
 
 Open [API documentation](http://localhost:8000/docs), or inspect liveness:
 
@@ -108,6 +111,7 @@ evals/golden.jsonl             Versioned questions and reviewed relevance seeds
 evals/run_evals.py             Full and ten-question quick evaluation entry point
 evals/reports/                 Measured reports and reviewed regression baseline
 docs/configuration.md         Settings and operational behavior
+docs/deploy.md                Containers, Cloud Run, Workers, and releases
 web/                         Next.js chat UI and OpenNext Workers adapter
 ```
 
