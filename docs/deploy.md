@@ -58,7 +58,7 @@ gcloud run deploy met-collection-agent-api \
   --min 1 \
   --max 3 \
   --set-secrets GROQ_API_KEY=met-agent-groq-api-key:latest,QDRANT_API_KEY=met-agent-qdrant-api-key:latest \
-  --set-env-vars "^@^APP_ENV=production@LOG_LEVEL=INFO@LLM_MODEL=groq/openai/gpt-oss-120b@LLM_MODEL_LITE=groq/openai/gpt-oss-20b@LLM_FALLBACK_ENABLED=false@USE_AI_GATEWAY=false@EMBEDDING_PROVIDER=local@EMBEDDING_MODEL=intfloat/multilingual-e5-large@EMBEDDING_DIMENSIONS=1024@EMBEDDING_THREADS=4@QDRANT_URL=${QDRANT_URL}@QDRANT_COLLECTION=met_objects@QDRANT_VISITOR_COLLECTION=met_visitor_info@CORS_ORIGINS=[\"https://met-collection-agent-web.ajaykasu7.workers.dev\"]@DATA_DIR=/tmp/met-agent@GIT_SHA=$(git rev-parse HEAD)"
+  --set-env-vars "^@^APP_ENV=production@LOG_LEVEL=INFO@LLM_MODEL=groq/openai/gpt-oss-120b@LLM_MODEL_LITE=groq/openai/gpt-oss-20b@LLM_FALLBACK_ENABLED=false@USE_AI_GATEWAY=false@EMBEDDING_PROVIDER=local@EMBEDDING_MODEL=intfloat/multilingual-e5-large@EMBEDDING_DIMENSIONS=1024@EMBEDDING_THREADS=4@QDRANT_URL=${QDRANT_URL}@QDRANT_COLLECTION=met_objects@QDRANT_VISITOR_COLLECTION=met_visitor_info@CORS_ORIGINS=[\"https://met-collection-agent.ajaykasu7.workers.dev\"]@DATA_DIR=/tmp/met-agent@GIT_SHA=$(git rev-parse HEAD)"
 ```
 
 Cloud Run injects `PORT`; the image honors it and exposes the configured health check at `/health`. The first semantic query downloads the pinned 2.24 GB local embedding model. Four CPUs, 8 GiB memory, minimum instance count one, and concurrency four reduce cold-start and memory pressure. Adjust them only after measuring production traffic and memory. `DATA_DIR` is ephemeral on Cloud Run, so local SQLite session audits do not survive instance replacement and cannot coordinate across multiple instances. Configure a durable audit store before using those records for operational or compliance purposes.
@@ -72,7 +72,7 @@ curl --fail --silent --show-error "$API_URL/health"
 
 ## Web on Cloudflare Workers
 
-The Worker name is `met-collection-agent-web`, so the expected account URL is `https://met-collection-agent-web.ajaykasu7.workers.dev`.
+The Worker name is `met-collection-agent`, so the expected account URL is `https://met-collection-agent.ajaykasu7.workers.dev`.
 
 ### Cloudflare Git integration
 
@@ -84,7 +84,7 @@ Use this option when Cloudflare should own deployments from GitHub:
 
 | Setting | Value |
 | --- | --- |
-| Worker name | `met-collection-agent-web` |
+| Worker name | `met-collection-agent` |
 | Root directory | `web` |
 | Build command | `pnpm build:worker` |
 | Deploy command | `pnpm exec wrangler deploy` |

@@ -1,5 +1,5 @@
 {
-  "name": "met-collection-agent-web",
+  "name": "met-collection-agent",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.34.5",
