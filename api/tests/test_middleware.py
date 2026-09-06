@@ -1,11 +1,16 @@
 """Check the ASGI boundary forwards streams incrementally and preserves protocol errors."""
 
 import asyncio
+from typing import cast
 
 import pytest
 from starlette.types import Message, Receive, Scope, Send
 
-from met_agent.middleware import ErrorBoundaryMiddleware, RequestContextMiddleware
+from met_agent.middleware import (
+    ErrorBoundaryMiddleware,
+    OriginAuthenticationMiddleware,
+    RequestContextMiddleware,
+)
 
 
 def test_stream_chunks_reach_the_client_before_the_application_finishes() -> None:
@@ -68,3 +73,32 @@ def test_non_http_scopes_pass_through_unchanged() -> None:
     asyncio.run(middleware(scope, receive, send))
     assert received == [scope]
     assert "state" not in scope
+
+
+def test_origin_authentication_is_fail_closed_and_health_remains_public() -> None:
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def downstream(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    async def status(path: str, headers: list[tuple[bytes, bytes]]) -> int:
+        sent: list[Message] = []
+
+        async def send(message: Message) -> None:
+            sent.append(message)
+
+        scope: Scope = {"type": "http", "method": "GET", "path": path, "headers": headers}
+        middleware = OriginAuthenticationMiddleware(
+            downstream, required=True, token="unit-test-origin-secret"
+        )
+        await middleware(scope, receive, send)
+        first = sent[0]
+        assert first["type"] == "http.response.start"
+        return cast(int, first["status"])
+
+    assert asyncio.run(status("/health", [])) == 204
+    assert asyncio.run(status("/chat", [])) == 401
+    assert asyncio.run(status("/chat", [(b"x-origin-auth", b"wrong")])) == 401
+    assert asyncio.run(status("/chat", [(b"x-origin-auth", b"unit-test-origin-secret")])) == 204

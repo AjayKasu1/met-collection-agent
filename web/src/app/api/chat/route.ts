@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { readServerEvents } from "@/lib/sse";
 import type { AgentAnswer, MuseumMessage } from "@/lib/types";
+import { protectChat } from "@/lib/server-security";
 import { isRecord, parseAgentAnswer } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,17 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let originHeaders: Record<string, string>;
+  try {
+    originHeaders = await protectChat(request, chatRequest.turnstile_token);
+  } catch (error) {
+    const status = error instanceof PublicApiError && error.code === "rate_limited" ? 429 : 403;
+    return Response.json(
+      { error: publicMessage(error) },
+      { status, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const stream = createUIMessageStream<MuseumMessage>({
     originalMessages: chatRequest.messages as MuseumMessage[],
     execute: async ({ writer }) => {
@@ -45,6 +57,7 @@ export async function POST(request: Request): Promise<Response> {
         headers: {
           Accept: "text/event-stream",
           "Content-Type": "application/json",
+          ...originHeaders,
         },
         body: JSON.stringify({
           message: question,
@@ -118,7 +131,7 @@ export async function POST(request: Request): Promise<Response> {
         throw new PublicApiError("invalid_response", "The verified response changed while streaming.");
       }
 
-      const tools = await fetchToolTrace(finalAnswer.session_id, request.signal);
+      const tools = await fetchToolTrace(finalAnswer.session_id, request.signal, originHeaders);
       writer.write({
         type: "data-provenance",
         data: { answer: finalAnswer, tools },

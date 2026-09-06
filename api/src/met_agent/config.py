@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     git_sha: Annotated[str, Field(pattern=r"^(?:unknown|[0-9a-f]{7,40})$")] = "unknown"
     cors_origins: CorsOrigins = ("http://localhost:3000",)
+    edge_auth_required: bool = False
+    edge_origin_token: Credential | None = Field(default=None, repr=False)
 
     gemini_api_key: Credential | None = Field(default=None, repr=False)
     llm_model: NonEmptyString
@@ -224,6 +226,17 @@ class Settings(BaseSettings):
                     "Required settings: {keys}",
                     {"keys": ", ".join(missing)},
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_edge_authentication(self) -> Self:
+        """A required edge boundary must have a shared origin credential."""
+        if self.edge_auth_required and self.edge_origin_token is None:
+            raise PydanticCustomError(
+                "missing_configuration",
+                "Required settings: {keys}",
+                {"keys": "EDGE_ORIGIN_TOKEN"},
+            )
         return self
 
     def provider_key(self, provider: ChatProvider) -> SecretStr | None:

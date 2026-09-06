@@ -14,17 +14,33 @@ describe("chat request boundary", () => {
     ] as UIMessage[];
 
     expect(latestUserText(messages)).toBe("Latest question");
-    expect(parseChatRequest({ messages, session_id: sessionId, language: "fr" })).toEqual({
+    expect(
+      parseChatRequest({
+        messages,
+        session_id: sessionId,
+        language: "fr",
+        turnstile_token: "unit-test-token",
+      }),
+    ).toEqual({
       messages,
       session_id: sessionId,
       language: "fr",
+      turnstile_token: "unit-test-token",
     });
   });
 
   it("rejects malformed sessions and empty questions", () => {
-    expect(() => parseChatRequest({ messages: [], session_id: "not-a-uuid", language: "en" })).toThrow(
-      "session",
-    );
+    expect(() =>
+      parseChatRequest({
+        messages: [],
+        session_id: "not-a-uuid",
+        language: "en",
+        turnstile_token: "unit-test-token",
+      }),
+    ).toThrow("session");
+    expect(() =>
+      parseChatRequest({ messages: [], session_id: sessionId, language: "en" }),
+    ).toThrow("security check");
     expect(() => latestUserText([])).toThrow("Enter a question");
   });
 

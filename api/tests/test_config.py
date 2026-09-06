@@ -133,6 +133,18 @@ def test_enabled_gateway_requires_both_configuration_values(
     assert load_settings(env_file=None).optional_services.ai_gateway is True
 
 
+def test_required_edge_authentication_requires_secret(
+    valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EDGE_AUTH_REQUIRED", "true")
+    with pytest.raises(ConfigurationError, match="EDGE_ORIGIN_TOKEN"):
+        load_settings(env_file=None)
+    monkeypatch.setenv("EDGE_ORIGIN_TOKEN", "unit-test-origin-secret")
+    settings = load_settings(env_file=None)
+    assert settings.edge_auth_required is True
+    assert settings.edge_origin_token is not None
+
+
 def test_incomplete_optional_services_are_disabled(
     valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

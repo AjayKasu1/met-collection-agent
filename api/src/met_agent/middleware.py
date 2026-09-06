@@ -1,5 +1,6 @@
 """Preserve request context across ASGI streaming without buffering response bodies."""
 
+import hmac
 import re
 from time import perf_counter
 from uuid import uuid4
@@ -11,6 +12,36 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 _REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", re.ASCII)
 logger = structlog.get_logger(__name__)
+
+
+class OriginAuthenticationMiddleware:
+    """Reject direct origin traffic when the edge authentication boundary is enabled."""
+
+    def __init__(self, app: ASGIApp, *, required: bool, token: str | None) -> None:
+        self.app = app
+        self.required = required
+        self.token = token
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("path") == "/health" or not self.required:
+            await self.app(scope, receive, send)
+            return
+
+        supplied = Headers(scope=scope).getlist("x-origin-auth")
+        if (
+            self.token is None
+            or len(supplied) != 1
+            or not hmac.compare_digest(supplied[0].encode(), self.token.encode())
+        ):
+            logger.warning("origin_authentication_rejected", path=scope.get("path", ""))
+            response = JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized"},
+                headers={"Cache-Control": "no-store"},
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 class RequestContextMiddleware:

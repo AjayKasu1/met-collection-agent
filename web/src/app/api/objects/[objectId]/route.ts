@@ -1,4 +1,5 @@
 import { apiBase } from "@/lib/api";
+import { originHeaders } from "@/lib/server-security";
 import { parseLiveObject } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ objectId: string }> };
@@ -11,7 +12,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
 
   try {
     const upstream = await fetch(`${apiBase()}/objects/${objectId}`, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...(await originHeaders()) },
       cache: "no-store",
       signal: request.signal,
     });

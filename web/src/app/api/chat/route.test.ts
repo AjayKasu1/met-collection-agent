@@ -1,6 +1,10 @@
 import type { UIMessage } from "ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/server-security", () => ({
+  protectChat: vi.fn().mockResolvedValue({ "X-Origin-Auth": "unit-test-origin-token" }),
+}));
+
 import { POST } from "@/app/api/chat/route";
 import { validAnswer } from "@/test/fixtures";
 
@@ -14,7 +18,12 @@ function request(messages: UIMessage[]): Request {
   return new Request("http://localhost/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, session_id: sessionId, language: "en" }),
+    body: JSON.stringify({
+      messages,
+      session_id: sessionId,
+      language: "en",
+      turnstile_token: "unit-test-turnstile-token",
+    }),
   });
 }
 
@@ -60,6 +69,9 @@ describe("AI SDK chat adapter", () => {
       message: "Where is Dendur?",
       session_id: sessionId,
       language: "en",
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      "X-Origin-Auth": "unit-test-origin-token",
     });
     expect(stream).toContain("Gallery 131");
     expect(stream).toContain("data-provenance");

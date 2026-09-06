@@ -12,7 +12,11 @@ from pydantic import BaseModel
 
 from met_agent.config import OptionalServices, Settings, load_settings
 from met_agent.llm.providers import configured_models
-from met_agent.middleware import ErrorBoundaryMiddleware, RequestContextMiddleware
+from met_agent.middleware import (
+    ErrorBoundaryMiddleware,
+    OriginAuthenticationMiddleware,
+    RequestContextMiddleware,
+)
 from met_agent.observability.logging import configure_logging
 from met_agent.routes import router
 
@@ -60,13 +64,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = config
     app.include_router(router)
+    app.add_middleware(
+        OriginAuthenticationMiddleware,
+        required=config.edge_auth_required,
+        token=(config.edge_origin_token.get_secret_value() if config.edge_origin_token else None),
+    )
     app.add_middleware(ErrorBoundaryMiddleware)
     # CORS wraps request handling so controlled 500 responses carry CORS headers too.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(config.cors_origins),
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "X-Request-ID"],
+        allow_headers=["Content-Type", "X-Request-ID", "X-Origin-Auth"],
         expose_headers=["X-Request-ID"],
         allow_credentials=False,
     )

@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CitationStrip } from "@/components/citation-strip";
 import { CollectionMark } from "@/components/mark";
 import { ProvenancePanel } from "@/components/provenance-panel";
+import { Turnstile, type TurnstileHandle } from "@/components/turnstile";
 import { messageProvenance, messageText } from "@/lib/messages";
 import type { Language, MuseumMessage } from "@/lib/types";
 
@@ -37,8 +38,11 @@ export function ChatShell(): React.ReactNode {
   const [input, setInput] = useState("");
   const [language, setLanguage] = useState<Language>("en");
   const [sessionId, setSessionId] = useState(newSessionId);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstile = useRef<TurnstileHandle>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const busy = status === "submitted" || status === "streaming";
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -46,10 +50,17 @@ export function ChatShell(): React.ReactNode {
 
   async function submit(question: string): Promise<void> {
     const text = question.trim();
-    if (!text || busy) return;
+    if (!text || busy || !turnstileToken) return;
     clearError();
     setInput("");
-    await sendMessage({ text }, { body: { session_id: sessionId, language } });
+    try {
+      await sendMessage(
+        { text },
+        { body: { session_id: sessionId, language, turnstile_token: turnstileToken } },
+      );
+    } finally {
+      turnstile.current?.reset();
+    }
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -176,11 +187,26 @@ export function ChatShell(): React.ReactNode {
               <span aria-hidden="true" />
             </button>
           ) : (
-            <button aria-label="Send question" className="send-button" disabled={!input.trim()} type="submit">
+            <button
+              aria-label="Send question"
+              className="send-button"
+              disabled={!input.trim() || !turnstileToken}
+              type="submit"
+            >
               <span aria-hidden="true">↑</span>
             </button>
           )}
         </form>
+        {turnstileSiteKey ? (
+          <Turnstile
+            action="chat"
+            onToken={setTurnstileToken}
+            ref={turnstile}
+            siteKey={turnstileSiteKey}
+          />
+        ) : (
+          <p className="security-unavailable" role="alert">Security verification is not configured.</p>
+        )}
         <p className="composer-note">Language is detected automatically. Verify gallery locations with museum staff.</p>
       </div>
 

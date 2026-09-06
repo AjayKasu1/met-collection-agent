@@ -14,12 +14,7 @@ export class PublicApiError extends Error {
 
 export function apiBase(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  const isTest = process.env.NODE_ENV === "test";
-  const configured =
-    envUrl && (!envUrl.includes("example.test") || isTest)
-      ? envUrl
-      : "https://met-collection-agent-api-584674541487.us-east1.run.app";
-  const safe = safeHttpUrl(configured);
+  const safe = safeHttpUrl(envUrl ?? "");
   if (!safe) throw new Error("NEXT_PUBLIC_API_URL must be an HTTP URL");
   return safe.replace(/\/$/, "");
 }
@@ -39,6 +34,7 @@ export function parseChatRequest(value: unknown): {
   messages: UIMessage[];
   session_id: string;
   language: Language;
+  turnstile_token: string;
 } {
   if (!isRecord(value) || !Array.isArray(value.messages)) {
     throw new PublicApiError("invalid_request", "The chat request is invalid.");
@@ -54,10 +50,18 @@ export function parseChatRequest(value: unknown): {
   if (!(["en", "fr", "es", "zh"] as unknown[]).includes(value.language)) {
     throw new PublicApiError("invalid_request", "The language selection is invalid.");
   }
+  if (
+    typeof value.turnstile_token !== "string" ||
+    value.turnstile_token.length === 0 ||
+    value.turnstile_token.length > 2048
+  ) {
+    throw new PublicApiError("verification_required", "Complete the security check and try again.");
+  }
   return {
     messages: value.messages as UIMessage[],
     session_id: value.session_id,
     language: value.language as Language,
+    turnstile_token: value.turnstile_token,
   };
 }
 
@@ -94,10 +98,14 @@ export function toolTrace(events: AuditEvent[]): ToolTrace[] {
   return calls;
 }
 
-export async function fetchToolTrace(sessionId: string, signal: AbortSignal): Promise<ToolTrace[]> {
+export async function fetchToolTrace(
+  sessionId: string,
+  signal: AbortSignal,
+  headers: HeadersInit = {},
+): Promise<ToolTrace[]> {
   try {
     const response = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events?limit=200`, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...headers },
       cache: "no-store",
       signal,
     });

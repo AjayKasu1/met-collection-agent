@@ -618,6 +618,20 @@ summary:focus-visible {
   text-align: center;
 }
 
+.turnstile {
+  display: flex;
+  justify-content: center;
+  min-height: 65px;
+  padding-top: 0.75rem;
+}
+
+.security-unavailable {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin: 0.75rem 0 0;
+  text-align: center;
+}
+
 footer {
   position: fixed;
   z-index: 25;
