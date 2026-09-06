@@ -64,6 +64,56 @@ def test_health_reports_supplied_build_revision(
         assert client.get("/health").json()["git_sha"] == "abc1234"
 
 
+def test_readiness_reports_required_dependencies(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from met_agent import main as module
+
+    class ReadyRuntime:
+        def __init__(self, settings: Settings) -> None:
+            self.settings = settings
+
+        def readiness(self) -> dict[str, bool]:
+            return {"audit_store": True, "qdrant": True}
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(module, "Runtime", ReadyRuntime)
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "checks": {"audit_store": True, "qdrant": True},
+    }
+
+
+def test_readiness_fails_when_a_required_dependency_is_down(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from met_agent import main as module
+
+    class UnreadyRuntime:
+        def __init__(self, settings: Settings) -> None:
+            self.settings = settings
+
+        def readiness(self) -> dict[str, bool]:
+            return {"audit_store": True, "qdrant": False}
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(module, "Runtime", UnreadyRuntime)
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "unavailable",
+        "checks": {"audit_store": True, "qdrant": False},
+    }
+
+
 def test_docs_and_openapi_are_available(client: TestClient) -> None:
     assert client.get("/docs").status_code == 200
     schema = client.get("/openapi.json").json()

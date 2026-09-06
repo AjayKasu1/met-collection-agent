@@ -106,6 +106,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60
     llm_max_retries: Annotated[int, Field(ge=0, le=5)] = 2
     llm_pacing_enabled: bool = False
+    eval_pacing_enabled: bool = True
     llm_max_output_tokens: Annotated[int, Field(ge=128, le=8192)] = 1600
     llm_rate_limits: dict[str, LLMRateLimit] = Field(default_factory=default_llm_limits)
     llm_default_tokens_per_minute: Annotated[int, Field(gt=0)] = 6000
@@ -125,6 +126,11 @@ class Settings(BaseSettings):
     ingest_max_objects: Annotated[int, Field(gt=0)] = 10_000
     embedding_batch_size: Annotated[int, Field(gt=0, le=100)] = 32
     data_dir: Path = Path("data")
+    audit_database_url: Credential | None = Field(default=None, repr=False)
+    audit_store_required: bool = False
+    audit_retention_days: Annotated[int, Field(ge=1, le=3650)] = 30
+    audit_pool_min_size: Annotated[int, Field(ge=0, le=20)] = 1
+    audit_pool_max_size: Annotated[int, Field(ge=1, le=50)] = 4
 
     langfuse_public_key: Credential | None = Field(default=None, repr=False)
     langfuse_secret_key: Credential | None = Field(default=None, repr=False)
@@ -237,6 +243,23 @@ class Settings(BaseSettings):
                 "Required settings: {keys}",
                 {"keys": "EDGE_ORIGIN_TOKEN"},
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_audit_store(self) -> Self:
+        """Production can require durable PostgreSQL without weakening local development."""
+        if self.audit_store_required and self.audit_database_url is None:
+            raise PydanticCustomError(
+                "missing_configuration",
+                "Required settings: {keys}",
+                {"keys": "AUDIT_DATABASE_URL"},
+            )
+        if self.audit_database_url is not None:
+            value = self.audit_database_url.get_secret_value()
+            if not value.startswith(("postgresql://", "postgres://")):
+                raise ValueError("AUDIT_DATABASE_URL must be a PostgreSQL connection string")
+        if self.audit_pool_min_size > self.audit_pool_max_size:
+            raise ValueError("AUDIT_POOL_MIN_SIZE cannot exceed AUDIT_POOL_MAX_SIZE")
         return self
 
     def provider_key(self, provider: ChatProvider) -> SecretStr | None:

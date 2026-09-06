@@ -23,7 +23,11 @@ class OriginAuthenticationMiddleware:
         self.token = token
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("path") == "/health" or not self.required:
+        if (
+            scope["type"] != "http"
+            or scope.get("path") in {"/health", "/ready"}
+            or not self.required
+        ):
             await self.app(scope, receive, send)
             return
 

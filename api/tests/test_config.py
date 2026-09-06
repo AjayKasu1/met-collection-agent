@@ -145,6 +145,22 @@ def test_required_edge_authentication_requires_secret(
     assert settings.edge_origin_token is not None
 
 
+def test_required_audit_store_validates_postgres_and_pool_bounds(
+    valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUDIT_STORE_REQUIRED", "true")
+    with pytest.raises(ConfigurationError, match="AUDIT_DATABASE_URL"):
+        load_settings(env_file=None)
+    monkeypatch.setenv("AUDIT_DATABASE_URL", "sqlite:///private.sqlite")
+    with pytest.raises(ConfigurationError):
+        load_settings(env_file=None)
+    monkeypatch.setenv("AUDIT_DATABASE_URL", "postgresql://localhost/audit")
+    monkeypatch.setenv("AUDIT_POOL_MIN_SIZE", "5")
+    monkeypatch.setenv("AUDIT_POOL_MAX_SIZE", "4")
+    with pytest.raises(ConfigurationError):
+        load_settings(env_file=None)
+
+
 def test_incomplete_optional_services_are_disabled(
     valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

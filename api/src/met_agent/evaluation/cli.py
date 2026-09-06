@@ -57,6 +57,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     rows = read_rows(args.golden, quick=args.quick)
     settings = load_settings()
     configured_deadline = settings.chat_deadline_seconds
+    interactive_pacing = settings.llm_pacing_enabled
+    settings = settings.model_copy(update={"llm_pacing_enabled": settings.eval_pacing_enabled})
     if args.chat_deadline_seconds is not None:
         settings = settings.model_copy(update={"chat_deadline_seconds": args.chat_deadline_seconds})
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()  # noqa: S607
@@ -92,6 +94,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "chat_deadline_seconds": str(settings.chat_deadline_seconds),
             "configured_chat_deadline_seconds": str(configured_deadline),
             "pacing_enabled": str(settings.llm_pacing_enabled),
+            "interactive_pacing_enabled": str(interactive_pacing),
             "rate_limits": json.dumps(
                 {k: v.model_dump() for k, v in settings.llm_rate_limits.items()}, sort_keys=True
             ),
@@ -101,7 +104,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         execution_notes=[
             f"Chat deadline: {settings.chat_deadline_seconds:g} seconds. "
             f"Saved interactive deadline: {configured_deadline:g} seconds. "
-            "An explicit batch override does not establish interactive latency acceptance."
+            f"Evaluation pacing: {settings.llm_pacing_enabled}. "
+            "Batch pacing and deadline settings do not establish interactive latency acceptance."
         ],
         expected_ids=[r.id for r in rows],
     )

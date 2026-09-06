@@ -6,7 +6,7 @@ from uuid import uuid4
 import httpx
 from pydantic import SecretStr
 
-from met_agent.agent.events import EventStore
+from met_agent.agent.events import AuditStore, EventStore, PostgresEventStore
 from met_agent.agent.loop import Agent
 from met_agent.agent.models import AgentAnswer, ChatRequest
 from met_agent.config import Settings
@@ -21,13 +21,21 @@ from met_agent.tools.registry import create_registry
 class Runtime:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.events = EventStore(
-            settings.data_dir / "sessions.sqlite3",
-            secrets=[
-                value.get_secret_value()
-                for name in type(settings).model_fields
-                if isinstance(value := getattr(settings, name), SecretStr)
-            ],
+        secrets = [
+            value.get_secret_value()
+            for name in type(settings).model_fields
+            if isinstance(value := getattr(settings, name), SecretStr)
+        ]
+        self.events: AuditStore = (
+            PostgresEventStore(
+                settings.audit_database_url.get_secret_value(),
+                secrets=secrets,
+                retention_days=settings.audit_retention_days,
+                pool_min_size=settings.audit_pool_min_size,
+                pool_max_size=settings.audit_pool_max_size,
+            )
+            if settings.audit_database_url
+            else EventStore(settings.data_dir / "sessions.sqlite3", secrets=secrets)
         )
         self.telemetry = (
             Telemetry(settings, self.events) if settings.optional_services.langfuse else None
@@ -69,8 +77,23 @@ class Runtime:
                 "A verified answer was not ready in time. Please try again shortly.",
             ) from None
 
+    def readiness(self) -> dict[str, bool]:
+        """Probe required durable dependencies without loading embedding models."""
+        checks: dict[str, bool] = {}
+        try:
+            checks["audit_store"] = self.events.ready()
+        except Exception:
+            checks["audit_store"] = False
+        try:
+            self.qdrant.get_collections()
+            checks["qdrant"] = True
+        except Exception:
+            checks["qdrant"] = False
+        return checks
+
     def close(self) -> None:
         self.http.close()
         self.qdrant.close()
+        self.events.close()
         if self.telemetry:
             self.telemetry.close()

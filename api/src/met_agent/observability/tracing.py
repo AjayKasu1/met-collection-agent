@@ -5,13 +5,13 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, cast
 
-from met_agent.agent.events import EventStore
+from met_agent.agent.events import AuditStore
 from met_agent.agent.models import AgentAnswer, ChatRequest
 from met_agent.config import Settings
 
 
 class Telemetry:
-    def __init__(self, settings: Settings, events: EventStore, *, client: Any = None) -> None:
+    def __init__(self, settings: Settings, events: AuditStore, *, client: Any = None) -> None:
         from langfuse import Langfuse
 
         if not settings.optional_services.langfuse:
@@ -77,7 +77,7 @@ class Telemetry:
         self.client.shutdown()
 
 
-def make_callback(client: Any, events: EventStore) -> Any:
+def make_callback(client: Any, events: AuditStore) -> Any:
     """Use the supported CustomLogger hooks, without SDK-global credentials or callbacks."""
     from litellm.integrations.custom_logger import CustomLogger
 

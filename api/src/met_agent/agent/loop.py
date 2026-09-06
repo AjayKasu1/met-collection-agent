@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from pydantic import JsonValue
 
-from met_agent.agent.events import EventStore
+from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
@@ -30,7 +30,7 @@ NOT_FOUND: dict[Language, str] = {
 
 
 class Agent:
-    def __init__(self, model: ChatModel, tools: ToolRegistry, events: EventStore) -> None:
+    def __init__(self, model: ChatModel, tools: ToolRegistry, events: AuditStore) -> None:
         self.model, self.tools, self.events = model, tools, events
         self._sessions: dict[UUID, asyncio.Lock] = {}
         self._users: dict[UUID, int] = {}
@@ -50,10 +50,11 @@ class Agent:
 
     async def _turn(self, request: ChatRequest, session: UUID) -> AgentAnswer:
         started, turn = time.monotonic(), uuid4()
-        history = self.events.history(session)
+        history = await asyncio.to_thread(self.events.history, session)
+        buffered_events: list[tuple[str, JsonValue]] = []
 
         def audit(kind: str, data: JsonValue) -> None:
-            self.events.append(session, turn, kind, data)
+            buffered_events.append((kind, data))
 
         context = CallContext(audit=audit)
         token = CURRENT_CALL.set(context)
@@ -129,6 +130,7 @@ class Agent:
             raise
         finally:
             CURRENT_CALL.reset(token)
+            await asyncio.to_thread(self.events.append_many, session, turn, buffered_events)
 
     async def _workspace(
         self,
@@ -376,5 +378,5 @@ class Agent:
             policy_refusal=refusal,
             model_calls=context.ledger.calls,
         )
-        self.events.append(session, turn, "final_answer", answer.model_dump(mode="json"))
+        context.audit("final_answer", answer.model_dump(mode="json"))
         return answer
