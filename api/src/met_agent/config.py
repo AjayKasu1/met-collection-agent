@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     llm_model_fallback: NonEmptyString | None = None
     llm_model_fallback_2: NonEmptyString | None = None
     llm_fallback_enabled: bool = False
-    chat_deadline_seconds: Annotated[float, Field(gt=0, le=600)] = 30
+    chat_deadline_seconds: Annotated[float, Field(gt=0, le=600)] = 120
     groq_api_key: Credential | None = Field(default=None, repr=False)
     cerebras_api_key: Credential | None = Field(default=None, repr=False)
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60
