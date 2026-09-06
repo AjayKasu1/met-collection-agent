@@ -6,12 +6,6 @@ import { isRecord } from "@/lib/validation";
 const TURNSTILE_ACTION = "chat";
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-type SecurityBindings = CloudflareEnv & {
-  ORIGIN_AUTH_TOKEN?: string;
-  TURNSTILE_HOSTNAMES?: string;
-  TURNSTILE_SECRET?: string;
-};
-
 function hostnames(value: string | undefined): Set<string> {
   return new Set(
     (value ?? "")
@@ -21,8 +15,8 @@ function hostnames(value: string | undefined): Set<string> {
   );
 }
 
-async function workerEnv(): Promise<SecurityBindings> {
-  return (await getCloudflareContext({ async: true })).env as SecurityBindings;
+async function workerEnv(): Promise<CloudflareEnv> {
+  return (await getCloudflareContext({ async: true })).env;
 }
 
 export async function originHeaders(): Promise<Record<string, string>> {

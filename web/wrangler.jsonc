@@ -17,6 +17,9 @@
   "vars": {
     "TURNSTILE_HOSTNAMES": "met-collection-agent.ajaykasu7.workers.dev"
   },
+  "secrets": {
+    "required": ["ORIGIN_AUTH_TOKEN", "TURNSTILE_SECRET"]
+  },
   "ratelimits": [
     {
       "name": "CHAT_RATE_LIMITER",
