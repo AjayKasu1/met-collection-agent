@@ -2,9 +2,10 @@
 
 import csv
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -17,6 +18,7 @@ from met_agent.ingestion.models import CollectionObject, IndexDocument
 from met_agent.ingestion.storage import load_objects, save_objects
 from met_agent.ingestion.verify import GoldenRow
 from met_agent.retrieval.embeddings import EmbeddingError
+from met_agent.retrieval.qdrant_store import IndexCompatibilityError
 
 
 @pytest.fixture
@@ -33,6 +35,17 @@ def configured_commands(
 def stub_index(monkeypatch: pytest.MonkeyPatch) -> list[IndexDocument]:
     indexed: list[IndexDocument] = []
 
+    class Client:
+        def close(self) -> None:
+            return None
+
+        def count(self, collection: str, *, exact: bool) -> SimpleNamespace:
+            assert collection and exact
+            return SimpleNamespace(count=len(indexed))
+
+        def scroll(self, *args: Any, **kwargs: Any) -> tuple[list[SimpleNamespace], None]:
+            return ([SimpleNamespace(payload=document.payload) for document in indexed], None)
+
     class Store:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
@@ -45,7 +58,7 @@ def stub_index(monkeypatch: pytest.MonkeyPatch) -> list[IndexDocument]:
             assert ids
 
     monkeypatch.setattr(commands, "HybridStore", Store)
-    monkeypatch.setattr(commands, "qdrant_client", lambda _: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(commands, "qdrant_client", lambda _: Client())
     monkeypatch.setattr(commands, "create_embedder", lambda _: None)
     monkeypatch.setattr(commands, "BM25Embedder", lambda _: None)
     return indexed
@@ -302,8 +315,8 @@ def test_visitor_prepare_and_index_preserves_provenance(
     configured_commands: Settings, stub_index: list[IndexDocument], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class Crawler:
-        def __init__(self, *args: Any) -> None:
-            pass
+        def __init__(self, source: Any) -> None:
+            assert source.interval == 3
 
         def fetch(self, url: str) -> tuple[str, str]:
             return url, "<title>Visit</title><main><h1>Hours</h1><p>Closed Wednesday.</p></main>"
@@ -318,6 +331,82 @@ def test_visitor_prepare_and_index_preserves_provenance(
     monkeypatch.setattr(commands, "chunk_markdown", lambda *a, **kw: [])
     with pytest.raises(SourceError, match="No visitor chunks"):
         commands.ingest_visitor_info(["--sources", str(sources)])
+
+
+def test_visitor_release_uses_versioned_collection_and_atomic_alias(
+    configured_commands: Settings,
+    stub_index: list[IndexDocument],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    aliases = [SimpleNamespace(alias_name="visitors_live", collection_name="visitors_old")]
+    operations: list[Any] = []
+
+    class Client:
+        def close(self) -> None:
+            return None
+
+        def count(self, collection: str, *, exact: bool) -> SimpleNamespace:
+            assert collection.startswith("visitors_live_") and exact
+            return SimpleNamespace(count=len(stub_index))
+
+        def scroll(self, *args: Any, **kwargs: Any) -> tuple[list[SimpleNamespace], None]:
+            return ([SimpleNamespace(payload=document.payload) for document in stub_index], None)
+
+        def get_collections(self) -> SimpleNamespace:
+            return SimpleNamespace(collections=[SimpleNamespace(name="visitors_old")])
+
+        def get_aliases(self) -> SimpleNamespace:
+            return SimpleNamespace(aliases=aliases)
+
+        def update_collection_aliases(self, changes: list[Any]) -> bool:
+            operations.extend(changes)
+            return True
+
+    monkeypatch.setattr(commands, "qdrant_client", lambda _: Client())
+    directory = configured_commands.data_dir / "saved"
+    directory.mkdir()
+    html = directory / "visit.html"
+    html.write_text("<title>Visit</title><main><h1>Hours</h1><p>Closed Wednesday.</p></main>")
+    (directory / "sources.yaml").write_text(
+        "pages:\n"
+        "  - label: Visit\n"
+        "    url: https://www.metmuseum.org/visit\n"
+        "    html_file: visit.html\n"
+        "    fetched_at: '2026-09-06T00:00:00+00:00'\n"
+    )
+
+    assert (
+        commands.ingest_visitor_info(
+            ["--html-dir", str(directory), "--promote-alias", "visitors_live"]
+        )
+        == 0
+    )
+    report = (configured_commands.data_dir / "visitor_refresh.json").read_text()
+    assert '"previous_collection": "visitors_old"' in report
+    assert '"promoted_alias": "visitors_live"' in report
+    assert len(operations) == 2
+    assert operations[0].delete_alias.alias_name == "visitors_live"
+    assert operations[1].create_alias.alias_name == "visitors_live"
+
+
+def test_visitor_release_rejects_unsafe_options_and_alias_collision(
+    configured_commands: Settings,
+) -> None:
+    with pytest.raises(ValueError, match="prepare-only"):
+        commands.ingest_visitor_info(["--prepare-only", "--promote-alias", "visitors"])
+    with pytest.raises(SystemExit):
+        commands.ingest_visitor_info(["--request-interval-seconds", "0.5"])
+
+    client = SimpleNamespace(
+        get_collections=lambda: SimpleNamespace(collections=[SimpleNamespace(name="visitors")]),
+        get_aliases=lambda: SimpleNamespace(aliases=[]),
+    )
+    with pytest.raises(IndexCompatibilityError, match="physical collection"):
+        commands._promote_collection(cast(Any, client), "candidate", "visitors")
+    assert (
+        commands._versioned_collection("visitors", datetime(2026, 9, 6, 1, 2, 3, tzinfo=UTC))
+        == "visitors_20260906T010203Z"
+    )
 
 
 @pytest.mark.parametrize("provider", ["gemini", "local"])

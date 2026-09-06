@@ -7,9 +7,19 @@ pages:
     url: https://www.metmuseum.org/policies/complimentary-admission
   - label: Accessibility, entrances, elevators, and map guidance
     url: https://www.metmuseum.org/visit-guides/accessibility
+  - label: Family visits and children's programs
+    url: https://www.metmuseum.org/visit-guides/families
+  - label: Group visits and reservation requirements
+    url: https://www.metmuseum.org/plan-your-visit/group-visits
+  - label: The Met Cloisters hours, admission, and directions
+    url: https://www.metmuseum.org/plan-your-visit/met-cloisters
   - label: Bag, stroller, and visitor policies
     url: https://www.metmuseum.org/policies/visitor-guidelines
   - label: Current gallery closures
     url: https://www.metmuseum.org/plan-your-visit/gallery-closures
+  - label: Current exhibitions
+    url: https://www.metmuseum.org/exhibitions
+  - label: Interactive museum map and directory
+    url: https://maps.metmuseum.org/
   - label: Contact information
     url: https://www.metmuseum.org/about-the-met/contact-us

@@ -12,7 +12,8 @@ import httpx
 import structlog
 import yaml
 from pydantic import BaseModel, ValidationError
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
+from qdrant_client.conversions.common_types import PointId
 
 from met_agent.config import ConfigurationError, Settings, load_settings
 from met_agent.ingestion.collection import (
@@ -71,6 +72,14 @@ def _batch_delay(value: str) -> float:
     if not math.isfinite(delay) or delay < 0:
         raise argparse.ArgumentTypeError("Batch delay must be finite and nonnegative")
     return delay
+
+
+def _request_interval(value: str) -> float:
+    """Require a respectful live-crawl interval before making any source request."""
+    interval = float(value)
+    if not math.isfinite(interval) or interval < 1:
+        raise argparse.ArgumentTypeError("Request interval must be finite and at least one second")
+    return interval
 
 
 def _add_batch_pacing(parser: argparse.ArgumentParser) -> None:
@@ -258,6 +267,73 @@ class _VisitorSources(BaseModel):
     pages: list[_VisitorPage]
 
 
+def _versioned_collection(alias: str, captured_at: datetime) -> str:
+    """Create an auditable physical collection name behind a stable read alias."""
+    suffix = captured_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return f"{alias}_{suffix}"
+
+
+def _validate_visitor_release(
+    client: QdrantClient,
+    collection: str,
+    chunks: Sequence[VisitorChunk],
+) -> dict[str, object]:
+    """Verify an indexed visitor release before it can receive production traffic."""
+    expected_urls = {chunk.source_url for chunk in chunks}
+    count = client.count(collection, exact=True).count
+    if count != len(chunks):
+        raise IndexCompatibilityError("Visitor release point count differs from prepared chunks")
+
+    indexed_urls: set[str] = set()
+    offset: PointId | None = None
+    while True:
+        points, offset = client.scroll(
+            collection,
+            scroll_filter=None,
+            limit=256,
+            offset=offset,
+            with_payload=["source_url"],
+            with_vectors=False,
+        )
+        for point in points:
+            source_url = (point.payload or {}).get("source_url")
+            if isinstance(source_url, str):
+                indexed_urls.add(source_url)
+        if offset is None:
+            break
+    if indexed_urls != expected_urls:
+        raise IndexCompatibilityError("Visitor release source coverage differs from prepared pages")
+    return {
+        "points": count,
+        "pages": len(expected_urls),
+        "source_urls": sorted(expected_urls),
+    }
+
+
+def _promote_collection(client: QdrantClient, collection: str, alias: str) -> str | None:
+    """Atomically move a stable alias and retain its old collection for rollback."""
+    physical = {item.name for item in client.get_collections().collections}
+    aliases = {item.alias_name: item.collection_name for item in client.get_aliases().aliases}
+    if alias in physical:
+        raise IndexCompatibilityError(
+            "Promotion alias conflicts with a physical collection; choose a dedicated alias"
+        )
+    previous = aliases.get(alias)
+    operations: list[models.AliasOperations] = []
+    if previous is not None:
+        operations.append(
+            models.DeleteAliasOperation(delete_alias=models.DeleteAlias(alias_name=alias))
+        )
+    operations.append(
+        models.CreateAliasOperation(
+            create_alias=models.CreateAlias(collection_name=collection, alias_name=alias)
+        )
+    )
+    if not client.update_collection_aliases(operations):
+        raise IndexCompatibilityError("Qdrant did not acknowledge the visitor alias promotion")
+    return previous
+
+
 def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
     """Prepare live or saved visitor pages, then replace stale chunks after successful indexing."""
     parser = _base_parser("Ingest curated public visitor-information pages")
@@ -277,8 +353,25 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--collection", help="Override the visitor collection for an isolated pilot"
     )
+    parser.add_argument(
+        "--promote-alias",
+        help="After validation, atomically point this read alias at a versioned collection",
+    )
+    parser.add_argument(
+        "--request-interval-seconds",
+        type=_request_interval,
+        default=3,
+        help="Minimum interval between live requests, including robots and redirects",
+    )
+    parser.add_argument(
+        "--report",
+        type=Path,
+        help="Write a machine-readable refresh report; defaults inside DATA_DIR",
+    )
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args(argv)
+    if args.prepare_only and args.promote_alias:
+        raise ValueError("A prepare-only run cannot promote a collection alias")
     settings = load_settings()
     configure_logging(settings.log_level)
     output: Path = args.data_dir or settings.data_dir
@@ -290,7 +383,7 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
         sources = _VisitorSources.model_validate(yaml.safe_load(sources_path.read_text()))
         pages = []
         with httpx.Client(timeout=30, follow_redirects=False) as client:
-            crawler = VisitorCrawler(SourceClient(client, interval=1))
+            crawler = VisitorCrawler(SourceClient(client, interval=args.request_interval_seconds))
             for page in sources.pages:
                 url, html = crawler.fetch(page.url)
                 pages.append(
@@ -327,12 +420,17 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
         raise SourceError("No visitor chunks were produced")
     save_chunks(output / "visitor_chunks.jsonl", chunks)
     if not args.prepare_only:
+        collection = args.collection or (
+            _versioned_collection(args.promote_alias, datetime.now(UTC))
+            if args.promote_alias
+            else settings.qdrant_visitor_collection
+        )
         dense = create_embedder(settings)
         sparse = BM25Embedder(settings.data_dir / "models")
         with closing(qdrant_client(settings)) as client:
             store = HybridStore(
                 client,
-                args.collection or settings.qdrant_visitor_collection,
+                collection,
                 settings.embedding_model,
                 settings.embedding_dimensions,
                 embedding_provider=settings.embedding_provider,
@@ -348,6 +446,26 @@ def ingest_visitor_info(argv: Sequence[str] | None = None) -> int:
                 store.remove_stale_page_chunks(
                     url, [c.point_id for c in chunks if c.source_url == url]
                 )
+            release = _validate_visitor_release(client, collection, chunks)
+            previous = (
+                _promote_collection(client, collection, args.promote_alias)
+                if args.promote_alias
+                else None
+            )
+        fetched_at = [content.fetched_at for content in pages]
+        report = {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "candidate_collection": collection,
+            "promoted_alias": args.promote_alias,
+            "previous_collection": previous,
+            "oldest_capture": min(fetched_at).isoformat(),
+            "newest_capture": max(fetched_at).isoformat(),
+            "embedding_provider": settings.embedding_provider,
+            "embedding_model": settings.embedding_model,
+            "embedding_dimensions": settings.embedding_dimensions,
+            **release,
+        }
+        write_json(args.report or output / "visitor_refresh.json", report)
     logger.info("visitor_ingestion_completed", pages=len(pages), chunks=len(chunks))
     return 0
 

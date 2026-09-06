@@ -1,0 +1,63 @@
+name: Refresh visitor information
+
+on:
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-visitor-information
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Build, verify, and promote visitor index
+    if: vars.ENABLE_VISITOR_REFRESH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: data-refresh
+    env:
+      QDRANT_URL: ${{ secrets.QDRANT_URL }}
+      QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+      LLM_MODEL: groq/openai/gpt-oss-120b
+      LLM_MODEL_LITE: groq/openai/gpt-oss-20b
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_MODEL: intfloat/multilingual-e5-large
+      EMBEDDING_DIMENSIONS: "1024"
+      DATA_DIR: data/visitor-refresh
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.17"
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - name: Require refresh credentials
+        run: |
+          test -n "$QDRANT_URL" || { echo 'Missing QDRANT_URL data-refresh secret'; exit 1; }
+          test -n "$QDRANT_API_KEY" || { echo 'Missing QDRANT_API_KEY data-refresh secret'; exit 1; }
+      - name: Restore multilingual embedding model
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: data/visitor-refresh/models
+          key: visitor-embedding-${{ runner.os }}-${{ hashFiles('api/uv.lock') }}-e5-large
+      - name: Install locked dependencies
+        run: uv sync --project api --locked
+      - name: Build, verify, and atomically promote the release
+        run: >-
+          make ingest-visitors
+          ARGS="--promote-alias met_visitor_info_live
+          --request-interval-seconds 3
+          --report data/visitor-refresh/report.json"
+      - name: Publish the non-secret refresh report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visitor-refresh-${{ github.run_id }}
+          path: data/visitor-refresh/report.json
+          if-no-files-found: error
+          retention-days: 30

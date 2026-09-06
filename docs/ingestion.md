@@ -58,7 +58,7 @@ make ingest-visitors ARGS="--data-dir data/pilot --collection met_visitor_info_p
 make ingest-visitors ARGS="--data-dir data/pilot --collection met_visitor_info_pilot"
 ```
 
-The curated YAML covers hours, admission, directions, accessibility, bag/stroller policies, map guidance, gallery closures, and contact information. Requests identify this project, run at most once per second, honor stricter robots crawl rules, and recheck permission after redirects. A failed robots request stops the crawl. HTTP 404 for `robots.txt` permits crawling; access failures and exhausted rate limits do not.
+The curated YAML covers hours, admission, directions, accessibility, families, group visits, The Met Cloisters, visitor policies, current exhibitions, the interactive map, gallery closures, and contact information. Requests identify this project, wait three seconds by default, honor stricter robots crawl rules, and recheck permission after redirects. `--request-interval-seconds` can increase that delay but cannot reduce it below one second. A failed robots request stops the crawl. HTTP 404 for `robots.txt` permits crawling; access failures and exhausted rate limits do not.
 
 To ingest Chrome "Webpage, Complete" saves, put top-level UTF-8 `.html` or `.htm` files under `data/visitor_pages/`. When no `sources.yaml` exists, the loader derives each source URL from its canonical link, falling back to Chrome's explicit saved-from comment, and uses file modification time in UTC as `fetched_at`. It writes a reproducible manifest and records how the provenance was obtained. Companion asset directories are ignored. File mtime is an approximation of capture time; copying or editing a page can change it. Supply an explicit manifest when the URL is missing or ambiguous, or when you have a more accurate capture time. Each manual entry requires a label, original Met HTTPS URL, relative HTML filename, and a timestamp with a timezone. This example illustrates the format; use the time you captured your page:
 
@@ -78,6 +78,16 @@ make ingest-visitors ARGS="--html-dir data/visitor_pages --data-dir data/pilot -
 `--html-dir` without a value defaults to `data/visitor_pages`. `--sources PATH` overrides the local manifest location. Saved mode makes no visitor HTTP or robots requests and never falls back to crawling. An explicitly selected missing manifest is an error. Indexing uses the configured text embedder and contacts Qdrant. Local inference does not contact Google. Source URLs, capture timestamps, headings, and stable chunk IDs flow through the same pipeline as live pages. The loader rejects missing timezones, duplicate URLs, paths or symlinks outside the HTML directory, non-HTML filenames, non-UTF-8 text, and files larger than 20 MiB. A saved manifest takes precedence on subsequent runs; editing a file does not silently revise its recorded timestamp. Text keeps meaningful image alt descriptions while omitting local asset paths and tracking frames. Files, manifests, and generated chunks remain under ignored `data/`.
 
 Main content becomes Markdown with headings, tables, lists, and links retained. Each section is divided into approximately 500-token windows with 50-token overlap. The deterministic Unicode-safe counter estimates tokens locally and is not a Gemini billing measure. Each chunk records its source URL, fetch timestamp, heading, and stable ID. Stale chunks for a page are removed only after all replacement chunks have been acknowledged.
+
+Production refreshes use a stable alias and an immutable timestamped collection:
+
+```sh
+make ingest-visitors ARGS="--promote-alias met_visitor_info_live --request-interval-seconds 3"
+```
+
+The command crawls and prepares every page before vector writes, builds a separate physical collection, validates embedding metadata, exact point count, and exact source-URL coverage, then changes the alias in one atomic Qdrant operation. A validation or ingestion failure never moves the alias. `data/visitor_refresh.json` records the new and previous physical collections, capture range, embedding identity, counts, and source URLs. The prior collection is retained for rollback. `--prepare-only` and `--promote-alias` are mutually exclusive, and a promotion alias cannot collide with a physical collection.
+
+The weekly `Refresh visitor information` workflow uses this release path. It remains disabled until `ENABLE_VISITOR_REFRESH=true` and the `data-refresh` environment has `QDRANT_URL` and a write-scoped `QDRANT_API_KEY`. Its report is retained as a non-secret workflow artifact for 30 days.
 
 The current [interactive museum map](https://maps.metmuseum.org/) requires JavaScript and supplies no usable static floor-plan text. The accessibility page contributes the museum's published map guidance and map link. The index does not infer restroom proximity, gallery adjacency, or an elevator's location relative to a particular artwork. Those questions require a verified map source or a handoff in the later agent phase.
 
