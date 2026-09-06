@@ -25,7 +25,7 @@ For a one-click Codespace, first add Codespaces secrets for `GROQ_API_KEY`, `LLM
 
 ## API on Google Cloud Run
 
-The API has no end-user authentication or public rate limit. A public Cloud Run service can consume the configured model quota if its URL is abused. Use this path for a controlled demonstration, restrict traffic through an existing gateway, or add authentication and distributed rate limiting before advertising the URL.
+Cloud Run remains publicly reachable so the Cloudflare Worker can call it without Google-specific identity exchange. Production data routes require a shared edge credential, while `/health` and `/ready` remain public for probes. Turnstile and the distributed chat rate limit run at Cloudflare before an expensive model request reaches Cloud Run.
 
 The following commands use the current `gcloud` project and deploy to `us-east1`. Qdrant must be a managed HTTPS endpoint with `met_objects` and `met_visitor_info` restored from the pinned bundle first.
 
@@ -47,6 +47,16 @@ printf '%s' "$QDRANT_API_KEY_INPUT" | gcloud secrets create met-agent-qdrant-api
   || printf '%s' "$QDRANT_API_KEY_INPUT" | gcloud secrets versions add met-agent-qdrant-api-key --data-file=-
 unset QDRANT_API_KEY_INPUT
 
+read -rsp 'Managed PostgreSQL TLS connection URL: ' AUDIT_DATABASE_URL_INPUT && printf '\n'
+printf '%s' "$AUDIT_DATABASE_URL_INPUT" | gcloud secrets create met-agent-audit-database-url --data-file=- 2>/dev/null \
+  || printf '%s' "$AUDIT_DATABASE_URL_INPUT" | gcloud secrets versions add met-agent-audit-database-url --data-file=-
+unset AUDIT_DATABASE_URL_INPUT
+
+read -rsp 'Shared edge-to-origin credential: ' EDGE_ORIGIN_TOKEN_INPUT && printf '\n'
+printf '%s' "$EDGE_ORIGIN_TOKEN_INPUT" | gcloud secrets create met-agent-edge-origin-token --data-file=- 2>/dev/null \
+  || printf '%s' "$EDGE_ORIGIN_TOKEN_INPUT" | gcloud secrets versions add met-agent-edge-origin-token --data-file=-
+unset EDGE_ORIGIN_TOKEN_INPUT
+
 gcloud run deploy met-collection-agent-api \
   --source api \
   --region "$GCP_REGION" \
@@ -57,17 +67,18 @@ gcloud run deploy met-collection-agent-api \
   --concurrency 4 \
   --min 1 \
   --max 3 \
-  --set-secrets GROQ_API_KEY=met-agent-groq-api-key:latest,QDRANT_API_KEY=met-agent-qdrant-api-key:latest \
-  --set-env-vars "^@^APP_ENV=production@LOG_LEVEL=INFO@LLM_MODEL=groq/openai/gpt-oss-120b@LLM_MODEL_LITE=groq/openai/gpt-oss-20b@LLM_FALLBACK_ENABLED=false@USE_AI_GATEWAY=false@EMBEDDING_PROVIDER=local@EMBEDDING_MODEL=intfloat/multilingual-e5-large@EMBEDDING_DIMENSIONS=1024@EMBEDDING_THREADS=4@QDRANT_URL=${QDRANT_URL}@QDRANT_COLLECTION=met_objects@QDRANT_VISITOR_COLLECTION=met_visitor_info@CORS_ORIGINS=[\"https://met-collection-agent.ajaykasu7.workers.dev\"]@DATA_DIR=/tmp/met-agent@GIT_SHA=$(git rev-parse HEAD)"
+  --set-secrets GROQ_API_KEY=met-agent-groq-api-key:latest,QDRANT_API_KEY=met-agent-qdrant-api-key:latest,AUDIT_DATABASE_URL=met-agent-audit-database-url:latest,EDGE_ORIGIN_TOKEN=met-agent-edge-origin-token:latest \
+  --set-env-vars "^@^APP_ENV=production@LOG_LEVEL=INFO@LLM_MODEL=groq/openai/gpt-oss-120b@LLM_MODEL_LITE=groq/openai/gpt-oss-20b@LLM_FALLBACK_ENABLED=false@LLM_PACING_ENABLED=false@CHAT_DEADLINE_SECONDS=120@USE_AI_GATEWAY=false@EMBEDDING_PROVIDER=local@EMBEDDING_MODEL=intfloat/multilingual-e5-large@EMBEDDING_DIMENSIONS=1024@EMBEDDING_THREADS=4@QDRANT_URL=${QDRANT_URL}@QDRANT_COLLECTION=met_objects@QDRANT_VISITOR_COLLECTION=met_visitor_info_live@AUDIT_STORE_REQUIRED=true@EDGE_AUTH_REQUIRED=true@CORS_ORIGINS=[\"https://met-collection-agent.ajaykasu7.workers.dev\"]@DATA_DIR=/tmp/met-agent@GIT_SHA=$(git rev-parse HEAD)"
 ```
 
-Cloud Run injects `PORT`; the image honors it and exposes the configured health check at `/health`. The first semantic query downloads the pinned 2.24 GB local embedding model. Four CPUs, 8 GiB memory, minimum instance count one, and concurrency four reduce cold-start and memory pressure. Adjust them only after measuring production traffic and memory. `DATA_DIR` is ephemeral on Cloud Run, so local SQLite session audits do not survive instance replacement and cannot coordinate across multiple instances. Configure a durable audit store before using those records for operational or compliance purposes.
+Cloud Run injects `PORT`; the image honors it and exposes liveness at `/health` and dependency readiness at `/ready`. The first semantic query downloads the pinned 2.24 GB local embedding model. Four CPUs, 8 GiB memory, minimum instance count one, and concurrency four reduce cold-start and memory pressure. Adjust them only after measuring production traffic and memory. PostgreSQL retains audits across revisions and instances. With the default pool maximum of four and three Cloud Run instances, reserve at least twelve application connections plus database administration headroom.
 
 Capture the deployed origin and verify it before building the Worker:
 
 ```sh
 export API_URL="$(gcloud run services describe met-collection-agent-api --region "$GCP_REGION" --format='value(status.url)')"
 curl --fail --silent --show-error "$API_URL/health"
+curl --fail --silent --show-error "$API_URL/ready"
 ```
 
 ## Web on Cloudflare Workers
@@ -90,9 +101,10 @@ Use this option when Cloudflare should own deployments from GitHub:
 | Deploy command | `pnpm exec wrangler deploy` |
 | Non-production deploy command | `pnpm exec wrangler versions upload` |
 
-4. Add the build variable `NEXT_PUBLIC_API_URL` with the verified Cloud Run `API_URL`. It must use HTTPS and must not end with `/`.
-5. Keep the GitHub repository variable `ENABLE_WEB_DEPLOY` unset or `false`. This prevents the separate GitHub Actions deploy workflow from competing with Cloudflare Builds.
-6. Deploy and verify the Worker URL, then send one factual collection question and confirm that its citation link opens.
+4. Add build variables `NEXT_PUBLIC_API_URL` with the verified Cloud Run `API_URL` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` with the production widget's site key. The API URL must use HTTPS and must not end with `/`.
+5. Add Worker secrets `TURNSTILE_SECRET` and `ORIGIN_AUTH_TOKEN`. The latter must match Cloud Run's `EDGE_ORIGIN_TOKEN`.
+6. Keep the GitHub repository variable `ENABLE_WEB_DEPLOY` unset or `false`. This prevents the separate GitHub Actions deploy workflow from competing with Cloudflare Builds.
+7. Deploy and complete the release smoke test in [production operations](operations.md).
 
 Cloudflare Builds installs the package manager declared in `web/package.json` and uses the locked Wrangler dependency. The checked-in `wrangler.jsonc` enables Workers logs and uses a current compatibility date with `nodejs_compat`.
 
@@ -107,9 +119,10 @@ Create a GitHub `production` environment with these settings:
 | Environment secret | `CLOUDFLARE_API_TOKEN` | Scoped token with Workers Scripts Edit |
 | Environment secret | `CF_ACCOUNT_ID` | Cloudflare account ID |
 | Repository variable | `NEXT_PUBLIC_API_URL` | Verified HTTPS Cloud Run origin |
+| Repository variable | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Production Turnstile site key |
 | Repository variable | `ENABLE_WEB_DEPLOY` | `true` |
 
-The `Deploy web Worker` workflow then runs for web changes on `main` and can also be started manually. It fails before building when required configuration is absent. Keep `ENABLE_WEB_DEPLOY=false` to disable it without modifying the workflow.
+Before the first workflow deployment, add `TURNSTILE_SECRET` and `ORIGIN_AUTH_TOKEN` directly to the existing Worker with the Cloudflare dashboard. The `Deploy web Worker` workflow then runs for web changes on `main` and can also be started manually. It fails before building when required public configuration is absent. Keep `ENABLE_WEB_DEPLOY=false` to disable it without modifying the workflow.
 
 ## API image publication
 

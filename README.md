@@ -6,7 +6,7 @@ An independent, source-grounded assistant for The Metropolitan Museum of Art's O
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/AjayKasu1/met-collection-agent?quickstart=1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The API, Worker bundle, and container images are verified in CI. A public demo is not active until its operator deploys the API with authentication and quota controls. See the [deployment runbook](docs/deploy.md).
+The API, Worker bundle, and container images are verified in CI. The production profile uses Turnstile, an edge rate-limit binding, a shared edge-to-origin credential, managed PostgreSQL audits, dependency readiness checks, and monitored rollback paths. See the [deployment runbook](docs/deploy.md) and [operations guide](docs/operations.md).
 
 ## What makes this different
 
@@ -36,7 +36,7 @@ The text index contains 20,000 public-domain objects embedded with multilingual 
 
 ## Latest reviewed evaluation
 
-The latest complete reviewed report is `2026-09-05T031955-21bf3af5-quick`. It used a 300-second batch deadline to accommodate free-tier pacing; the saved interactive deadline remained 30 seconds.
+The latest complete reviewed report is `2026-09-05T031955-21bf3af5-quick`. It used a 300-second batch deadline to accommodate free-tier pacing. The current interactive deadline is 120 seconds and interactive pacing is disabled.
 
 | Metric | Measured result |
 | --- | ---: |
@@ -128,11 +128,11 @@ docker-compose.yml          API, web, and pinned Qdrant services
 
 ## Limitations
 
-- The v0 API has no user authentication or distributed rate limit. CORS is not access control.
-- Groq free-tier token pacing dominates the measured p95. The limiter is process-local.
+- The public demo uses bot verification and a per-location edge rate limit. It does not provide user accounts, tenant isolation, or identity-based quotas.
+- Interactive token pacing is disabled. Groq free-tier limits can still reject bursts; paid capacity and account-level monitoring are required for a launch SLO.
 - Collection search stores gallery values from ingestion time. Only `get_object` checks the live object record, cached for at most five minutes.
-- Visitor answers reflect captured pages and show their capture time. They are not a guarantee of today's hours, policies, or exhibition status.
-- Local SQLite audit records are append-only but are neither durable across ephemeral cloud instances nor safe for multi-instance coordination.
+- Visitor answers reflect captured pages and show their capture time. A weekly blue-green refresh is available, but source publication delays still prevent a guarantee of today's hours, policies, or exhibition status.
+- PostgreSQL is the required production audit store. SQLite remains the local single-process development fallback.
 - The 20,000-object selection and reviewed golden set are regression assets, not a complete or held-out museum benchmark.
 
 The full [limitations and production controls](docs/limitations.md) document covers data policy, latency measurements, authentication, human review, monitoring, and deployment requirements.
