@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     cerebras_api_key: Credential | None = Field(default=None, repr=False)
     llm_timeout_seconds: Annotated[float, Field(gt=0, le=300)] = 60
     llm_max_retries: Annotated[int, Field(ge=0, le=5)] = 2
-    llm_pacing_enabled: bool = True
+    llm_pacing_enabled: bool = False
     llm_max_output_tokens: Annotated[int, Field(ge=128, le=8192)] = 1600
     llm_rate_limits: dict[str, LLMRateLimit] = Field(default_factory=default_llm_limits)
     llm_default_tokens_per_minute: Annotated[int, Field(gt=0)] = 6000
