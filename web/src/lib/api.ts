@@ -13,7 +13,12 @@ export class PublicApiError extends Error {
 }
 
 export function apiBase(): string {
-  const configured = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  const isTest = process.env.NODE_ENV === "test";
+  const configured =
+    envUrl && (!envUrl.includes("example.test") || isTest)
+      ? envUrl
+      : "https://met-collection-agent-api-584674541487.us-east1.run.app";
   const safe = safeHttpUrl(configured);
   if (!safe) throw new Error("NEXT_PUBLIC_API_URL must be an HTTP URL");
   return safe.replace(/\/$/, "");
