@@ -1,5 +1,33 @@
 import type { NextConfig } from "next";
 
+function validateProductionBuild(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
+  if (!apiUrl) throw new Error("NEXT_PUBLIC_API_URL is required for a production build");
+  if (!turnstileSiteKey) {
+    throw new Error("NEXT_PUBLIC_TURNSTILE_SITE_KEY is required for a production build");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(apiUrl);
+  } catch {
+    throw new Error("NEXT_PUBLIC_API_URL must be a valid URL");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.pathname !== "/"
+  ) {
+    throw new Error("NEXT_PUBLIC_API_URL must be an HTTPS origin without credentials or a path");
+  }
+}
+
+validateProductionBuild();
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",

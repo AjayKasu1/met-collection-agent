@@ -106,7 +106,7 @@ Use this option when Cloudflare should own deployments from GitHub:
 6. Keep the GitHub repository variable `ENABLE_WEB_DEPLOY` unset or `false`. This prevents the separate GitHub Actions deploy workflow from competing with Cloudflare Builds.
 7. Deploy and complete the release smoke test in [production operations](operations.md).
 
-Cloudflare Builds installs the package manager declared in `web/package.json` and uses the locked Wrangler dependency. The checked-in `wrangler.jsonc` enables Workers logs and uses a current compatibility date with `nodejs_compat`.
+Cloudflare Builds installs the package manager declared in `web/package.json` and uses the locked Wrangler dependency. Production builds validate both public settings and reject an API URL containing credentials, a path, query, fragment, or non-HTTPS scheme. Missing Turnstile configuration fails the new build before deployment, preserving the last healthy Worker. The checked-in `wrangler.jsonc` enables Workers logs and uses a current compatibility date with `nodejs_compat`.
 
 ### GitHub Actions deployment
 

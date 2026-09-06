@@ -57,6 +57,9 @@ jobs:
     name: Node 20 web and Workers checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_API_URL: https://api.example.test
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
