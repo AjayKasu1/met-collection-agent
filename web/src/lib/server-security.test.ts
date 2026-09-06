@@ -1,10 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { limit } = vi.hoisted(() => ({ limit: vi.fn() }));
+const { limit, runtimeEnv } = vi.hoisted(() => {
+  const rateLimit = vi.fn();
+  return {
+    limit: rateLimit,
+    runtimeEnv: {
+      CHAT_RATE_LIMITER: { limit: rateLimit },
+      ORIGIN_AUTH_TOKEN: "unit-test-origin-token",
+      TURNSTILE_HOSTNAMES: "museum.example",
+      TURNSTILE_SECRET: "unit-test-turnstile-secret",
+    },
+  };
+});
 
 vi.mock("@opennextjs/cloudflare", () => ({
   getCloudflareContext: vi.fn().mockResolvedValue({
-    env: { CHAT_RATE_LIMITER: { limit } },
+    env: runtimeEnv,
   }),
 }));
 
@@ -20,15 +31,16 @@ function request(): Request {
 beforeEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
-  vi.stubEnv("ORIGIN_AUTH_TOKEN", "unit-test-origin-token");
-  vi.stubEnv("TURNSTILE_SECRET", "unit-test-turnstile-secret");
-  vi.stubEnv("TURNSTILE_HOSTNAMES", "museum.example");
+  runtimeEnv.ORIGIN_AUTH_TOKEN = "unit-test-origin-token";
+  runtimeEnv.TURNSTILE_HOSTNAMES = "museum.example";
+  runtimeEnv.TURNSTILE_SECRET = "unit-test-turnstile-secret";
   limit.mockReset();
   limit.mockResolvedValue({ success: true });
 });
 
 describe("Worker request protection", () => {
   it("rate limits, validates the action and hostname, then returns origin authentication", async () => {
+    vi.stubEnv("ORIGIN_AUTH_TOKEN", "process-env-must-not-be-used");
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({ success: true, action: "chat", hostname: "museum.example" }),
     );
@@ -72,7 +84,7 @@ describe("Worker request protection", () => {
   });
 
   it("requires every security setting and never emits an empty origin header", async () => {
-    vi.stubEnv("ORIGIN_AUTH_TOKEN", "");
+    runtimeEnv.ORIGIN_AUTH_TOKEN = "";
     await expect(originHeaders()).rejects.toMatchObject({ code: "service_unavailable" });
     await expect(protectChat(request(), "token")).rejects.toMatchObject({
       code: "service_unavailable",

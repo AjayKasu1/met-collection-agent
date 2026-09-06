@@ -6,6 +6,12 @@ import { isRecord } from "@/lib/validation";
 const TURNSTILE_ACTION = "chat";
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
+type SecurityBindings = CloudflareEnv & {
+  ORIGIN_AUTH_TOKEN?: string;
+  TURNSTILE_HOSTNAMES?: string;
+  TURNSTILE_SECRET?: string;
+};
+
 function hostnames(value: string | undefined): Set<string> {
   return new Set(
     (value ?? "")
@@ -15,12 +21,12 @@ function hostnames(value: string | undefined): Set<string> {
   );
 }
 
-async function workerEnv(): Promise<CloudflareEnv> {
-  return (await getCloudflareContext({ async: true })).env;
+async function workerEnv(): Promise<SecurityBindings> {
+  return (await getCloudflareContext({ async: true })).env as SecurityBindings;
 }
 
 export async function originHeaders(): Promise<Record<string, string>> {
-  const token = process.env.ORIGIN_AUTH_TOKEN?.trim();
+  const token = (await workerEnv()).ORIGIN_AUTH_TOKEN?.trim();
   if (!token) {
     throw new PublicApiError("service_unavailable", "The museum assistant is not configured.");
   }
@@ -30,9 +36,9 @@ export async function originHeaders(): Promise<Record<string, string>> {
 export async function protectChat(request: Request, token: string): Promise<Record<string, string>> {
   const env = await workerEnv();
   const clientIp = request.headers.get("cf-connecting-ip")?.trim();
-  const secret = process.env.TURNSTILE_SECRET?.trim();
-  const expectedHostnames = hostnames(process.env.TURNSTILE_HOSTNAMES);
-  const originToken = process.env.ORIGIN_AUTH_TOKEN?.trim();
+  const secret = env.TURNSTILE_SECRET?.trim();
+  const expectedHostnames = hostnames(env.TURNSTILE_HOSTNAMES);
+  const originToken = env.ORIGIN_AUTH_TOKEN?.trim();
 
   if (!clientIp || !secret || expectedHostnames.size === 0 || !originToken) {
     throw new PublicApiError("service_unavailable", "The museum assistant is not configured.");
