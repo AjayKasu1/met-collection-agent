@@ -14,6 +14,9 @@
       "service": "met-collection-agent"
     }
   ],
+  "vars": {
+    "TURNSTILE_HOSTNAMES": "met-collection-agent.ajaykasu7.workers.dev"
+  },
   "ratelimits": [
     {
       "name": "CHAT_RATE_LIMITER",

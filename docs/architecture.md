@@ -8,8 +8,9 @@ The system separates source acquisition, retrieval, reasoning, verification, and
 flowchart TB
     subgraph Edge[Cloudflare Workers]
         UI[Next.js UI]
-        Proxy[Same-origin API routes]
-        UI --> Proxy
+        Guard[Turnstile and rate limit]
+        Proxy[Authenticated origin proxy]
+        UI --> Guard --> Proxy
     end
 
     subgraph Service[FastAPI service]
@@ -62,7 +63,7 @@ The API sends a comment heartbeat every 15 seconds while verification is still r
 
 ## Event log
 
-Each turn has a session UUID and turn UUID. SQLite assigns a monotonic sequence number and database triggers reject updates and deletes. The store redacts configured secret values, credential-like strings, and secret-shaped fields before serialization.
+Each turn has a session UUID and turn UUID. Production uses PostgreSQL with pooled connections, atomic per-turn appends, a monotonic sequence, and database triggers that reject updates and deletes. A transaction-scoped retention procedure is the only delete path. SQLite provides the same append-only contract for local single-process development. The store redacts configured secret values, credential-like strings, and secret-shaped fields before serialization.
 
 Typical multi-hop factual turns append this sequence:
 
@@ -86,7 +87,7 @@ final_answer
 
 Retries, cooldowns, fallback selection, validation errors, tool limits, terminal handoffs, and turn errors add explicit events when they occur. Provider response bodies and authorization headers are never recorded. Event data can still contain user questions, model-visible evidence, and final answers, so it requires the same access and retention controls as conversation data.
 
-`GET /sessions/{session_id}/events?after=0&limit=200` returns the ordered audit trail. `after` provides a stable cursor and `limit` is bounded from 1 through 500. Tests exercise multi-hop tool calls and assert that tool, evidence, guardrail, and final-answer events remain ordered and share the same turn. The v0 route has no authorization and must stay behind trusted access until production authentication is added.
+`GET /sessions/{session_id}/events?after=0&limit=200` returns the ordered audit trail. `after` provides a stable cursor and `limit` is bounded from 1 through 500. Tests exercise multi-hop tool calls and assert that tool, evidence, guardrail, and final-answer events remain ordered and share the same turn. In production the API route requires the same edge-to-origin credential as other data routes; the public browser proxy does not expose arbitrary credentials.
 
 Application request logs are separate. They include request ID, route template, method, status, and elapsed time while omitting raw paths, query strings, headers, and bodies.
 

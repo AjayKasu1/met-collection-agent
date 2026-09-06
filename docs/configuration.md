@@ -48,6 +48,8 @@ Service URLs must use HTTP or HTTPS and cannot carry user credentials, query str
 ## HTTP behavior
 
 - `GET /health` is a typed liveness response. It does not prove retrieval or model readiness.
+- `GET /ready` checks Qdrant and the active audit store. It returns only boolean component status and HTTP 503 when either dependency is unavailable.
+- `EDGE_AUTH_REQUIRED=true` requires `X-Origin-Auth` on every route except `/health` and `/ready`. The Worker sources that value from `ORIGIN_AUTH_TOKEN`; the API compares it with `EDGE_ORIGIN_TOKEN` in constant time.
 - `GET /docs` and `GET /openapi.json` expose the implemented API contract.
 - `CORS_ORIGINS` accepts a JSON array or comma-separated list of explicit HTTP origins. Wildcards, credentials, paths, query strings, and fragments are rejected. An empty array disables cross-origin access. Cookies are not allowed by CORS.
 - Each HTTP response, including errors and CORS preflights, carries `X-Request-ID`. A supplied ID is accepted only if it is a single header, 1 to 128 characters, starts with an ASCII letter or digit, and contains only ASCII letters, digits, `.`, `_`, `:`, or `-`. Other values are replaced by a generated ID.
@@ -55,6 +57,12 @@ Service URLs must use HTTP or HTTPS and cannot carry user credentials, query str
 - Unhandled exceptions return a generic JSON error with the request ID. Logs contain the exception class, not its potentially sensitive message. If a response stream already started, the connection fails with a sanitized exception instead of sending a second response.
 
 Middleware is ordered as request context, CORS, then error boundary. It is implemented directly in ASGI so response chunks pass through immediately and context remains attached during streaming.
+
+## Production audit storage
+
+`AUDIT_DATABASE_URL` selects PostgreSQL through Psycopg's bounded connection pool. `AUDIT_STORE_REQUIRED=true` makes a missing URL a startup error and makes `/ready` fail if the store is unavailable. `AUDIT_POOL_MIN_SIZE` and `AUDIT_POOL_MAX_SIZE` bound connections per Cloud Run instance. Keep their product with maximum instances below the database connection allowance.
+
+The PostgreSQL schema is created idempotently under an advisory lock. One transaction appends all events from a completed turn. Database triggers reject updates and normal deletes. `AUDIT_RETENTION_DAYS` controls the opportunistic daily purge through a transaction-scoped retention flag. Session content is still personal data even after secret redaction, so production access must follow the retention and incident rules in [operations](operations.md).
 
 ## Verification and release discipline
 
