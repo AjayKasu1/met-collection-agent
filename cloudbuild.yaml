@@ -1,0 +1,52 @@
+steps:
+  - id: Build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --no-cache
+      - --tag
+      - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}
+      - --file
+      - api/Dockerfile
+      - api
+
+  - id: Push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}
+
+  - id: Deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - ${_SERVICE_NAME}
+      - --platform=managed
+      - --region=${_DEPLOY_REGION}
+      - --image=${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}
+      - --labels=managed-by=gcp-cloud-build-deploy-cloud-run,commit-sha=${COMMIT_SHA},gcb-build-id=${BUILD_ID},gcb-trigger-id=${_TRIGGER_ID}
+      - --update-env-vars=GIT_SHA=${COMMIT_SHA}
+      - --quiet
+
+images:
+  - ${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitutionOption: ALLOW_LOOSE
+
+substitutions:
+  _AR_HOSTNAME: us-east1-docker.pkg.dev
+  _AR_PROJECT_ID: project-24b6075c-252b-4cbe-a6e
+  _AR_REPOSITORY: cloud-run-source-deploy
+  _DEPLOY_REGION: us-east1
+  _SERVICE_NAME: met-collection-agent-api
+  _TRIGGER_ID: 2fd41db6-c7ed-428d-9684-e9f8b3cb50d9
+
+tags:
+  - gcp-cloud-build-deploy-cloud-run
+  - gcp-cloud-build-deploy-cloud-run-managed
+  - met-collection-agent-api

@@ -73,6 +73,10 @@ gcloud run deploy met-collection-agent-api \
 
 Cloud Run injects `PORT`; the image honors it and exposes liveness at `/health` and dependency readiness at `/ready`. The first semantic query downloads the pinned 2.24 GB local embedding model. Four CPUs, 8 GiB memory, minimum instance count one, and concurrency four reduce cold-start and memory pressure. Adjust them only after measuring production traffic and memory. PostgreSQL retains audits across revisions and instances. With the default pool maximum of four and three Cloud Run instances, reserve at least twelve application connections plus database administration headroom.
 
+The GitHub Cloud Build trigger uses the repository's `cloudbuild.yaml`. Its deploy step
+sets `GIT_SHA` from Cloud Build's immutable `COMMIT_SHA`, so `/health` identifies the
+revision that produced the serving image without a manual environment update.
+
 Capture the deployed origin and verify it before building the Worker:
 
 ```sh
