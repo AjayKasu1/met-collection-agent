@@ -44,7 +44,7 @@ substitutions:
   _AR_REPOSITORY: cloud-run-source-deploy
   _DEPLOY_REGION: us-east1
   _SERVICE_NAME: met-collection-agent-api
-  _TRIGGER_ID: 2fd41db6-c7ed-428d-9684-e9f8b3cb50d9
+  _TRIGGER_ID: 56151b74-fa80-412e-9d9c-89fac0263bda
 
 tags:
   - gcp-cloud-build-deploy-cloud-run
