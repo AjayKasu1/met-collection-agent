@@ -9,6 +9,12 @@ import { parseLiveObject, safeHttpUrl } from "@/lib/validation";
 function sourceLabel(url: string): string {
   try {
     const parsed = new URL(url);
+    if (
+      parsed.hostname === "maps.metmuseum.org" &&
+      parsed.pathname.startsWith("/navigate/")
+    ) {
+      return "The Met Interactive Map";
+    }
     const segment = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "Visitor information";
     return segment
       .replace(/[-_]/g, " ")
