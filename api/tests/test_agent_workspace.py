@@ -107,6 +107,12 @@ def judgment(supported: bool = True) -> dict[str, Any]:
     "message",
     [
         "What can I see in Gallery 131?",
+        "What inside Gallery 131?",
+        "What's inside Gallery 131?",
+        "What is inside the Gallery 131?",
+        "What is there in Gallery 131?",
+        "What is displayed in Gallery 131?",
+        "Show me the objects in Gallery 131.",
         "What is in gallery #131?",
         "Which artworks are on view in the Gallery 131?",
     ],

@@ -27,7 +27,11 @@ class Intent(BaseModel):
 _DIRECT_GALLERY_QUESTION = re.compile(
     r"^\s*(?:"
     r"what\s+can\s+i\s+see|"
+    r"what(?:'s|\s+is)?\s+inside|"
+    r"what\s+is\s+there|"
+    r"what(?:'s|\s+is)\s+(?:displayed|on\s+display)|"
     r"what(?:'s|\s+is)(?:\s+on\s+view)?|"
+    r"(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:objects?|artworks?)|"
     r"show\s+me(?:\s+what(?:'s|\s+is))?|"
     r"which\s+(?:objects?|artworks?)\s+(?:are\s+)?(?:on\s+view)?"
     r")\s+(?:in\s+)?(?:the\s+)?gallery\s*#?\s*(\d{1,4})\s*[?!.]*\s*$",
