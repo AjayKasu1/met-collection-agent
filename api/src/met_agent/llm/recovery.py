@@ -30,8 +30,28 @@ def failure_details(error: Exception, *, model: str, route: str) -> dict[str, Js
 
 
 def retry_delay(details: dict[str, JsonValue]) -> float:
+    """Return the longest trusted provider reset hint in seconds.
+
+    Groq's Retry-After is a number of seconds, while token reset headers use
+    compact durations such as ``7.66s`` or ``2m59.56s``.
+    """
+
+    return max(
+        _duration_seconds(details.get("retry_after")),
+        _duration_seconds(details.get("token_reset_after")),
+    )
+
+
+def _duration_seconds(raw: JsonValue | None) -> float:
+    value = str(raw or "")
     try:
-        value = float(str(details.get("retry_after", 0)))
-        return max(0.0, value) if math.isfinite(value) else 0.0
+        seconds = float(value)
+        return max(0.0, seconds) if math.isfinite(seconds) else 0.0
     except ValueError:
+        pass
+    parts = re.findall(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h|d)", value)
+    if not parts or "".join(number + unit for number, unit in parts) != value:
         return 0.0
+    multipliers = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+    seconds = sum(float(number) * multipliers[unit] for number, unit in parts)
+    return seconds if math.isfinite(seconds) else 0.0

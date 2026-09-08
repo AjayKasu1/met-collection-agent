@@ -95,6 +95,14 @@ def test_untrusted_quota_headers_and_nonfinite_retry_are_rejected() -> None:
         assert retry_delay({"retry_after": value}) == 0
 
 
+@pytest.mark.parametrize(
+    "value,expected",
+    [("7.66s", 7.66), ("2m59.56s", 179.56), ("250ms", 0.25), ("1h2m3s", 3723)],
+)
+def test_provider_reset_durations_are_parsed(value: str, expected: float) -> None:
+    assert retry_delay({"token_reset_after": value}) == pytest.approx(expected)
+
+
 def test_turn_evidence_is_deduplicated_bounded_and_verbatim() -> None:
     def message(records: list[dict[str, Any]]) -> dict[str, Any]:
         return {"role": "tool", "content": json.dumps({"name": "search", "evidence": records})}

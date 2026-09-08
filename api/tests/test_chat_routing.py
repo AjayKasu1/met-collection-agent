@@ -294,7 +294,7 @@ def test_missing_first_key_uses_second_and_403_stops_chain(settings: Settings) -
     assert [call["model"] for call in router.calls] == ["main", "fallback"]
 
 
-def test_retry_reserves_each_attempt_and_respects_retry_after(
+def test_rate_limit_spills_to_lite_without_retrying_exhausted_model(
     settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sleeps: list[float] = []
@@ -313,15 +313,22 @@ def test_retry_reserves_each_attempt_and_respects_retry_after(
         ),
     )
     model = LiteLLMChat(config, router=Router([quota, response()]))
+    events: list[tuple[str, Any]] = []
+    token = CURRENT_CALL.set(CallContext(audit=lambda kind, data: events.append((kind, data))))
 
     async def reserve(name: str, tokens: int) -> None:
         reservations.append(name)
 
     monkeypatch.setattr(asyncio, "sleep", sleep)
     monkeypatch.setattr(model.pacer, "reserve", reserve)
-    asyncio.run(model.complete("main", []))
-    assert sleeps == [3]
-    assert len(reservations) == 2 and reservations[0] == reservations[1]
+    try:
+        asyncio.run(model.complete("main", []))
+    finally:
+        CURRENT_CALL.reset(token)
+    assert sleeps == []
+    assert reservations == [model.models["main"], model.models["lite"]]
+    assert [call["model"] for call in model.router.calls] == ["main", "lite"]
+    assert ("model_fallback", {"from": "main", "to": "lite", "reason": "rate_limit"}) in events
 
 
 def test_gateway_500_is_retried_with_safe_telemetry(

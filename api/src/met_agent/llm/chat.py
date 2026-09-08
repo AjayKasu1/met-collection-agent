@@ -119,6 +119,20 @@ class LiteLLMChat:
             )
         self.router = router
 
+    def _candidate_routes(self, route: Route) -> list[str]:
+        """Prefer configured fallbacks, then use the lite model as a capacity reserve."""
+        aliases = [str(route), *[key for key in self.models if key.startswith("fallback")]]
+        if route == "main":
+            aliases.append("lite")
+        candidates: list[str] = []
+        seen_models: set[str] = set()
+        for alias in aliases:
+            model = self.models[alias]
+            if model not in seen_models:
+                candidates.append(alias)
+                seen_models.add(model)
+        return candidates
+
     async def complete(
         self,
         route: Route,
@@ -171,7 +185,7 @@ class LiteLLMChat:
         retry_ms = 0.0
         response = None
         try:
-            candidates = [str(route)] + [k for k in self.models if k.startswith("fallback")]
+            candidates = self._candidate_routes(route)
             for candidate in candidates:
                 actual_route = candidate
                 model_name = self.models[candidate]
@@ -179,6 +193,15 @@ class LiteLLMChat:
                     raise ModelError("access_denied", "Provider access needs operator review")
                 if self.cooldown_until.get(model_name, 0) > time.monotonic():
                     if candidate != candidates[-1]:
+                        if context:
+                            context.audit(
+                                "model_fallback",
+                                {
+                                    "from": candidate,
+                                    "to": candidates[candidates.index(candidate) + 1],
+                                    "reason": "active_cooldown",
+                                },
+                            )
                         continue
                     raise ModelError("provider_unavailable", "Provider is temporarily unavailable")
                 if response_schema is not None and not tools:
@@ -210,6 +233,7 @@ class LiteLLMChat:
                         provider_ms += (time.monotonic() - provider_started) * 1000
                         details = failure_details(error, model=model_name, route=candidate)
                         status = details.get("status")
+                        rate_limited = isinstance(error, RateLimitError) or status == 429
                         retryable = (
                             isinstance(error, (RateLimitError, Timeout))
                             or status in (408, 429)
@@ -221,7 +245,11 @@ class LiteLLMChat:
                         if context:
                             context.audit("provider_attempt_failed", details)
                         retry_after = retry_delay(details)
-                        if attempt < self.settings.llm_max_retries and retry_after <= 60:
+                        if (
+                            not rate_limited
+                            and attempt < self.settings.llm_max_retries
+                            and retry_after <= 60
+                        ):
                             retry_started = time.monotonic()
                             await asyncio.sleep(
                                 max(random.SystemRandom().uniform(0, 2**attempt), retry_after)
@@ -237,6 +265,7 @@ class LiteLLMChat:
                                 {
                                     "from": candidate,
                                     "to": candidates[candidates.index(candidate) + 1],
+                                    "reason": "rate_limit" if rate_limited else "transient_failure",
                                 },
                             )
                         break
