@@ -34,6 +34,21 @@ _DIRECT_GALLERY_QUESTION = re.compile(
     re.IGNORECASE,
 )
 
+_DIRECT_GALLERY_WAYFINDING = re.compile(
+    r"^\s*(?:"
+    r"(?:please\s+)?(?:tell\s+me\s+)?how\s+(?:do|can|should)\s+i\s+"
+    r"(?:get|go|walk)\s+to\s+(?:the\s+)?gallery\s*#?\s*(?P<to>\d{1,4})\s+"
+    r"from\s+(?:the\s+)?(?:fifth\s+avenue\s+)?(?:main\s+)?entrance|"
+    r"(?:please\s+)?(?:give\s+me\s+)?directions\s+to\s+(?:the\s+)?"
+    r"gallery\s*#?\s*(?P<directions>\d{1,4})\s+from\s+(?:the\s+)?"
+    r"(?:fifth\s+avenue\s+)?(?:main\s+)?entrance|"
+    r"(?:please\s+)?(?:tell\s+me\s+)?how\s+(?:do|can|should)\s+i\s+"
+    r"(?:get|go|walk)\s+from\s+(?:the\s+)?(?:fifth\s+avenue\s+)?"
+    r"(?:main\s+)?entrance\s+to\s+(?:the\s+)?gallery\s*#?\s*(?P<from>\d{1,4})"
+    r")(?:\s*,?\s*please)?\s*[?!.]*\s*$",
+    re.IGNORECASE,
+)
+
 
 def direct_gallery_number(message: str) -> str | None:
     """Return a bounded gallery number only for a complete direct-gallery question."""
@@ -41,8 +56,31 @@ def direct_gallery_number(message: str) -> str | None:
     return match.group(1) if match is not None else None
 
 
+def direct_gallery_wayfinding_number(message: str) -> str | None:
+    """Return a gallery only for a complete Fifth Avenue entrance direction request."""
+    match = _DIRECT_GALLERY_WAYFINDING.fullmatch(message)
+    if match is None:
+        return None
+    return match.group("to") or match.group("directions") or match.group("from")
+
+
 def normalize_intent(intent: Intent, message: str) -> tuple[Intent, str | None]:
     """Stabilize a narrow direct-gallery route while preserving semantic safety classes."""
+    wayfinding_gallery = direct_gallery_wayfinding_number(message)
+    if wayfinding_gallery is not None and intent.category not in {"interpretive", "out_of_scope"}:
+        return (
+            intent.model_copy(
+                update={
+                    "category": "visitor_info",
+                    "difficulty": "simple",
+                    "language": "en",
+                    "search_query": (
+                        f"Directions from the Fifth Avenue entrance to Gallery {wayfinding_gallery}"
+                    ),
+                }
+            ),
+            "direct_gallery_wayfinding",
+        )
     gallery_number = direct_gallery_number(message)
     if gallery_number is None or intent.category in {"interpretive", "out_of_scope"}:
         return intent, None

@@ -14,6 +14,7 @@ from met_agent.ingestion.commands import qdrant_client
 from met_agent.llm.chat import LiteLLMChat, ModelError
 from met_agent.observability.tracing import Telemetry
 from met_agent.retrieval.service import SearchService
+from met_agent.tools.get_directions import WayfindingClient
 from met_agent.tools.get_object import LiveObjectClient
 from met_agent.tools.registry import create_registry
 
@@ -44,7 +45,10 @@ class Runtime:
         self.qdrant = qdrant_client(settings)
         self.search = SearchService(self.qdrant, settings)
         self.live = LiveObjectClient(self.http, str(settings.met_api_base))
-        self.tools = create_registry(settings, self.search, self.live)
+        self.wayfinding = WayfindingClient(
+            self.http, str(settings.met_map_api_base), str(settings.met_map_base)
+        )
+        self.tools = create_registry(settings, self.search, self.live, self.wayfinding)
         self.tools.telemetry = self.telemetry
         self.agent: Agent | None = None
 

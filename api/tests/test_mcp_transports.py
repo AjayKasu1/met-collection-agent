@@ -58,7 +58,9 @@ def test_stdio_protocol_and_clean_shutdown(tmp_path: Path) -> None:
             ) as session,
         ):
             await exercise(session)
-            assert len((await session.list_tools()).tools) == 5
+            tools = (await session.list_tools()).tools
+            assert len(tools) == 6
+            assert any(tool.name == "get_directions" for tool in tools)
 
     asyncio.run(run())
 

@@ -10,7 +10,12 @@ ObjectId = Annotated[int, Field(gt=0)]
 Query = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 Contact = Literal["info@metmuseum.org", "store.support@metmuseum.org"]
 ToolName = Literal[
-    "search_collection", "get_object", "search_visitor_info", "handoff", "find_similar_objects"
+    "search_collection",
+    "get_object",
+    "search_visitor_info",
+    "handoff",
+    "find_similar_objects",
+    "get_directions",
 ]
 
 
@@ -26,6 +31,11 @@ class SearchCollectionArguments(Arguments):
 
 class GetObjectArguments(Arguments):
     object_id: ObjectId
+
+
+class GetDirectionsArguments(Arguments):
+    origin: Literal["fifth_avenue_entrance"] = "fifth_avenue_entrance"
+    destination_gallery: Annotated[str, StringConstraints(pattern=r"^\d{1,4}$")]
 
 
 class SearchVisitorArguments(Arguments):
@@ -88,6 +98,18 @@ class SimilarObjectsResult(BaseModel):
     vector: Literal["image"] = "image"
 
 
+class WayfindingResult(BaseModel):
+    origin: Literal["The Great Hall"]
+    destination: str = Field(pattern=r"^Gallery \d{1,4}$")
+    floor: Literal["Floor 1"]
+    distance_metres: int = Field(ge=0, le=10_000)
+    distance_feet: int = Field(ge=0, le=32_809)
+    duration_minutes: int = Field(ge=1, le=120)
+    source_url: str
+    fetched_at: str
+    text: str
+
+
 class Evidence(BaseModel):
     """Only the server derives citation candidates from this turn's tool results."""
 
@@ -95,7 +117,14 @@ class Evidence(BaseModel):
     object_id: int | None = None
     source_url: str | None = None
     text: str
-    kind: Literal["collection", "visitor_info", "live_object", "image_similarity", "lookup_status"]
+    kind: Literal[
+        "collection",
+        "visitor_info",
+        "live_object",
+        "image_similarity",
+        "lookup_status",
+        "wayfinding",
+    ]
 
 
 class ToolError(BaseModel):
@@ -104,7 +133,12 @@ class ToolError(BaseModel):
 
 
 ToolPayload = (
-    CollectionSearchResult | VisitorSearchResult | LiveObject | SimilarObjectsResult | Handoff
+    CollectionSearchResult
+    | VisitorSearchResult
+    | LiveObject
+    | SimilarObjectsResult
+    | WayfindingResult
+    | Handoff
 )
 
 

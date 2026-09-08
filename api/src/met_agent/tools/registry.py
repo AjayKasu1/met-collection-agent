@@ -1,4 +1,4 @@
-"""Validate the same five tool contracts for chat and MCP before running sequential handlers."""
+"""Validate shared tool contracts for chat and MCP before running sequential handlers."""
 
 import asyncio
 from collections.abc import Callable
@@ -12,11 +12,13 @@ from pydantic import BaseModel, ValidationError
 from met_agent.config import Settings
 from met_agent.retrieval.service import SearchService
 from met_agent.tools.find_similar_objects import find_similar_objects
+from met_agent.tools.get_directions import WayfindingClient
 from met_agent.tools.get_object import LiveObjectClient, ObjectNotFound
 from met_agent.tools.handoff import handoff
 from met_agent.tools.models import (
     CollectionSearchResult,
     Evidence,
+    GetDirectionsArguments,
     GetObjectArguments,
     Handoff,
     HandoffArguments,
@@ -28,6 +30,7 @@ from met_agent.tools.models import (
     ToolPayload,
     ToolResult,
     VisitorSearchResult,
+    WayfindingResult,
 )
 from met_agent.tools.schemas import FindSimilarObjectsArguments
 from met_agent.tools.search_collection import search_collection
@@ -169,11 +172,23 @@ def evidence_from(output: ToolPayload) -> list[Evidence]:
             )
             for obj in output.objects
         ]
+    if isinstance(output, WayfindingResult):
+        return [
+            Evidence(
+                key=f"route:{output.origin}:{output.destination}",
+                source_url=output.source_url,
+                text=output.text,
+                kind="wayfinding",
+            )
+        ]
     return []
 
 
 def create_registry(
-    settings: Settings, search: SearchService, live: LiveObjectClient
+    settings: Settings,
+    search: SearchService,
+    live: LiveObjectClient,
+    wayfinding: WayfindingClient,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
@@ -228,5 +243,17 @@ def create_registry(
         FindSimilarObjectsArguments,
         SimilarObjectsResult,
         partial(find_similar_objects, search, settings.qdrant_collection),
+    )
+    registry.register(
+        "get_directions",
+        (
+            "For a Fifth Avenue entrance request, get a live route that uses The Great Hall "
+            "as its indoor starting point and ends at an exact numbered gallery using The "
+            "Met's official interactive map. Do not infer room connections or substitute "
+            "collection search."
+        ),
+        GetDirectionsArguments,
+        WayfindingResult,
+        wayfinding.get,
     )
     return registry

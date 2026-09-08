@@ -25,11 +25,13 @@ from met_agent.tools.handoff import handoff
 from met_agent.tools.models import (
     CollectionSearchResult,
     Evidence,
+    GetDirectionsArguments,
     GetObjectArguments,
     Handoff,
     HandoffArguments,
     LiveObject,
     SearchCollectionArguments,
+    WayfindingResult,
 )
 from met_agent.tools.registry import ToolRegistry
 
@@ -135,6 +137,129 @@ def test_gallery_normalization_does_not_collapse_complex_or_policy_requests() ->
     )
     normalized, policy = normalize_intent(interpretive, "What is in Gallery 131?")
     assert normalized == interpretive and policy is None
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "How do I get to Gallery 131 from the Fifth Avenue entrance?",
+        "How can I walk from the main entrance to gallery #131?",
+        "Directions to Gallery 131 from the entrance, please.",
+    ],
+)
+def test_direct_gallery_wayfinding_has_a_stable_lite_route(message: str) -> None:
+    model_intent = Intent(
+        category="multi_hop",
+        difficulty="complex",
+        language="en",
+        search_query="ambiguous model rewrite",
+    )
+    normalized, policy = normalize_intent(model_intent, message)
+    assert policy == "direct_gallery_wayfinding"
+    assert normalized.category == "visitor_info"
+    assert normalized.difficulty == "simple"
+    assert normalized.search_query == "Directions from the Fifth Avenue entrance to Gallery 131"
+
+
+def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+    executed: list[GetDirectionsArguments] = []
+    source_url = "https://maps.metmuseum.org/navigate/" + "a" * 32 + "/" + "b" * 32
+
+    def directions(arguments: GetDirectionsArguments) -> WayfindingResult:
+        executed.append(arguments)
+        return WayfindingResult(
+            origin="The Great Hall",
+            destination="Gallery 131",
+            floor="Floor 1",
+            distance_metres=178,
+            distance_feet=584,
+            duration_minutes=2,
+            source_url=source_url,
+            fetched_at="2026-09-08T00:00:00Z",
+            text=(
+                "The Met Interactive Map route\nStart: The Great Hall\n"
+                "Destination: Gallery 131\nFloor: Floor 1\n"
+                "Estimated walking time: 2 minutes\nDistance: 178 metres (584 feet)"
+            ),
+        )
+
+    registry.register(
+        "get_directions",
+        "Official route",
+        GetDirectionsArguments,
+        WayfindingResult,
+        directions,
+    )
+    model_decision = {
+        **intent(category="multi_hop"),
+        "difficulty": "complex",
+        "search_query": "search everything",
+    }
+    supported = {
+        "fully_supported": True,
+        "claims": [
+            {
+                "text": "The official route starts in The Great Hall and reaches Gallery 131.",
+                "supported": True,
+                "evidence_keys": ["route:The Great Hall:Gallery 131"],
+            }
+        ],
+    }
+    store = EventStore(tmp_path / "wayfinding.sqlite3")
+    model = ScriptedModel([model_decision, supported])
+    answer = asyncio.run(
+        Agent(model, registry, store).run(
+            ChatRequest(message="How do I get to Gallery 131 from the Fifth Avenue entrance?")
+        )
+    )
+    assert answer.route == "lite" and answer.grounding_score == 1
+    assert answer.text == (
+        "Use The Great Hall as the route's starting point. The Met's official map route "
+        "continues on Floor 1 to Gallery 131, about 584 feet (2 minutes). Open the cited "
+        "live route before you start."
+    )
+    assert answer.citations[0].source_url == source_url
+    assert executed == [
+        GetDirectionsArguments(origin="fifth_avenue_entrance", destination_gallery="131")
+    ]
+    assert [call[0] for call in model.calls] == ["lite", "lite"]
+    events = store.read(answer.session_id)
+    assert len([event for event in events if event.kind == "tool_call"]) == 1
+    assert any(
+        event.kind == "route_policy"
+        and isinstance(event.data, dict)
+        and event.data.get("policy") == "direct_gallery_wayfinding"
+        for event in events
+    )
+
+
+def test_direct_gallery_wayfinding_fails_closed_without_map_evidence(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+
+    def unavailable(_: GetDirectionsArguments) -> WayfindingResult:
+        raise RuntimeError("private upstream detail")
+
+    registry.register(
+        "get_directions",
+        "Official route",
+        GetDirectionsArguments,
+        WayfindingResult,
+        unavailable,
+    )
+    model = ScriptedModel([intent(category="visitor_info")])
+    answer = asyncio.run(
+        Agent(model, registry, EventStore(tmp_path / "wayfinding-failure.sqlite3")).run(
+            ChatRequest(message="Directions to Gallery 131 from the Fifth Avenue entrance")
+        )
+    )
+    assert answer.grounding_score == 0 and not answer.citations
+    assert (
+        answer.text
+        == "I couldn't verify that from the available museum sources. Please try a more "
+        "specific question or contact info@metmuseum.org."
+    )
+    assert "private upstream detail" not in answer.model_dump_json()
 
 
 def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:

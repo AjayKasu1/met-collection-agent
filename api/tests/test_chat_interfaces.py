@@ -30,6 +30,7 @@ from met_agent.llm.chat import ModelError
 from met_agent.main import create_app
 from met_agent.mcp.server import create_server
 from met_agent.retrieval.service import SearchService
+from met_agent.tools.get_directions import WayfindingClient
 from met_agent.tools.get_object import LiveObjectClient, ObjectNotFound
 from met_agent.tools.models import GetObjectArguments
 from met_agent.tools.registry import create_registry
@@ -135,7 +136,7 @@ def test_runtime_is_lazy_and_reuses_agent(
     assert app.state.runtime.http.is_closed
 
 
-def test_mcp_five_tools_use_same_validation_and_results(settings: Settings) -> None:
+def test_mcp_six_tools_use_same_validation_and_results(settings: Settings) -> None:
     async def exercise() -> None:
         with httpx.Client(
             transport=httpx.MockTransport(
@@ -154,6 +155,7 @@ def test_mcp_five_tools_use_same_validation_and_results(settings: Settings) -> N
                     settings,
                     SearchService(client, settings),
                     LiveObjectClient(http, "https://met.test"),
+                    WayfindingClient(http, "https://map.test", "https://maps.test"),
                 )
                 server = create_server(registry)
                 listed = await server.list_tools()
@@ -164,6 +166,7 @@ def test_mcp_five_tools_use_same_validation_and_results(settings: Settings) -> N
                     ("search_collection", {"query": "vase", "k": 0}),
                     ("search_visitor_info", {"query": "hours", "k": 0}),
                     ("find_similar_objects", {"object_id": 0}),
+                    ("get_directions", {"destination_gallery": 131}),
                 ):
                     result = await server.call_tool(name, args)
                     assert isinstance(result, CallToolResult)

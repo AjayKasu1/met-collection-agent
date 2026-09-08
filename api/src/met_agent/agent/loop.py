@@ -13,11 +13,23 @@ from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
-from met_agent.guardrails.intent import Intent, direct_gallery_number, normalize_intent
+from met_agent.guardrails.intent import (
+    Intent,
+    direct_gallery_number,
+    direct_gallery_wayfinding_number,
+    normalize_intent,
+)
 from met_agent.guardrails.interpretive import POLICY, UNVERIFIED
 from met_agent.llm.chat import CURRENT_CALL, CallContext, ChatModel, ModelError, structured
 from met_agent.llm.prompts import load_prompt, prompt_hash
-from met_agent.tools.models import CollectionSearchResult, Evidence, Handoff, LiveObject, ToolResult
+from met_agent.tools.models import (
+    CollectionSearchResult,
+    Evidence,
+    Handoff,
+    LiveObject,
+    ToolResult,
+    WayfindingResult,
+)
 from met_agent.tools.registry import ToolRegistry
 
 MAX_TOOL_CALLS = 6
@@ -82,6 +94,9 @@ class Agent:
             audit("intent", model_intent.model_dump(mode="json"))
             intent, routing_policy = normalize_intent(model_intent, request.message)
             if routing_policy is not None:
+                selected_route: Route = (
+                    "lite" if routing_policy == "direct_gallery_wayfinding" else intent.route
+                )
                 audit(
                     "route_policy",
                     {
@@ -90,7 +105,7 @@ class Agent:
                         "model_difficulty": model_intent.difficulty,
                         "category": intent.category,
                         "difficulty": intent.difficulty,
-                        "route": intent.route,
+                        "route": selected_route,
                         "search_query": intent.search_query,
                     },
                 )
@@ -151,6 +166,19 @@ class Agent:
                     context,
                     audit,
                 )
+            if routing_policy == "direct_gallery_wayfinding":
+                gallery_number = direct_gallery_wayfinding_number(request.message)
+                if gallery_number is None:
+                    raise RuntimeError("Wayfinding policy lost its validated gallery number")
+                return await self._wayfinding_workspace(
+                    request,
+                    session,
+                    turn,
+                    started,
+                    gallery_number,
+                    context,
+                    audit,
+                )
             return await self._workspace(
                 request, session, turn, started, intent, context, history, audit
             )
@@ -160,6 +188,112 @@ class Agent:
         finally:
             CURRENT_CALL.reset(token)
             await asyncio.to_thread(self.events.append_many, session, turn, buffered_events)
+
+    async def _wayfinding_workspace(
+        self,
+        request: ChatRequest,
+        session: UUID,
+        turn: UUID,
+        started: float,
+        gallery_number: str,
+        context: CallContext,
+        audit: Callable[[str, JsonValue], None],
+    ) -> AgentAnswer:
+        """Resolve one entrance-to-gallery route without loading retrieval models."""
+        arguments = json.dumps(
+            {
+                "origin": "fifth_avenue_entrance",
+                "destination_gallery": gallery_number,
+            }
+        )
+        audit("tool_call", {"name": "get_directions", "arguments": arguments, "number": 1})
+        tool_started = time.monotonic()
+        result = await self.tools.execute("get_directions", arguments)
+        audit(
+            "tool_timing",
+            {"name": "get_directions", "latency_ms": (time.monotonic() - tool_started) * 1000},
+        )
+        audit(
+            "validation_error" if result.error else "tool_result",
+            result.model_dump(mode="json"),
+        )
+        if not isinstance(result.output, WayfindingResult) or len(result.evidence) != 1:
+            audit("guardrail", {"policy": "official_map_wayfinding", "decision": "fail_closed"})
+            return self._answer(
+                session,
+                turn,
+                started,
+                "en",
+                "lite",
+                context,
+                UNVERIFIED["en"],
+                [],
+                0.0,
+            )
+
+        route = result.output
+        evidence = result.model_evidence()
+        audit(
+            "evidence_context",
+            [item.model_dump(mode="json", exclude_none=True) for item in evidence],
+        )
+        text = (
+            f"Use {route.origin} as the route's starting point. The Met's official map route "
+            f"continues on {route.floor} to {route.destination}, about "
+            f"{route.distance_feet} feet ({route.duration_minutes} minutes). Open the cited "
+            "live route before you start."
+        )
+        draft = AgentDraft(
+            text=text,
+            language="en",
+            citations=[Citation(source_url=route.source_url, quote=evidence[0].text)],
+        )
+        if not valid_citations(draft, evidence):
+            raise RuntimeError("Server-produced wayfinding citation is invalid")
+        check = await structured(
+            self.model,
+            "lite",
+            load_prompt("grounding_v1"),
+            {
+                "question": request.message,
+                "draft": draft.model_dump(mode="json"),
+                "evidence": [item.model_dump(mode="json") for item in evidence],
+            },
+            GroundingCheck,
+        )
+        score = check.score(evidence)
+        audit(
+            "guardrail",
+            {
+                "policy": "official_map_wayfinding",
+                "score": score,
+                "result": check.model_dump(mode="json"),
+            },
+        )
+        if not check.fully_supported or score != 1:
+            audit("guardrail", {"policy": "citation_or_grounding", "decision": "fail_closed"})
+            return self._answer(
+                session,
+                turn,
+                started,
+                "en",
+                "lite",
+                context,
+                UNVERIFIED["en"],
+                [],
+                0.0,
+            )
+        return self._answer(
+            session,
+            turn,
+            started,
+            "en",
+            "lite",
+            context,
+            draft.text,
+            draft.citations,
+            score,
+        )
 
     async def _gallery_workspace(
         self,

@@ -123,6 +123,8 @@ class Settings(BaseSettings):
     qdrant_collection: NonEmptyString = "met_objects"
     qdrant_visitor_collection: NonEmptyString = "met_visitor_info"
     met_api_base: HttpUrl = HttpUrl("https://collectionapi.metmuseum.org/public/collection/v1")
+    met_map_api_base: HttpUrl = HttpUrl("https://map-api.prod.livingmap.com")
+    met_map_base: HttpUrl = HttpUrl("https://maps.metmuseum.org")
     ingest_max_objects: Annotated[int, Field(gt=0)] = 10_000
     embedding_batch_size: Annotated[int, Field(gt=0, le=100)] = 32
     data_dir: Path = Path("data")

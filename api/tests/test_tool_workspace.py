@@ -17,12 +17,122 @@ from met_agent.retrieval.qdrant_store import HybridStore, IndexCompatibilityErro
 from met_agent.retrieval.schema import ImageVectorSpec
 from met_agent.retrieval.service import SearchService
 from met_agent.tools.find_similar_objects import find_similar_objects
+from met_agent.tools.get_directions import WayfindingClient
 from met_agent.tools.get_object import LiveObjectClient, ObjectNotFound
-from met_agent.tools.models import GetObjectArguments, Handoff, HandoffArguments, LiveObject
+from met_agent.tools.models import (
+    GetDirectionsArguments,
+    GetObjectArguments,
+    Handoff,
+    HandoffArguments,
+    LiveObject,
+)
 from met_agent.tools.registry import ToolRegistry, create_registry
 from met_agent.tools.schemas import FindSimilarObjectsArguments
 
 pytestmark = pytest.mark.filterwarnings("ignore:Payload indexes have no effect:UserWarning")
+
+
+def map_feature(feature_id: str, label: str, *, closed: bool = False) -> dict[str, Any]:
+    return {
+        "id": feature_id,
+        "is_temporarily_closed": closed,
+        "label": {"name": [{"lang": "en-GB", "text": label}]},
+        "location": {
+            "center": {"latitude": 40.779448, "longitude": -73.963517},
+            "floor": {
+                "id": 2,
+                "floor": "1",
+                "name": [{"lang": "en-GB", "text": "Floor 1"}],
+                "short_name": "1",
+            },
+        },
+    }
+
+
+def test_wayfinding_uses_exact_official_features_route_and_cache() -> None:
+    calls: list[httpx.Request] = []
+    clock = [0.0]
+    hall_id = "a" * 32
+    gallery_id = "b" * 32
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        assert request.headers["user-agent"]
+        if request.method == "POST":
+            assert json.loads(request.content) == {
+                "from": {"lmId": hall_id},
+                "to": {"lmId": gallery_id},
+                "options": {},
+                "project": "the_met",
+            }
+            return httpx.Response(
+                200,
+                json={"routeMetadata": [{"totalTime": 2, "totalLength": 0.178}]},
+            )
+        query = request.url.params["query"]
+        data = (
+            [map_feature(hall_id, "The Great Hall")]
+            if query == "The Great Hall"
+            else [
+                map_feature("c" * 32, "Gallery 131 South Walkway"),
+                map_feature(gallery_id, "131"),
+            ]
+        )
+        return httpx.Response(200, json={"data": data})
+
+    with httpx.Client(transport=httpx.MockTransport(transport)) as http:
+        client = WayfindingClient(
+            http,
+            "https://map-api.prod.livingmap.com",
+            "https://maps.metmuseum.org",
+            clock=lambda: clock[0],
+        )
+        result = client.get(GetDirectionsArguments(destination_gallery="131"))
+        assert result.origin == "The Great Hall" and result.destination == "Gallery 131"
+        assert result.floor == "Floor 1"
+        assert result.distance_metres == 178 and result.distance_feet == 584
+        assert result.duration_minutes == 2
+        assert result.source_url == (
+            f"https://maps.metmuseum.org/navigate/{hall_id}/{gallery_id}?floor=1&lang=en-GB"
+        )
+        assert "Fetched at:" in result.text
+        result.text = "locally changed"
+        assert (
+            "The Met Interactive Map route"
+            in client.get(GetDirectionsArguments(destination_gallery="131")).text
+        )
+        assert len(calls) == 3
+        clock[0] = 300
+        client.get(GetDirectionsArguments(destination_gallery="131"))
+        assert len(calls) == 6
+
+
+def test_wayfinding_fails_closed_for_closed_or_ambiguous_destination() -> None:
+    hall_id = "a" * 32
+    gallery_id = "b" * 32
+    destinations = [[map_feature(gallery_id, "131", closed=True)], []]
+    for gallery_results in destinations:
+
+        def transport(
+            request: httpx.Request, gallery_results: list[dict[str, Any]] = gallery_results
+        ) -> httpx.Response:
+            query = request.url.params["query"]
+            data = (
+                [map_feature(hall_id, "The Great Hall")]
+                if query == "The Great Hall"
+                else gallery_results
+            )
+            return httpx.Response(200, json={"data": data})
+
+        with (
+            httpx.Client(transport=httpx.MockTransport(transport)) as http,
+            pytest.raises(SourceError),
+        ):
+            WayfindingClient(
+                http,
+                "https://map-api.prod.livingmap.com",
+                "https://maps.metmuseum.org",
+            ).get(GetDirectionsArguments(destination_gallery="131"))
 
 
 def test_live_cache_expiry_identity_and_safe_errors() -> None:
@@ -109,9 +219,7 @@ def test_registry_never_executes_invalid_input_or_leaks_exception() -> None:
     assert len(registry.schemas) == 1
 
 
-def test_all_five_tools_and_image_space(
-    settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_all_six_tools_and_image_space(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
     config = settings.model_copy(
         update={
             "embedding_provider": "local",
@@ -163,13 +271,19 @@ def test_all_five_tools_and_image_space(
             ],
         )
         service = SearchService(client, config)
-        registry = create_registry(config, service, LiveObjectClient(http, "https://met.test"))
+        registry = create_registry(
+            config,
+            service,
+            LiveObjectClient(http, "https://met.test"),
+            WayfindingClient(http, "https://map.test", "https://maps.test"),
+        )
         assert set(registry.tools) == {
             "search_collection",
             "search_visitor_info",
             "get_object",
             "handoff",
             "find_similar_objects",
+            "get_directions",
         }
         result = asyncio.run(registry.execute("find_similar_objects", '{"object_id":1,"k":5}'))
         assert result.error is None and result.output is not None
