@@ -21,6 +21,7 @@ from met_agent.tools.models import Evidence, Handoff
 from met_agent.tools.registry import ToolRegistry
 
 MAX_TOOL_CALLS = 6
+MAX_TOOL_ROUNDS = 2
 NOT_FOUND: dict[Language, str] = {
     "en": "The requested object was not found. The Met API returned no object record.",
     "fr": "L'objet demandé est introuvable. L'API du Met n'a renvoyé aucune notice d'objet.",
@@ -159,12 +160,19 @@ class Agent:
         ]
         evidence: list[Evidence] = []
         tool_count = 0
+        tool_rounds = 0
         repairs = 0
         for _ in range(MAX_TOOL_CALLS + 3):
             reply = await self.model.complete(
                 intent.route,
                 messages,
-                tools=self.tools.schemas if tool_count < MAX_TOOL_CALLS and repairs == 0 else None,
+                tools=(
+                    self.tools.schemas
+                    if tool_count < MAX_TOOL_CALLS
+                    and tool_rounds < MAX_TOOL_ROUNDS
+                    and repairs == 0
+                    else None
+                ),
                 response_schema=AgentDraft,
             )
             calls = reply.message.get("tool_calls") or []
@@ -175,6 +183,7 @@ class Agent:
                 raise ModelError("invalid_response", "Invalid model tool-call envelope")
             messages.append(reply.message)
             if calls:
+                tool_rounds += 1
                 for call in calls:
                     if tool_count >= MAX_TOOL_CALLS:
                         audit("tool_limit", {"limit": MAX_TOOL_CALLS})
@@ -270,6 +279,11 @@ class Agent:
                             1.0,
                             handoff=result.output,
                         )
+                if tool_rounds == MAX_TOOL_ROUNDS:
+                    audit(
+                        "tool_round_limit",
+                        {"limit": MAX_TOOL_ROUNDS, "decision": "finalize_with_current_evidence"},
+                    )
                 continue
             try:
                 draft = AgentDraft.model_validate_json(reply.text)

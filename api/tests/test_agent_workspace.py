@@ -228,8 +228,17 @@ def test_invalid_argument_feedback_and_terminal_handoff(tmp_path: Path) -> None:
         ]
     )
     agent = Agent(model, registry_with_calls(executed), EventStore(tmp_path / "audit.sqlite3"))
-    assert asyncio.run(agent.run(ChatRequest(message="Temple"))).grounding_score == 1
+    answer = asyncio.run(agent.run(ChatRequest(message="Temple")))
+    assert answer.grounding_score == 1
     assert "invalid_arguments" in json.dumps(model.calls[2][1])
+    assert model.calls[1][2] is not None and model.calls[2][2] is not None
+    assert model.calls[3][2] is None
+    assert any(
+        event.kind == "tool_round_limit"
+        and isinstance(event.data, dict)
+        and event.data.get("decision") == "finalize_with_current_evidence"
+        for event in agent.events.read(answer.session_id)
+    )
     model.replies.extend(
         [
             intent(),
