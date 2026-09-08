@@ -88,7 +88,7 @@ uv run --project api --locked met-agent-mcp
 uv run --project api --locked met-agent-mcp --transport sse --port 8001
 ```
 
-It exposes five tools:
+It exposes six tools:
 
 | Tool | Purpose |
 | --- | --- |
@@ -96,6 +96,7 @@ It exposes five tools:
 | `get_object` | Live object details, including current gallery and display status |
 | `search_visitor_info` | Search captured visitor pages with freshness metadata |
 | `find_similar_objects` | Image-vector similarity using The Met's published embeddings |
+| `get_directions` | Live bounded routes from The Great Hall to a numbered gallery using The Met's official interactive map |
 | `handoff` | Terminal routing for account, purchase, and out-of-scope requests |
 
 See [MCP client configuration](docs/mcp.md).
@@ -112,7 +113,7 @@ api/
     mcp/                   Stdio and SSE transports
     observability/         Redacted logs and optional Langfuse traces
     retrieval/             Dense, BM25, image, fusion, and local reranking
-    tools/                 Five typed tools shared by HTTP and MCP
+    tools/                 Six typed tools shared by HTTP and MCP
     config.py              Sole environment-loading boundary
     main.py, routes.py     FastAPI factory and verified SSE routes
   prompts/                 Versioned runtime instructions and hashes

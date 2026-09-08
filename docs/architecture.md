@@ -30,15 +30,18 @@ flowchart TB
         Objects[(met_objects)]
         Visitors[(met_visitor_info)]
         Live[Met object API]
+        Map[Met interactive map]
         Objects --> Pack[Bounded evidence pack]
         Visitors --> Pack
         Live --> Pack
+        Map --> Pack
     end
 
     Proxy --> HTTP
     Agent --> Objects
     Agent --> Visitors
     Agent --> Live
+    Agent --> Map
     Pack --> Agent
     Verify -->|verified answer| HTTP
     HTTP -->|SSE| Proxy
@@ -54,7 +57,7 @@ Qdrant collection metadata records the text embedding provider, model, dimension
 4. Interpretive requests return the versioned policy response. Out-of-scope requests call the terminal `handoff` tool. Factual requests enter the bounded loop.
 5. The main or lite model may call only a registered JSON-schema tool. Arguments are strictly validated, calls run sequentially, and the loop stops after six tool calls.
 6. Search combines local multilingual E5 dense vectors with Qdrant BM25, fuses candidates, and reranks the top 20 with a pinned local cross-encoder. Model context keeps at most eight unique evidence records and 6,000 source-text characters.
-7. `get_object` reads The Met's live object endpoint for current display and gallery fields. `find_similar_objects` searches only the published `image` vector and never substitutes text similarity.
+7. `get_object` reads The Met's live object endpoint for current display and gallery fields. `find_similar_objects` searches only the published `image` vector and never substitutes text similarity. A narrowly recognized Fifth Avenue entrance request can call `get_directions`, which resolves an exact Floor 1 gallery through The Met's live interactive map and uses The Great Hall as the indoor route origin.
 8. Final generation uses provider-native JSON Schema. Citation URLs and verbatim excerpts must match evidence returned during the same turn.
 9. A separate structured grounding call checks atomic claims against the same bounded evidence. One rejected draft may be regenerated without new tools. A second failure returns a verification-unavailable answer.
 10. Only the verified final text is emitted as SSE token events. The browser compares the emitted text with the typed final answer before attaching citations or provenance.

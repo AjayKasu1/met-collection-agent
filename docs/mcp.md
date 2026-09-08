@@ -1,6 +1,6 @@
 # MCP tools
 
-The official `mcp` Python SDK serves the same five tools and Pydantic schemas as chat: `search_collection`, `get_object`, `search_visitor_info`, `find_similar_objects`, and `handoff`. Raw arguments go directly to the shared registry, so numeric strings, booleans used as IDs, unknown fields, and out-of-range values are rejected consistently. Results contain `output` or `error` plus server-derived citation evidence. A tool error also sets the MCP `isError` flag.
+The official `mcp` Python SDK serves the same six tools and Pydantic schemas as chat: `search_collection`, `get_object`, `search_visitor_info`, `find_similar_objects`, `get_directions`, and `handoff`. Raw arguments go directly to the shared registry, so numeric strings, booleans used as IDs, unknown fields, and out-of-range values are rejected consistently. Results contain `output` or `error` plus server-derived citation evidence. A tool error also sets the MCP `isError` flag.
 
 ## Standard input/output
 
@@ -40,7 +40,7 @@ Connect an SSE-capable MCP client to `http://127.0.0.1:8001/sse`. The SDK advert
 
 ## Use and limits
 
-`get_object` provides current gallery information through a five-minute cache. Search gallery filters describe the index capture. `find_similar_objects` searches only the Met's published image vectors, excludes the source, and explicitly reports missing image coverage. Search queries should be English rewrites for the English reranker; returned evidence can support answers in other languages.
+`get_object` provides current gallery information through a five-minute cache. Search gallery filters describe the index capture. `find_similar_objects` searches only the Met's published image vectors, excludes the source, and explicitly reports missing image coverage. `get_directions` resolves a bounded route from The Great Hall to an exact numbered gallery through The Met's live interactive map, caches it for five minutes, and fails when the map result is unavailable, ambiguous, on another floor, or marks the destination closed. Search queries should be English rewrites for the English reranker; returned evidence can support answers in other languages.
 
 MCP exposes tools, not the chat agent's policy loop. The host client is responsible for its own tool-call budget, answer language, citation verification, and non-interpretive behavior. The `handoff` result suggests a contact and sends nothing. MCP clients should treat it as terminal in their own conversation flow.
 

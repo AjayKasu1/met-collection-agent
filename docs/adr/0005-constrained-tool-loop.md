@@ -9,7 +9,7 @@ Unbounded agents can repeat searches, accumulate excessive context, increase pro
 
 ## Decision
 
-Register five tools with strict Pydantic input and output schemas. Reject extra or oversized arguments, execute calls sequentially, cap each turn at six tool calls, deduplicate evidence, and cap model-visible context at eight records and 6,000 source-text characters. Treat `handoff` as terminal. Preserve full validated tool output in the API and audit record while sending only citable fields to the model.
+Register six tools with strict Pydantic input and output schemas. Reject extra or oversized arguments, execute calls sequentially, cap each turn at six tool calls, deduplicate evidence, and cap model-visible context at eight records and 6,000 source-text characters. Treat `handoff` as terminal. Preserve full validated tool output in the API and audit record while sending only citable fields to the model.
 
 ## Consequences
 
