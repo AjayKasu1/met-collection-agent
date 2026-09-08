@@ -13,7 +13,7 @@ from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
-from met_agent.guardrails.intent import Intent
+from met_agent.guardrails.intent import Intent, normalize_intent
 from met_agent.guardrails.interpretive import POLICY, UNVERIFIED
 from met_agent.llm.chat import CURRENT_CALL, CallContext, ChatModel, ModelError, structured
 from met_agent.llm.prompts import load_prompt, prompt_hash
@@ -68,7 +68,7 @@ class Agent:
             },
         )
         try:
-            intent = await structured(
+            model_intent = await structured(
                 self.model,
                 "lite",
                 load_prompt("intent_v2"),
@@ -79,7 +79,21 @@ class Agent:
                 },
                 Intent,
             )
-            audit("intent", intent.model_dump(mode="json"))
+            audit("intent", model_intent.model_dump(mode="json"))
+            intent, routing_policy = normalize_intent(model_intent, request.message)
+            if routing_policy is not None:
+                audit(
+                    "route_policy",
+                    {
+                        "policy": routing_policy,
+                        "model_category": model_intent.category,
+                        "model_difficulty": model_intent.difficulty,
+                        "category": intent.category,
+                        "difficulty": intent.difficulty,
+                        "route": intent.route,
+                        "search_query": intent.search_query,
+                    },
+                )
             if intent.category == "interpretive":
                 audit("guardrail", {"policy": "non_interpretive", "decision": "refuse"})
                 return self._answer(

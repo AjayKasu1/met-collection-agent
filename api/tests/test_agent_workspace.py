@@ -14,6 +14,7 @@ from met_agent.agent.events import EventStore
 from met_agent.agent.loop import Agent
 from met_agent.agent.models import AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
+from met_agent.guardrails.intent import Intent, normalize_intent
 from met_agent.guardrails.interpretive import POLICY
 from met_agent.ingestion.verify import read_golden
 from met_agent.llm.chat import ModelError, Reply
@@ -94,6 +95,72 @@ def judgment(supported: bool = True) -> dict[str, Any]:
             {"text": "Temple", "supported": True, "evidence_keys": ["object:1"]},
             {"text": "Unsupported date", "supported": False, "evidence_keys": []},
         ],
+    }
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "What can I see in Gallery 131?",
+        "What is in gallery #131?",
+        "Which artworks are on view in the Gallery 131?",
+    ],
+)
+def test_direct_gallery_questions_have_a_stable_lite_route(message: str) -> None:
+    model_intent = Intent(
+        category="visitor_info",
+        difficulty="complex",
+        language="en",
+        search_query="ambiguous model rewrite",
+    )
+    normalized, policy = normalize_intent(model_intent, message)
+    assert policy == "direct_gallery_question"
+    assert normalized.category == "collection"
+    assert normalized.difficulty == "simple"
+    assert normalized.search_query == "Objects in Gallery 131"
+    assert normalized.route == "lite"
+
+
+def test_gallery_normalization_does_not_collapse_complex_or_policy_requests() -> None:
+    collection = Intent.model_validate(intent())
+    normalized, policy = normalize_intent(
+        collection, "Compare Gallery 131 and Gallery 132, then plan my route"
+    )
+    assert normalized == collection and policy is None
+    interpretive = collection.model_copy(
+        update={"category": "interpretive", "difficulty": "complex"}
+    )
+    normalized, policy = normalize_intent(interpretive, "What is in Gallery 131?")
+    assert normalized == interpretive and policy is None
+
+
+def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
+    model_decision = {
+        **intent(category="visitor_info"),
+        "difficulty": "complex",
+        "search_query": "ambiguous model rewrite",
+    }
+    model = ScriptedModel([model_decision, calls("get_object"), draft(), judgment()])
+    store = EventStore(tmp_path / "gallery-route.sqlite3")
+    answer = asyncio.run(
+        Agent(model, registry_with_calls([]), store).run(
+            ChatRequest(message="What can I see in Gallery 131?")
+        )
+    )
+    assert answer.route == "lite" and answer.grounding_score == 1
+    assert [call[0] for call in model.calls] == ["lite"] * 4
+    policy_events = [
+        event for event in store.read(answer.session_id) if event.kind == "route_policy"
+    ]
+    assert len(policy_events) == 1
+    assert policy_events[0].data == {
+        "policy": "direct_gallery_question",
+        "model_category": "visitor_info",
+        "model_difficulty": "complex",
+        "category": "collection",
+        "difficulty": "simple",
+        "route": "lite",
+        "search_query": "Objects in Gallery 131",
     }
 
 
