@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
+import structlog
 from pydantic import JsonValue
 
 from met_agent.agent.events import AuditStore
@@ -15,8 +16,7 @@ from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citatio
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
 from met_agent.guardrails.intent import (
     Intent,
-    direct_gallery_number,
-    direct_gallery_wayfinding_number,
+    message_numbers,
     normalize_intent,
 )
 from met_agent.guardrails.interpretive import POLICY, UNVERIFIED
@@ -76,14 +76,14 @@ class Agent:
             "prompt_versions",
             {
                 name: prompt_hash(name)
-                for name in ("system_v2", "tools_v1", "intent_v2", "grounding_v1", "citations_v1")
+                for name in ("system_v2", "tools_v1", "intent_v3", "grounding_v1", "citations_v1")
             },
         )
         try:
             model_intent = await structured(
                 self.model,
                 "lite",
-                load_prompt("intent_v2"),
+                load_prompt("intent_v3"),
                 {
                     "message": request.message,
                     "history": json.loads(json.dumps(history)),
@@ -153,7 +153,7 @@ class Agent:
                     handoff=handoff,
                 )
             if routing_policy == "direct_gallery_question":
-                gallery_number = direct_gallery_number(request.message)
+                gallery_number = intent.gallery_number
                 if gallery_number is None:
                     raise RuntimeError("Direct gallery policy lost its validated gallery number")
                 return await self._gallery_workspace(
@@ -167,7 +167,7 @@ class Agent:
                     audit,
                 )
             if routing_policy == "direct_gallery_wayfinding":
-                gallery_number = direct_gallery_wayfinding_number(request.message)
+                gallery_number = intent.gallery_number
                 if gallery_number is None:
                     raise RuntimeError("Wayfinding policy lost its validated gallery number")
                 return await self._wayfinding_workspace(
@@ -179,9 +179,23 @@ class Agent:
                     context,
                     audit,
                 )
-            return await self._workspace(
+            answer = await self._workspace(
                 request, session, turn, started, intent, context, history, audit
             )
+            if answer.grounding_score < 1 and (
+                intent.gallery_number is not None or message_numbers(request.message)
+            ):
+                deviation: dict[str, JsonValue] = {
+                    "reason": "numeric_query_unverified_on_general_route",
+                    "category": intent.category,
+                    "operation": intent.operation,
+                    "gallery_number": intent.gallery_number,
+                    "session_id": str(session),
+                    "turn_id": str(turn),
+                }
+                audit("routing_deviation", deviation)
+                structlog.get_logger(__name__).warning("routing_deviation", **deviation)
+            return answer
         except ModelError as error:
             audit("turn_error", {"code": error.code, "message": str(error)})
             raise

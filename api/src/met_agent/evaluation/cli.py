@@ -74,7 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             for name in (
                 "system_v2",
                 "tools_v1",
-                "intent_v2",
+                "intent_v3",
                 "grounding_v1",
                 "evaluation_v1",
                 "citations_v1",

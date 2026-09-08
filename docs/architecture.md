@@ -53,7 +53,7 @@ Qdrant collection metadata records the text embedding provider, model, dimension
 
 1. The web route validates the UI message, sends the latest question and stable session UUID to `POST /chat`, and accepts no client-provided citations.
 2. FastAPI validates the request and appends `user_message` plus the hashes of all active prompt versions.
-3. The lite model classifies language, category, route, search rewrite, and optional handoff target with native structured output.
+3. The lite model classifies language, category, operation, gallery entity, origin, search rewrite, and optional handoff target with native structured output using `intent_v3`. The same call handles colloquial wording and spelling variation; there is no phrase-matching router or additional embedding model. The server checks the proposed operation, category, difficulty, language, and numeric entity before dispatching a bounded gallery handler. A gallery ID must match the only numeric entity in the current message and be explicitly identified as a gallery or room. The remaining short regex validates that entity reference, not the requested operation. Ambiguous, filtered, combined, or unsupported requests remain general requests.
 4. Interpretive requests return the versioned policy response. Out-of-scope requests call the terminal `handoff` tool. Factual requests enter the bounded loop.
 5. The main or lite model may call only a registered JSON-schema tool. Arguments are strictly validated, calls run sequentially, and the loop stops after six tool calls.
 6. Search combines local multilingual E5 dense vectors with Qdrant BM25, fuses candidates, and reranks the top 20 with a pinned local cross-encoder. Model context keeps at most eight unique evidence records and 6,000 source-text characters.
@@ -89,6 +89,8 @@ final_answer
 ```
 
 Retries, cooldowns, fallback selection, validation errors, tool limits, terminal handoffs, and turn errors add explicit events when they occur. Provider response bodies and authorization headers are never recorded. Event data can still contain user questions, model-visible evidence, and final answers, so it requires the same access and retention controls as conversation data.
+
+An unverified general-route answer with a classified gallery or a numeric entity emits `routing_deviation` to the session audit and structured warning logs. It includes the operation, category, and session/turn identifiers; raw questions remain in the protected session audit. This is a review signal, not proof of a routing defect: years and object IDs can also trigger it. No email is sent and no test labels are changed automatically.
 
 `GET /sessions/{session_id}/events?after=0&limit=200` returns the ordered audit trail. `after` provides a stable cursor and `limit` is bounded from 1 through 500. Tests exercise multi-hop tool calls and assert that tool, evidence, guardrail, and final-answer events remain ordered and share the same turn. In production the API route requires the same edge-to-origin credential as other data routes; the public browser proxy does not expose arbitrary credentials.
 

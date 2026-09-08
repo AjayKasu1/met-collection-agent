@@ -119,10 +119,12 @@ def judgment(supported: bool = True) -> dict[str, Any]:
 )
 def test_direct_gallery_questions_have_a_stable_lite_route(message: str) -> None:
     model_intent = Intent(
-        category="visitor_info",
-        difficulty="complex",
+        category="collection",
+        difficulty="simple",
+        operation="gallery_inventory",
+        gallery_number="131",
         language="en",
-        search_query="ambiguous model rewrite",
+        search_query="Objects in Gallery 131",
     )
     normalized, policy = normalize_intent(model_intent, message)
     assert policy == "direct_gallery_question"
@@ -146,19 +148,65 @@ def test_gallery_normalization_does_not_collapse_complex_or_policy_requests() ->
 
 
 @pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"category": "interpretive"}, "What inside gallery 131?"),
+        ({"category": "out_of_scope"}, "What inside gallery 131?"),
+        ({"difficulty": "complex"}, "Compare the sculptures inside 131"),
+        ({"operation": "general"}, "Which bronze objects are in room 131?"),
+        ({"constraints": ["bronze", "sculptures"]}, "Which bronze sculptures are in room 131?"),
+        ({"language": "fr"}, "Que voir dans la salle 131 ?"),
+        ({"gallery_number": "132"}, "what inside gallery 131"),
+        ({}, "Compare gallery 131 with gallery 132"),
+        ({}, "what is there"),
+        ({}, "object 547802"),
+        ({}, "gimme info on 131"),
+        ({}, "gallery 131.5"),
+        ({"operation": "gallery_wayfinding", "category": "visitor_info"}, "to gallery 131"),
+    ],
+)
+def test_semantic_routing_rejects_unsupported_or_unanchored_decisions(
+    updates: dict[str, Any], message: str
+) -> None:
+    decision = Intent.model_validate(
+        {**intent(), "operation": "gallery_inventory", "gallery_number": "131", **updates}
+    )
+    normalized, policy = normalize_intent(decision, message)
+    assert normalized == decision and policy is None
+
+
+def test_unverified_numeric_general_route_emits_review_event(tmp_path: Path) -> None:
+    model = ScriptedModel([intent(), draft(object_id=999), draft(object_id=999)])
+    store = EventStore(tmp_path / "deviation.sqlite3")
+    answer = asyncio.run(
+        Agent(model, registry_with_calls([]), store).run(
+            ChatRequest(message="gimme info on room 131")
+        )
+    )
+    assert answer.grounding_score == 0
+    events = [e for e in store.read(answer.session_id) if e.kind == "routing_deviation"]
+    assert len(events) == 1
+    assert isinstance(events[0].data, dict)
+    assert events[0].data["session_id"] == str(answer.session_id)
+
+
+@pytest.mark.parametrize(
     "message",
     [
         "How do I get to Gallery 131 from the Fifth Avenue entrance?",
         "How can I walk from the main entrance to gallery #131?",
-        "Directions to Gallery 131 from the entrance, please.",
+        "Directions to Gallery 131 from the main entrance, please.",
     ],
 )
 def test_direct_gallery_wayfinding_has_a_stable_lite_route(message: str) -> None:
     model_intent = Intent(
-        category="multi_hop",
-        difficulty="complex",
+        category="visitor_info",
+        difficulty="simple",
+        operation="gallery_wayfinding",
+        gallery_number="131",
+        origin="fifth_avenue_entrance",
         language="en",
-        search_query="ambiguous model rewrite",
+        search_query="route to room",
     )
     normalized, policy = normalize_intent(model_intent, message)
     assert policy == "direct_gallery_wayfinding"
@@ -198,9 +246,10 @@ def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> Non
         directions,
     )
     model_decision = {
-        **intent(category="multi_hop"),
-        "difficulty": "complex",
-        "search_query": "search everything",
+        **intent(category="visitor_info"),
+        "operation": "gallery_wayfinding",
+        "gallery_number": "131",
+        "origin": "fifth_avenue_entrance",
     }
     supported = {
         "fully_supported": True,
@@ -253,7 +302,16 @@ def test_direct_gallery_wayfinding_fails_closed_without_map_evidence(tmp_path: P
         WayfindingResult,
         unavailable,
     )
-    model = ScriptedModel([intent(category="visitor_info")])
+    model = ScriptedModel(
+        [
+            {
+                **intent(category="visitor_info"),
+                "operation": "gallery_wayfinding",
+                "gallery_number": "131",
+                "origin": "fifth_avenue_entrance",
+            }
+        ]
+    )
     answer = asyncio.run(
         Agent(model, registry, EventStore(tmp_path / "wayfinding-failure.sqlite3")).run(
             ChatRequest(message="Directions to Gallery 131 from the Fifth Avenue entrance")
@@ -270,9 +328,10 @@ def test_direct_gallery_wayfinding_fails_closed_without_map_evidence(tmp_path: P
 
 def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
     model_decision = {
-        **intent(category="visitor_info"),
-        "difficulty": "complex",
-        "search_query": "ambiguous model rewrite",
+        **intent(),
+        "operation": "gallery_inventory",
+        "gallery_number": "131",
+        "search_query": "Objects in Gallery 131",
     }
     executed: list[int] = []
     registry = registry_with_calls(executed)
@@ -315,8 +374,8 @@ def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
     assert len(policy_events) == 1
     assert policy_events[0].data == {
         "policy": "direct_gallery_question",
-        "model_category": "visitor_info",
-        "model_difficulty": "complex",
+        "model_category": "collection",
+        "model_difficulty": "simple",
         "category": "collection",
         "difficulty": "simple",
         "route": "lite",
