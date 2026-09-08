@@ -19,14 +19,17 @@ from met_agent.guardrails.interpretive import POLICY
 from met_agent.ingestion.verify import read_golden
 from met_agent.llm.chat import ModelError, Reply
 from met_agent.llm.prompts import load_prompt, prompt_hash
+from met_agent.retrieval.hybrid import RetrievedObject, ScoreBreakdown, SearchFilters
 from met_agent.tools.get_object import ObjectNotFound
 from met_agent.tools.handoff import handoff
 from met_agent.tools.models import (
+    CollectionSearchResult,
     Evidence,
     GetObjectArguments,
     Handoff,
     HandoffArguments,
     LiveObject,
+    SearchCollectionArguments,
 )
 from met_agent.tools.registry import ToolRegistry
 
@@ -140,15 +143,41 @@ def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
         "difficulty": "complex",
         "search_query": "ambiguous model rewrite",
     }
-    model = ScriptedModel([model_decision, calls("get_object"), draft(), judgment()])
+    executed: list[int] = []
+    registry = registry_with_calls(executed)
+
+    def gallery_search(arguments: SearchCollectionArguments) -> CollectionSearchResult:
+        assert arguments.query == "Objects in Gallery 131"
+        assert arguments.filters == SearchFilters(gallery_number="131")
+        return CollectionSearchResult(
+            objects=[
+                RetrievedObject(
+                    object_id=1,
+                    title="Temple",
+                    source_url="https://www.metmuseum.org/art/collection/search/1",
+                    text="Temple\ngallery_number: 131",
+                    record={"gallery_number": "131"},
+                    scores=ScoreBreakdown(rrf=1 / 61, rerank=1.0),
+                )
+            ]
+        )
+
+    registry.register(
+        "search_collection",
+        "Collection search",
+        SearchCollectionArguments,
+        CollectionSearchResult,
+        gallery_search,
+    )
+    model = ScriptedModel([model_decision, judgment()])
     store = EventStore(tmp_path / "gallery-route.sqlite3")
     answer = asyncio.run(
-        Agent(model, registry_with_calls([]), store).run(
-            ChatRequest(message="What can I see in Gallery 131?")
-        )
+        Agent(model, registry, store).run(ChatRequest(message="What can I see in Gallery 131?"))
     )
     assert answer.route == "lite" and answer.grounding_score == 1
-    assert [call[0] for call in model.calls] == ["lite"] * 4
+    assert answer.text == "The live Met record currently lists Temple as on view in Gallery 131."
+    assert answer.citations[0].object_id == 1 and executed == [1]
+    assert [call[0] for call in model.calls] == ["lite"] * 2
     policy_events = [
         event for event in store.read(answer.session_id) if event.kind == "route_policy"
     ]
@@ -162,6 +191,12 @@ def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
         "route": "lite",
         "search_query": "Objects in Gallery 131",
     }
+    assert any(
+        event.kind == "guardrail"
+        and isinstance(event.data, dict)
+        and event.data.get("policy") == "deterministic_gallery_inventory"
+        for event in store.read(answer.session_id)
+    )
 
 
 def live_object(object_id: int = 1) -> LiveObject:

@@ -13,11 +13,11 @@ from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
-from met_agent.guardrails.intent import Intent, normalize_intent
+from met_agent.guardrails.intent import Intent, direct_gallery_number, normalize_intent
 from met_agent.guardrails.interpretive import POLICY, UNVERIFIED
 from met_agent.llm.chat import CURRENT_CALL, CallContext, ChatModel, ModelError, structured
 from met_agent.llm.prompts import load_prompt, prompt_hash
-from met_agent.tools.models import Evidence, Handoff
+from met_agent.tools.models import CollectionSearchResult, Evidence, Handoff, LiveObject, ToolResult
 from met_agent.tools.registry import ToolRegistry
 
 MAX_TOOL_CALLS = 6
@@ -137,6 +137,20 @@ class Agent:
                     1.0,
                     handoff=handoff,
                 )
+            if routing_policy == "direct_gallery_question":
+                gallery_number = direct_gallery_number(request.message)
+                if gallery_number is None:
+                    raise RuntimeError("Direct gallery policy lost its validated gallery number")
+                return await self._gallery_workspace(
+                    request,
+                    session,
+                    turn,
+                    started,
+                    intent,
+                    gallery_number,
+                    context,
+                    audit,
+                )
             return await self._workspace(
                 request, session, turn, started, intent, context, history, audit
             )
@@ -146,6 +160,167 @@ class Agent:
         finally:
             CURRENT_CALL.reset(token)
             await asyncio.to_thread(self.events.append_many, session, turn, buffered_events)
+
+    async def _gallery_workspace(
+        self,
+        request: ChatRequest,
+        session: UUID,
+        turn: UUID,
+        started: float,
+        intent: Intent,
+        gallery_number: str,
+        context: CallContext,
+        audit: Callable[[str, JsonValue], None],
+    ) -> AgentAnswer:
+        """Resolve a direct gallery inventory with exact filtering and live records."""
+
+        async def execute(number: int, name: str, arguments: str) -> ToolResult:
+            audit("tool_call", {"name": name, "arguments": arguments, "number": number})
+            tool_started = time.monotonic()
+            result = await self.tools.execute(name, arguments)
+            audit(
+                "tool_timing",
+                {"name": name, "latency_ms": (time.monotonic() - tool_started) * 1000},
+            )
+            audit(
+                "validation_error" if result.error else "tool_result",
+                result.model_dump(mode="json"),
+            )
+            return result
+
+        query = f"Objects in Gallery {gallery_number}"
+        search = await execute(
+            1,
+            "search_collection",
+            json.dumps(
+                {
+                    "query": query,
+                    "filters": {"gallery_number": gallery_number},
+                    "k": 5,
+                }
+            ),
+        )
+        if not isinstance(search.output, CollectionSearchResult):
+            audit(
+                "guardrail",
+                {"policy": "deterministic_gallery_inventory", "decision": "fail_closed"},
+            )
+            return self._answer(
+                session,
+                turn,
+                started,
+                "en",
+                "lite",
+                context,
+                UNVERIFIED["en"],
+                [],
+                0.0,
+            )
+
+        confirmed: list[tuple[LiveObject, Evidence]] = []
+        for number, candidate in enumerate(search.output.objects[:5], 2):
+            result = await execute(
+                number, "get_object", json.dumps({"object_id": candidate.object_id})
+            )
+            if not isinstance(result.output, LiveObject):
+                continue
+            if not result.output.is_on_view or result.output.gallery_number != gallery_number:
+                continue
+            live_evidence = next(
+                (item for item in result.model_evidence() if item.kind == "live_object"), None
+            )
+            if live_evidence is not None:
+                confirmed.append((result.output, live_evidence))
+
+        evidence = [item for _, item in confirmed]
+        audit(
+            "evidence_context",
+            [item.model_dump(mode="json", exclude_none=True) for item in evidence],
+        )
+        if not confirmed:
+            audit(
+                "guardrail",
+                {"policy": "deterministic_gallery_inventory", "decision": "fail_closed"},
+            )
+            return self._answer(
+                session,
+                turn,
+                started,
+                "en",
+                "lite",
+                context,
+                UNVERIFIED["en"],
+                [],
+                0.0,
+            )
+
+        labels = [obj.title.strip() or f"Object {obj.object_id}" for obj, _ in confirmed]
+        if len(labels) == 1:
+            text = (
+                f"The live Met record currently lists {labels[0]} as on view "
+                f"in Gallery {gallery_number}."
+            )
+        else:
+            text = (
+                f"The live Met records currently list these objects as on view in Gallery "
+                f"{gallery_number}: " + "; ".join(labels) + "."
+            )
+        draft = AgentDraft(
+            text=text,
+            language="en",
+            citations=[
+                Citation(object_id=obj.object_id, quote=item.text[:2000]) for obj, item in confirmed
+            ],
+        )
+        if not valid_citations(draft, evidence):
+            raise RuntimeError("Server-produced gallery citations are invalid")
+        check = await structured(
+            self.model,
+            "lite",
+            load_prompt("grounding_v1"),
+            {
+                "question": request.message,
+                "draft": draft.model_dump(mode="json"),
+                "evidence": [item.model_dump(mode="json") for item in evidence],
+            },
+            GroundingCheck,
+        )
+        score = check.score(evidence)
+        audit(
+            "guardrail",
+            {
+                "policy": "deterministic_gallery_inventory",
+                "score": score,
+                "result": check.model_dump(mode="json"),
+            },
+        )
+        if not check.fully_supported or score != 1:
+            audit(
+                "guardrail",
+                {"policy": "citation_or_grounding", "decision": "fail_closed"},
+            )
+            return self._answer(
+                session,
+                turn,
+                started,
+                "en",
+                "lite",
+                context,
+                UNVERIFIED["en"],
+                [],
+                0.0,
+            )
+        return self._answer(
+            session,
+            turn,
+            started,
+            "en",
+            "lite",
+            context,
+            draft.text,
+            draft.citations,
+            score,
+        )
 
     async def _workspace(
         self,

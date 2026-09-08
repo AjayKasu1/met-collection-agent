@@ -8,7 +8,12 @@ from met_agent.tools.models import CollectionSearchResult, SearchCollectionArgum
 def search_collection(
     service: SearchService, collection: str, arguments: SearchCollectionArguments
 ) -> CollectionSearchResult:
-    matches = service.search(collection, arguments.query, filters=arguments.filters, k=arguments.k)
+    gallery_number = arguments.filters.gallery_number if arguments.filters else None
+    matches = (
+        service.gallery(collection, gallery_number, k=arguments.k)
+        if gallery_number is not None and arguments.query == f"Objects in Gallery {gallery_number}"
+        else service.search(collection, arguments.query, filters=arguments.filters, k=arguments.k)
+    )
     return CollectionSearchResult(
         objects=[
             RetrievedObject(

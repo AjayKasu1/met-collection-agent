@@ -35,16 +35,22 @@ _DIRECT_GALLERY_QUESTION = re.compile(
 )
 
 
+def direct_gallery_number(message: str) -> str | None:
+    """Return a bounded gallery number only for a complete direct-gallery question."""
+    match = _DIRECT_GALLERY_QUESTION.fullmatch(message)
+    return match.group(1) if match is not None else None
+
+
 def normalize_intent(intent: Intent, message: str) -> tuple[Intent, str | None]:
     """Stabilize a narrow direct-gallery route while preserving semantic safety classes."""
-    match = _DIRECT_GALLERY_QUESTION.fullmatch(message)
-    if match is None or intent.category in {"interpretive", "out_of_scope"}:
+    gallery_number = direct_gallery_number(message)
+    if gallery_number is None or intent.category in {"interpretive", "out_of_scope"}:
         return intent, None
-    gallery_number = match.group(1)
     normalized = intent.model_copy(
         update={
             "category": "collection",
             "difficulty": "simple",
+            "language": "en",
             "search_query": f"Objects in Gallery {gallery_number}",
         }
     )

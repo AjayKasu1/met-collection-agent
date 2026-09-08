@@ -17,6 +17,7 @@ class SearchFilters(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
     department: str | None = Field(default=None, min_length=1, max_length=200)
+    gallery_number: str | None = Field(default=None, pattern=r"^\d{1,4}$")
     date_from: int | None = Field(default=None, ge=-100000, le=3000)
     date_to: int | None = Field(default=None, ge=-100000, le=3000)
     on_view: bool | None = None
@@ -38,6 +39,12 @@ class SearchFilters(BaseModel):
             must.append(
                 models.FieldCondition(
                     key="department", match=models.MatchValue(value=self.department)
+                )
+            )
+        if self.gallery_number:
+            must.append(
+                models.FieldCondition(
+                    key="gallery_number", match=models.MatchValue(value=self.gallery_number)
                 )
             )
         if self.date_from is not None:

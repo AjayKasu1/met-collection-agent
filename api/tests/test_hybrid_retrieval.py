@@ -17,6 +17,7 @@ from met_agent.retrieval.embeddings import EmbeddingError
 from met_agent.retrieval.hybrid import HybridRetriever, SearchFilters
 from met_agent.retrieval.qdrant_store import HybridStore, IndexCompatibilityError
 from met_agent.retrieval.schema import EmbeddingIdentity
+from met_agent.retrieval.service import SearchService
 
 pytestmark = pytest.mark.filterwarnings("ignore:Payload indexes have no effect:UserWarning")
 
@@ -40,7 +41,7 @@ class Rank:
         return [float(text.rsplit(" ", 1)[-1]) for text in documents]
 
 
-def test_fusion_reranking_filters_and_model_identity() -> None:
+def test_fusion_reranking_filters_and_model_identity(settings: Any) -> None:
     with closing(QdrantClient(location=":memory:")) as client:
         store = HybridStore(client, "test", "fixture", 2, embedding_provider="local")
         docs = [
@@ -70,6 +71,10 @@ def test_fusion_reranking_filters_and_model_identity() -> None:
         ] == [1]
         assert [
             point.id
+            for point, _ in retrieval.search("object", filters=SearchFilters(gallery_number="131"))
+        ] == [1]
+        assert [
+            point.id
             for point, _ in retrieval.search(
                 "object",
                 filters=SearchFilters(
@@ -84,6 +89,21 @@ def test_fusion_reranking_filters_and_model_identity() -> None:
             retrieval.search("object", k=41)
         with pytest.raises(ValidationError):
             SearchFilters(date_from=2000, date_to=1000)
+        with pytest.raises(ValidationError):
+            SearchFilters(gallery_number="first floor")
+        service = SearchService(
+            client,
+            settings.model_copy(
+                update={
+                    "embedding_provider": "local",
+                    "embedding_model": "fixture",
+                    "embedding_dimensions": 2,
+                }
+            ),
+        )
+        exact = service.gallery("test", "131")
+        assert [point.id for point, _ in exact] == [1]
+        assert service._dense is None and service._sparse is None and service._reranker is None
         bad = Dense()
         bad.identity = Dense.identity.model_copy(update={"model": "other"})
         with pytest.raises(IndexCompatibilityError):

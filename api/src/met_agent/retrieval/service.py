@@ -1,7 +1,9 @@
 """Share lazy local model instances and serialize CPU inference across requests."""
 
+import time
 from threading import Lock
 
+import structlog
 from qdrant_client import QdrantClient, models
 
 from met_agent.config import Settings
@@ -54,3 +56,45 @@ class SearchService:
             return HybridRetriever(store, self._dense, self._sparse, self._reranker).search(
                 query, filters=filters, k=k
             )
+
+    def gallery(
+        self, collection: str, gallery_number: str, *, k: int = 5
+    ) -> list[tuple[models.ScoredPoint, ScoreBreakdown]]:
+        """Use the indexed gallery keyword without loading local inference models."""
+        filters = SearchFilters(gallery_number=gallery_number)
+        if not 1 <= k <= 40:
+            raise ValueError("Gallery lookup requires k from 1 to 40")
+        started = time.monotonic()
+        with self._lock:
+            self.store(collection)
+            records, _ = self.client.scroll(
+                collection,
+                scroll_filter=filters.qdrant(),
+                limit=k,
+                with_payload=True,
+                with_vectors=False,
+            )
+        results: list[tuple[models.ScoredPoint, ScoreBreakdown]] = []
+        for rank, record in enumerate(records, 1):
+            payload = record.payload or {}
+            if not payload.get("text"):
+                raise ValueError("Retrieved gallery records lack their indexed text")
+            reciprocal_rank = 1 / (60 + rank)
+            results.append(
+                (
+                    models.ScoredPoint(
+                        id=record.id,
+                        version=0,
+                        score=reciprocal_rank,
+                        payload=payload,
+                    ),
+                    ScoreBreakdown(rrf=reciprocal_rank, rerank=1.0),
+                )
+            )
+        structlog.get_logger(__name__).info(
+            "retrieval_timing",
+            mode="gallery_filter",
+            exact_filter_ms=(time.monotonic() - started) * 1000,
+            candidates=len(results),
+        )
+        return results
