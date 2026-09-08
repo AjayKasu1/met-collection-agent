@@ -234,12 +234,28 @@ class LiteLLMChat:
                         details = failure_details(error, model=model_name, route=candidate)
                         status = details.get("status")
                         rate_limited = isinstance(error, RateLimitError) or status == 429
+                        validation_failed = (
+                            status == 400 and "json_validate_failed" in str(error).lower()
+                        )
                         retryable = (
                             isinstance(error, (RateLimitError, Timeout))
                             or status in (408, 429)
                             or (isinstance(status, int) and 500 <= status <= 599)
                         )
                         if not retryable:
+                            if validation_failed and candidate != candidates[-1]:
+                                if context:
+                                    context.audit("provider_attempt_failed", details)
+                                    context.audit(
+                                        "model_fallback",
+                                        {
+                                            "from": candidate,
+                                            "to": candidates[candidates.index(candidate) + 1],
+                                            "reason": "json_validate_failed",
+                                        },
+                                    )
+                                self.cooldown_until[model_name] = time.monotonic() + 30
+                                break
                             raise
                         details["attempt"] = attempt + 1
                         if context:

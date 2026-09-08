@@ -473,3 +473,33 @@ def test_wire_citations_preserve_existing_source_and_quote_rules() -> None:
                     }
                 )
             )
+
+
+def test_json_validate_failed_spills_to_fallback(settings: Settings) -> None:
+    config = settings.model_copy(
+        update={
+            "llm_max_retries": 0,
+            "llm_fallback_enabled": True,
+            "llm_model_fallback": "gemini/gemini-2.5-flash",
+            "gemini_api_key": SecretStr("synthetic"),
+        }
+    )
+    validate_err = BadRequestError(
+        "json_validate_failed: failed to validate json schema",
+        llm_provider="groq",
+        model="test",
+        response=httpx.Response(400, request=httpx.Request("POST", "https://test.local")),
+    )
+    router = Router([validate_err, response()])
+    events: list[tuple[str, Any]] = []
+    token = CURRENT_CALL.set(CallContext(audit=lambda kind, data: events.append((kind, data))))
+    try:
+        reply = asyncio.run(LiteLLMChat(config, router=router).complete("main", []))
+        assert reply is not None
+    finally:
+        CURRENT_CALL.reset(token)
+    assert [call["model"] for call in router.calls] == ["main", "fallback"]
+    assert (
+        "model_fallback",
+        {"from": "main", "to": "fallback", "reason": "json_validate_failed"},
+    ) in events
