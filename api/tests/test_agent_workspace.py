@@ -352,6 +352,7 @@ def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> Non
     def directions(arguments: GetDirectionsArguments) -> WayfindingResult:
         executed.append(arguments)
         return WayfindingResult(
+            requested_origin="Fifth Avenue entrance",
             origin="The Great Hall",
             destination="Gallery 131",
             floor="Floor 1",
@@ -361,7 +362,8 @@ def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> Non
             source_url=source_url,
             fetched_at="2026-09-08T00:00:00Z",
             text=(
-                "The Met Interactive Map route\nStart: The Great Hall\n"
+                "The Met Interactive Map route\nRequested origin: Fifth Avenue entrance\n"
+                "Start: The Great Hall\n"
                 "Destination: Gallery 131\nFloor: Floor 1\n"
                 "Estimated walking time: 2 minutes\nDistance: 178 metres (584 feet)"
             ),
@@ -399,9 +401,8 @@ def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> Non
     )
     assert answer.route == "lite" and answer.grounding_score == 1
     assert answer.text == (
-        "Use The Great Hall as the route's starting point. The Met's official map route "
-        "continues on Floor 1 to Gallery 131, about 584 feet (2 minutes). Open the cited "
-        "live route before you start."
+        "The Met's official map route starts at The Great Hall and continues on Floor 1 to "
+        "Gallery 131, about 584 feet (2 minutes). Open the cited live route before you start."
     )
     assert answer.citations[0].source_url == source_url
     assert executed == [
@@ -424,6 +425,7 @@ def test_gallery_wayfinding_default_is_disclosed_and_grounded(tmp_path: Path) ->
 
     def directions(_: GetDirectionsArguments) -> WayfindingResult:
         return WayfindingResult(
+            requested_origin="Fifth Avenue entrance",
             origin="The Great Hall",
             destination="Gallery 131",
             floor="Floor 1",
@@ -433,7 +435,8 @@ def test_gallery_wayfinding_default_is_disclosed_and_grounded(tmp_path: Path) ->
             source_url=source_url,
             fetched_at="2026-09-08T00:00:00Z",
             text=(
-                "The Met Interactive Map route\nStart: The Great Hall\n"
+                "The Met Interactive Map route\nRequested origin: Fifth Avenue entrance\n"
+                "Start: The Great Hall\n"
                 "Destination: Gallery 131\nFloor: Floor 1\n"
                 "Estimated walking time: 2 minutes\nDistance: 178 metres (584 feet)"
             ),
@@ -472,7 +475,10 @@ def test_gallery_wayfinding_default_is_disclosed_and_grounded(tmp_path: Path) ->
         )
     )
     assert answer.route == "lite" and answer.grounding_score == 1
-    assert answer.text.startswith("Assuming you are entering at Fifth Avenue")
+    assert answer.text.startswith(
+        "I will use the Fifth Avenue entrance as your starting assumption. "
+        "The Met's official map route starts at The Great Hall"
+    )
     assert answer.citations[0].source_url == source_url
     assert [call[0] for call in model.calls] == ["lite", "lite"]
 

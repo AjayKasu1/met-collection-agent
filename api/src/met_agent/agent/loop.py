@@ -422,9 +422,13 @@ class Agent:
             "evidence_context",
             [item.model_dump(mode="json", exclude_none=True) for item in evidence],
         )
-        start = "Assuming you are entering at Fifth Avenue, use" if assumed_origin else "Use"
+        assumption = (
+            "I will use the Fifth Avenue entrance as your starting assumption. "
+            if assumed_origin
+            else ""
+        )
         text = (
-            f"{start} {route.origin} as the route's starting point. The Met's official map route "
+            f"{assumption}The Met's official map route starts at {route.origin} and "
             f"continues on {route.floor} to {route.destination}, about "
             f"{route.distance_feet} feet ({route.duration_minutes} minutes). Open the cited "
             "live route before you start."

@@ -99,6 +99,7 @@ class SimilarObjectsResult(BaseModel):
 
 
 class WayfindingResult(BaseModel):
+    requested_origin: Literal["Fifth Avenue entrance"]
     origin: Literal["The Great Hall"]
     destination: str = Field(pattern=r"^Gallery \d{1,4}$")
     floor: Literal["Floor 1"]

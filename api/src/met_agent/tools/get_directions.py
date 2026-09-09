@@ -144,6 +144,7 @@ class WayfindingClient:
         text = "\n".join(
             [
                 "The Met Interactive Map route",
+                "Requested origin: Fifth Avenue entrance",
                 "Start: The Great Hall",
                 f"Destination: Gallery {arguments.destination_gallery}",
                 "Floor: Floor 1",
@@ -154,6 +155,7 @@ class WayfindingClient:
             ]
         )
         result = WayfindingResult(
+            requested_origin="Fifth Avenue entrance",
             origin="The Great Hall",
             destination=f"Gallery {arguments.destination_gallery}",
             floor="Floor 1",
