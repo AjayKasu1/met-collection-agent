@@ -23,3 +23,7 @@ The second measured quick run scored 7/10 versus 5/10 initially. All out-of-scop
 Runtime behavior changed without changing prompt text. Fallback providers now require explicit opt-in. A complete interactive chat has a configurable deadline, and model cooldown or access quarantine prevents repeated calls to a dependency that is expected to fail. Retry and failure events record only allowlisted diagnostics.
 
 Evidence is now deduplicated and bounded across the complete turn. The final-answer contract, citation validator and grounding check remain unchanged. The generator, grounding check and evaluation judge receive the same retained evidence. The interrupted full run remains a diagnostic artifact; a new measured run is required before promoting a baseline.
+
+## Wayfinding default v4, September 8, 2026
+
+`intent_v4` recognizes a simple route request to one explicit numbered gallery when the entrance is omitted. The classifier preserves the origin as unspecified. The server then discloses its Fifth Avenue assumption and uses the same live-map handler, citation identity, and atomic grounding check as an explicitly stated Fifth Avenue request. Other origins, accessibility routes, multiple stops, constraints, and ambiguous numbers remain on the general path.

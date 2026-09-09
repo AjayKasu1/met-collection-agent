@@ -9,7 +9,7 @@ Collection records can identify an object's gallery, but they do not describe co
 
 ## Decision
 
-Add a typed `get_directions` tool for one narrow route class: a Fifth Avenue entrance request to an exact numbered Floor 1 gallery. Resolve The Great Hall and the gallery by exact English labels through the backend used by The Met's live interactive map, then request its route. The Great Hall is the explicit indoor starting point. Validate feature identifiers, coordinates, floor identity, closure status, route distance, and route duration before producing evidence.
+Add a typed `get_directions` tool for one narrow route class: a request from the Fifth Avenue entrance to an exact numbered Floor 1 gallery. If the user omits an entrance, disclose that Fifth Avenue is assumed. Resolve The Great Hall and the gallery by exact English labels through the backend used by The Met's live interactive map, then request its route. The Great Hall is the explicit indoor starting point. Validate feature identifiers, coordinates, floor identity, closure status, route distance, and route duration before producing evidence.
 
 Return the floor, distance, estimated time, capture time, and a `maps.metmuseum.org` navigation URL. Cache a validated route for five minutes. Use a five-second timeout for each of the three upstream requests. Keep the existing citation identity and atomic-claim grounding check. If the map response is unavailable, ambiguous, malformed, on another floor, or marks the destination closed, return the existing verification-unavailable response.
 
@@ -17,4 +17,4 @@ Do not infer turn-by-turn steps, accessibility routes, or an entrance-to-Great-H
 
 ## Consequences
 
-The first uncached request makes two exact feature searches and one route request. Warm requests avoid those calls for five minutes. The route remains dependent on a live external service and users should open the cited map before walking. Other origins, other floors, named destinations, and step-free routing remain outside this contract until their source behavior is verified and covered by tests.
+The first uncached request makes two exact feature searches and one route request. Warm requests avoid those calls for five minutes. The route remains dependent on a live external service and users should open the cited map before walking. Other stated origins, other floors, named destinations, and step-free routing remain outside this contract until their source behavior is verified and covered by tests.

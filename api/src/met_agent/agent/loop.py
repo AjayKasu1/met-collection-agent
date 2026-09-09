@@ -78,14 +78,14 @@ class Agent:
             "prompt_versions",
             {
                 name: prompt_hash(name)
-                for name in ("system_v2", "tools_v1", "intent_v3", "grounding_v1", "citations_v1")
+                for name in ("system_v2", "tools_v1", "intent_v4", "grounding_v1", "citations_v1")
             },
         )
         try:
             model_intent = await structured(
                 self.model,
                 "lite",
-                load_prompt("intent_v3"),
+                load_prompt("intent_v4"),
                 {
                     "message": request.message,
                     "history": json.loads(json.dumps(history)),
@@ -97,7 +97,9 @@ class Agent:
             intent, routing_policy = normalize_intent(model_intent, request.message)
             if routing_policy is not None:
                 selected_route: Route = (
-                    "lite" if routing_policy == "direct_gallery_wayfinding" else intent.route
+                    "lite"
+                    if routing_policy.startswith("direct_gallery_wayfinding")
+                    else intent.route
                 )
                 audit(
                     "route_policy",
@@ -168,7 +170,10 @@ class Agent:
                     context,
                     audit,
                 )
-            if routing_policy == "direct_gallery_wayfinding":
+            if routing_policy in {
+                "direct_gallery_wayfinding",
+                "direct_gallery_wayfinding_default_origin",
+            }:
                 gallery_number = intent.gallery_number
                 if gallery_number is None:
                     raise RuntimeError("Wayfinding policy lost its validated gallery number")
@@ -178,6 +183,7 @@ class Agent:
                     turn,
                     started,
                     gallery_number,
+                    routing_policy == "direct_gallery_wayfinding_default_origin",
                     context,
                     audit,
                 )
@@ -374,6 +380,7 @@ class Agent:
         turn: UUID,
         started: float,
         gallery_number: str,
+        assumed_origin: bool,
         context: CallContext,
         audit: Callable[[str, JsonValue], None],
     ) -> AgentAnswer:
@@ -415,8 +422,9 @@ class Agent:
             "evidence_context",
             [item.model_dump(mode="json", exclude_none=True) for item in evidence],
         )
+        start = "Assuming you are entering at Fifth Avenue, use" if assumed_origin else "Use"
         text = (
-            f"Use {route.origin} as the route's starting point. The Met's official map route "
+            f"{start} {route.origin} as the route's starting point. The Met's official map route "
             f"continues on {route.floor} to {route.destination}, about "
             f"{route.distance_feet} feet ({route.duration_minutes} minutes). Open the cited "
             "live route before you start."

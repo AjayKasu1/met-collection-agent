@@ -58,11 +58,18 @@ def normalize_intent(intent: Intent, message: str) -> tuple[Intent, str | None]:
         return intent.model_copy(
             update={"search_query": f"Objects in Gallery {intent.gallery_number}"}
         ), "direct_gallery_question"
-    if (
-        intent.operation == "gallery_wayfinding"
-        and intent.category == "visitor_info"
-        and intent.origin == "fifth_avenue_entrance"
-    ):
+    if intent.operation == "gallery_wayfinding" and intent.category == "visitor_info":
+        if intent.origin == "unspecified":
+            return intent.model_copy(
+                update={
+                    "search_query": (
+                        "Directions from the Fifth Avenue entrance to Gallery "
+                        f"{intent.gallery_number}"
+                    )
+                }
+            ), "direct_gallery_wayfinding_default_origin"
+        if intent.origin != "fifth_avenue_entrance":
+            return intent, None
         return intent.model_copy(
             update={
                 "search_query": (
