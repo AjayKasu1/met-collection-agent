@@ -356,7 +356,7 @@ def test_search_service_loads_models_once(
         return object()
 
     monkeypatch.setattr(module, "create_embedder", lambda _: created_model("dense"))
-    monkeypatch.setattr(module, "BM25Embedder", lambda _: created_model("sparse"))
+    monkeypatch.setattr(module, "BM25Embedder", lambda *args, **kwargs: created_model("sparse"))
     monkeypatch.setattr(module, "LocalReranker", lambda *args, **kwargs: created_model("rerank"))
 
     class Retriever:

@@ -171,10 +171,15 @@ class GeminiEmbedder:
 class BM25Embedder:
     """Lazily load FastEmbed's fixed BM25 model and keep its cache in the data directory."""
 
-    def __init__(self, cache_dir: Path) -> None:
+    def __init__(self, cache_dir: Path, *, local_files_only: bool = False) -> None:
         from fastembed import SparseTextEmbedding
 
-        self.model = SparseTextEmbedding("Qdrant/bm25", cache_dir=str(cache_dir), threads=1)
+        self.model = SparseTextEmbedding(
+            "Qdrant/bm25",
+            cache_dir=str(cache_dir),
+            threads=1,
+            local_files_only=local_files_only,
+        )
 
     def embed(self, texts: Sequence[str]) -> list[models.SparseVector]:
         return [

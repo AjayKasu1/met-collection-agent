@@ -60,6 +60,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
         try:
+            if config.startup_warmup:
+                app.state.runtime = Runtime(config)
+                try:
+                    await asyncio.to_thread(app.state.runtime.warmup)
+                except Exception as error:
+                    logger.error("startup_warmup_failed", error_type=type(error).__name__)
+                    raise RuntimeError("Retrieval startup warmup failed") from None
+                logger.info("startup_warmup_completed")
             yield
         finally:
             if getattr(app.state, "runtime", None) is not None:

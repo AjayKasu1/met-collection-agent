@@ -33,7 +33,15 @@ LOCAL_FILES = (
 class LocalEmbedder:
     """Preserve E5's query/passage contract and reject configuration or output drift."""
 
-    def __init__(self, model: str, dimensions: int, cache_dir: Path, *, threads: int = 4) -> None:
+    def __init__(
+        self,
+        model: str,
+        dimensions: int,
+        cache_dir: Path,
+        *,
+        threads: int = 4,
+        local_files_only: bool = False,
+    ) -> None:
         if model != LOCAL_MODEL or dimensions != LOCAL_DIMENSIONS:
             raise EmbeddingError(
                 "Local embeddings require intfloat/multilingual-e5-large at 1024 dimensions"
@@ -56,6 +64,8 @@ class LocalEmbedder:
                     local_files_only=True,
                 )
             except LocalEntryNotFoundError:
+                if local_files_only:
+                    raise
                 weights = snapshot_download(
                     LOCAL_WEIGHTS_REPO,
                     revision=LOCAL_WEIGHTS_REVISION,

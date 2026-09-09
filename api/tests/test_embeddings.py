@@ -255,8 +255,10 @@ def test_bm25_converts_numpy_vectors_without_dense_model(
     import numpy as np
 
     class FakeBM25:
-        def __init__(self, model_name: str, *, cache_dir: str, threads: int) -> None:
-            assert model_name == "Qdrant/bm25" and threads == 1
+        def __init__(
+            self, model_name: str, *, cache_dir: str, threads: int, local_files_only: bool
+        ) -> None:
+            assert model_name == "Qdrant/bm25" and threads == 1 and not local_files_only
 
         def embed(self, documents: Sequence[str]) -> list[SimpleNamespace]:
             return [

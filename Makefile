@@ -73,6 +73,10 @@ seed:
 demo-check:
 	$(UV) run --project api --locked python api/scripts/demo_check.py
 
+.PHONY: retrieval-check
+retrieval-check:
+	$(UV) run --project api --locked python api/scripts/retrieval_check.py $(ARGS)
+
 .PHONY: evals evals-quick
 evals:
 	$(UV) run --project api --locked python evals/run_evals.py $(ARGS)

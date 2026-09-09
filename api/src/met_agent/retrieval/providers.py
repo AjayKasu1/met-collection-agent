@@ -11,8 +11,9 @@ def create_embedder(settings: Settings) -> IdentifiedEmbedder:
         return LocalEmbedder(
             settings.embedding_model,
             settings.embedding_dimensions,
-            settings.data_dir / "models",
+            settings.model_cache_dir or settings.data_dir / "models",
             threads=settings.embedding_threads,
+            local_files_only=settings.models_offline,
         )
     return GeminiEmbedder(
         create_embedding_router(settings),

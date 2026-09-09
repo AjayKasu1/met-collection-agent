@@ -48,6 +48,8 @@ Service URLs must use HTTP or HTTPS and cannot carry user credentials, query str
 ## HTTP behavior
 
 - `GET /health` is a typed liveness response. It does not prove retrieval or model readiness.
+- `STARTUP_WARMUP=true` prepares both index schemas and local inference before the server accepts requests; `/ready` then includes `retrieval_models`. Container images enable this by default. Local development keeps lazy initialization unless explicitly enabled.
+- `MODEL_CACHE_DIR` separates deployment model assets from `DATA_DIR`; unset locally, it uses `DATA_DIR/models`. `MODELS_OFFLINE=true` rejects missing cached model assets instead of downloading during a request. Both are set by the production image, independently of `.env`.
 - `GET /ready` checks Qdrant and the active audit store. It returns only boolean component status and HTTP 503 when either dependency is unavailable.
 - `EDGE_AUTH_REQUIRED=true` requires `X-Origin-Auth` on every route except `/health` and `/ready`. The Worker sources that value from `ORIGIN_AUTH_TOKEN`; the API compares it with `EDGE_ORIGIN_TOKEN` in constant time.
 - `GET /docs` and `GET /openapi.json` expose the implemented API contract.

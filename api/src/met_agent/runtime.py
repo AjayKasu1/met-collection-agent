@@ -53,14 +53,9 @@ class Runtime:
         self.agent: Agent | None = None
 
     async def chat(self, request: ChatRequest) -> AgentAnswer:
+        self.prepare_agent()
         if self.agent is None:
-            self.agent = Agent(
-                LiteLLMChat(
-                    self.settings, callback=self.telemetry.callback if self.telemetry else None
-                ),
-                self.tools,
-                self.events,
-            )
+            raise RuntimeError("Agent initialization did not complete")
         request = request.model_copy(update={"session_id": request.session_id or uuid4()})
         try:
             async with asyncio.timeout(self.settings.chat_deadline_seconds):
@@ -81,9 +76,31 @@ class Runtime:
                 "A verified answer was not ready in time. Please try again shortly.",
             ) from None
 
+    def prepare_agent(self) -> None:
+        """Initialize provider adapters without making a paid generation request."""
+        if self.agent is None:
+            self.agent = Agent(
+                LiteLLMChat(
+                    self.settings, callback=self.telemetry.callback if self.telemetry else None
+                ),
+                self.tools,
+                self.events,
+            )
+
+    def warmup(self) -> None:
+        """Validate both indexes and prepare inference before accepting customer requests."""
+        self.search.store(self.settings.qdrant_collection)
+        self.search.store(self.settings.qdrant_visitor_collection)
+        self.search.warmup()
+        self.prepare_agent()
+        if not all(self.readiness().values()):
+            raise RuntimeError("Required dependencies are unavailable during startup")
+
     def readiness(self) -> dict[str, bool]:
         """Probe required durable dependencies without loading embedding models."""
         checks: dict[str, bool] = {}
+        if self.settings.startup_warmup:
+            checks["retrieval_models"] = self.search.warmed
         try:
             checks["audit_store"] = self.events.ready()
         except Exception:

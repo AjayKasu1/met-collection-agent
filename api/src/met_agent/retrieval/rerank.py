@@ -14,6 +14,7 @@ from met_agent.retrieval.embeddings import EmbeddingError
 
 MODEL = "Xenova/ms-marco-MiniLM-L-2-v2"
 REVISION = "b84c4fa7efd7b4801931e75773c940f002a494f5"
+MODEL_FILES = ("*.json", "onnx/model.onnx")
 
 _REGISTRY_LOCK = Lock()
 
@@ -21,7 +22,7 @@ _REGISTRY_LOCK = Lock()
 class LocalReranker:
     """Use English query rewrites for the English records; keep inference off provider APIs."""
 
-    def __init__(self, cache: Path, *, threads: int = 4) -> None:
+    def __init__(self, cache: Path, *, threads: int = 4, local_files_only: bool = False) -> None:
         with _REGISTRY_LOCK:
             if MODEL not in {entry["model"] for entry in TextCrossEncoder.list_supported_models()}:
                 TextCrossEncoder.add_custom_model(
@@ -38,15 +39,18 @@ class LocalReranker:
                     revision=REVISION,
                     token=False,
                     cache_dir=str(cache / "hf"),
+                    allow_patterns=list(MODEL_FILES),
                     local_files_only=True,
                 )
             except LocalEntryNotFoundError:
+                if local_files_only:
+                    raise
                 path = snapshot_download(
                     MODEL,
                     revision=REVISION,
                     token=False,
                     cache_dir=str(cache / "hf"),
-                    allow_patterns=["*.json", "onnx/model.onnx"],
+                    allow_patterns=list(MODEL_FILES),
                     max_workers=2,
                 )
             self.model = TextCrossEncoder(

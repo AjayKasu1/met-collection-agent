@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     embedding_model: NonEmptyString = "intfloat/multilingual-e5-large"
     embedding_dimensions: Annotated[int, Field(ge=128, le=3072)] = 1024
     embedding_threads: Annotated[int, Field(ge=1, le=64)] = 4
+    model_cache_dir: Path | None = None
+    models_offline: bool = False
+    startup_warmup: bool = False
     llm_model_main_fallback: NonEmptyString | None = None
     llm_model_lite_fallback: NonEmptyString | None = None
     llm_model_fallback: NonEmptyString | None = None

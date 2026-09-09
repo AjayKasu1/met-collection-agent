@@ -17,7 +17,10 @@ def test_factory_routes_only_to_the_selected_provider(
 
     calls: list[tuple[str, int, int]] = []
 
-    def local(model: str, dimensions: int, *args: object, threads: int) -> SimpleNamespace:
+    def local(
+        model: str, dimensions: int, *args: object, threads: int, local_files_only: bool
+    ) -> SimpleNamespace:
+        assert local_files_only is False
         calls.append((model, dimensions, threads))
         return SimpleNamespace(
             identity=EmbeddingIdentity(provider="local", model=model, dimensions=dimensions)
