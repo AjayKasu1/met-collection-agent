@@ -41,6 +41,8 @@ class AuditStore(Protocol):
 
     def history(self, session: UUID) -> list[dict[str, str]]: ...
 
+    def first_user_message(self, session: UUID) -> str | None: ...
+
     def ready(self) -> bool: ...
 
     def close(self) -> None: ...
@@ -166,6 +168,18 @@ class EventStore(RedactingStore):
             }
             for kind, data in reversed(rows)
         ]
+
+    def first_user_message(self, session: UUID) -> str | None:
+        """Return the earliest redacted user message in one session."""
+        with self._connect() as connection:
+            row = connection.execute(
+                (
+                    "SELECT data FROM events WHERE session_id=? AND kind='user_message' "
+                    "ORDER BY sequence LIMIT 1"
+                ),
+                (str(session),),
+            ).fetchone()
+        return str(json.loads(row[0])["message"]) if row else None
 
     def ready(self) -> bool:
         with self._connect() as connection:
@@ -333,6 +347,18 @@ class PostgresEventStore(RedactingStore):
             }
             for kind, data in reversed(rows)
         ]
+
+    def first_user_message(self, session: UUID) -> str | None:
+        """Return the earliest redacted user message in one session."""
+        with self.pool.connection() as connection:
+            row = connection.execute(
+                (
+                    "SELECT data FROM met_agent_events WHERE session_id=%s "
+                    "AND kind='user_message' ORDER BY sequence LIMIT 1"
+                ),
+                (session,),
+            ).fetchone()
+        return str(row[0]["message"]) if row else None
 
     def ready(self) -> bool:
         with self.pool.connection() as connection:

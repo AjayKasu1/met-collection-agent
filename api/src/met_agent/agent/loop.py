@@ -20,6 +20,7 @@ from met_agent.guardrails.grounding import (
 )
 from met_agent.guardrails.intent import (
     Intent,
+    asks_for_first_message,
     message_numbers,
     normalize_intent,
     social_intent,
@@ -149,6 +150,33 @@ class Agent:
                     "lite",
                     context,
                     SOCIAL_RESPONSES[kind][language],
+                    [],
+                    1.0,
+                )
+            if asks_for_first_message(request.message):
+                first_message = await asyncio.to_thread(self.events.first_user_message, session)
+                audit(
+                    "route_policy",
+                    {
+                        "policy": "deterministic_session_recall",
+                        "operation": "first_user_message",
+                        "found": first_message is not None,
+                        "route": "lite",
+                    },
+                )
+                text = (
+                    f'You first asked: "{first_message}"'
+                    if first_message is not None
+                    else "This is your first message in this session."
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    "en",
+                    "lite",
+                    context,
+                    text,
                     [],
                     1.0,
                 )

@@ -54,6 +54,13 @@ _FAREWELL_LANGUAGES: dict[str, Language] = {
     "adiós": "es",
     "再见": "zh",
 }
+_FIRST_MESSAGE_RECALL = {
+    "what did i ask first",
+    "what did i ask you first",
+    "what was my first question",
+    "what was the first thing i asked",
+    "what i asked first",
+}
 SocialIntent = Literal["greeting", "wellbeing", "thanks", "farewell"]
 
 
@@ -81,6 +88,11 @@ def social_intent(message: str) -> tuple[SocialIntent, Language] | None:
         if language := phrases.get(normalized):
             return kind, language
     return None
+
+
+def asks_for_first_message(message: str) -> bool:
+    """Recognize an exact request to recall the current session's first message."""
+    return _normalized_message(message) in _FIRST_MESSAGE_RECALL
 
 
 class Intent(BaseModel):

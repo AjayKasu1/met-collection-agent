@@ -14,7 +14,13 @@ from met_agent.agent.events import EventStore
 from met_agent.agent.loop import Agent
 from met_agent.agent.models import AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
-from met_agent.guardrails.intent import Intent, greeting_language, normalize_intent, social_intent
+from met_agent.guardrails.intent import (
+    Intent,
+    asks_for_first_message,
+    greeting_language,
+    normalize_intent,
+    social_intent,
+)
 from met_agent.guardrails.interpretive import POLICY
 from met_agent.ingestion.verify import read_golden
 from met_agent.llm.chat import ModelError, Reply
@@ -229,6 +235,39 @@ def test_wellbeing_short_circuits_models_and_tools(tmp_path: Path) -> None:
     assert answer.model_calls == []
     assert answer.cost_usd == 0
     assert model.calls == []
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "What did I ask first?",
+        "what i asked first",
+        "What was my first question?",
+    ],
+)
+def test_first_message_recall_is_bounded(message: str) -> None:
+    assert asks_for_first_message(message)
+
+
+def test_first_message_recall_does_not_swallow_compound_questions() -> None:
+    assert not asks_for_first_message("What did I ask first, and when does the museum close?")
+
+
+def test_first_message_recall_uses_only_the_current_session(tmp_path: Path) -> None:
+    model = ScriptedModel([])
+    store = EventStore(tmp_path / "recall.sqlite3")
+    agent = Agent(model, ToolRegistry(), store)
+    first = asyncio.run(agent.run(ChatRequest(message="Hi!")))
+    other = asyncio.run(agent.run(ChatRequest(message="Bonjour!")))
+    recalled = asyncio.run(
+        agent.run(ChatRequest(message="What did I ask first?", session_id=first.session_id))
+    )
+
+    assert recalled.text == 'You first asked: "Hi!"'
+    assert recalled.model_calls == []
+    assert recalled.citations == []
+    assert recalled.grounding_score == 1
+    assert store.first_user_message(other.session_id) == "Bonjour!"
 
 
 def test_simple_visitor_facts_bypass_model_tool_selection(tmp_path: Path) -> None:
