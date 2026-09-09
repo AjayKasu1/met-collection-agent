@@ -56,7 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             active={
                 alias: model
                 for alias, model in configured_models(config).items()
-                if alias.startswith("fallback")
+                if alias not in {"lite", "main"}
             },
         )
         try:

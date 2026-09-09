@@ -92,7 +92,7 @@ class LiteLLMChat:
         self.cooldown_until: dict[str, float] = {}
         logging.getLogger(__name__).info(
             "Active model fallbacks: %s",
-            {k: v for k, v in self.models.items() if k.startswith("fallback")},
+            {k: v for k, v in self.models.items() if k not in {"lite", "main"}},
         )
         if router is None:
             from litellm.router import Router
@@ -120,10 +120,17 @@ class LiteLLMChat:
         self.router = router
 
     def _candidate_routes(self, route: Route) -> list[str]:
-        """Prefer configured fallbacks, then use the lite model as a capacity reserve."""
-        aliases = [str(route), *[key for key in self.models if key.startswith("fallback")]]
+        """Use the requested tier's fallback before shared and lower-capacity reserves."""
+        tier_fallback = f"{route}_fallback"
+        aliases = [
+            str(route),
+            *([tier_fallback] if tier_fallback in self.models else []),
+            *[key for key in ("fallback", "fallback_2") if key in self.models],
+        ]
         if route == "main":
             aliases.append("lite")
+            if "lite_fallback" in self.models:
+                aliases.append("lite_fallback")
         candidates: list[str] = []
         seen_models: set[str] = set()
         for alias in aliases:

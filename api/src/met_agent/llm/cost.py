@@ -6,11 +6,14 @@ from typing import Any
 
 from met_agent.agent.models import ModelCall
 
-# USD per million tokens, standard inference prices verified 2026-09-04.
-# Source: https://console.groq.com/docs/models
-GROQ_PRICES: dict[str, tuple[float, float]] = {
+# USD per million tokens. Groq prices verified 2026-09-04; Gemini prices
+# verified 2026-09-09. Sources: https://console.groq.com/docs/models and
+# https://ai.google.dev/gemini-api/docs/pricing
+MODEL_PRICES: dict[str, tuple[float, float]] = {
     "groq/openai/gpt-oss-120b": (0.15, 0.60),
     "groq/openai/gpt-oss-20b": (0.075, 0.30),
+    "gemini/gemini-3.7-flash": (0.75, 3.75),
+    "gemini/gemini-3.1-flash-lite": (0.25, 1.50),
 }
 
 
@@ -28,8 +31,8 @@ class CallLedger:
 def estimate_cost(response: Any) -> float | None:
     from litellm import completion_cost
 
-    if response.model in GROQ_PRICES:
-        input_price, output_price = GROQ_PRICES[response.model]
+    if response.model in MODEL_PRICES:
+        input_price, output_price = MODEL_PRICES[response.model]
         return (
             int(response.usage.prompt_tokens) * input_price
             + int(response.usage.completion_tokens) * output_price

@@ -38,6 +38,24 @@ def test_missing_fallback_keys_and_provider_keys(settings: Settings, caplog: Any
     assert chat_routes(config)[2]["litellm_params"]["api_key"] == "synthetic-cerebras"
 
 
+def test_missing_tier_fallback_key_skips_only_that_route(settings: Settings) -> None:
+    config = settings.model_copy(
+        update={
+            "llm_fallback_enabled": True,
+            "llm_model_main_fallback": "cerebras/gpt-oss-120b",
+            "llm_model_lite_fallback": "groq/openai/gpt-oss-20b",
+            "groq_api_key": SecretStr("synthetic-groq"),
+            "cerebras_api_key": None,
+        }
+    )
+
+    models = configured_models(config)
+
+    assert "main_fallback" not in models
+    assert models["lite_fallback"] == "groq/openai/gpt-oss-20b"
+    assert config.optional_services.fallback_llm
+
+
 def test_groq_local_does_not_require_google_key(
     valid_environment: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

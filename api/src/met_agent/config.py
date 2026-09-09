@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     embedding_model: NonEmptyString = "intfloat/multilingual-e5-large"
     embedding_dimensions: Annotated[int, Field(ge=128, le=3072)] = 1024
     embedding_threads: Annotated[int, Field(ge=1, le=64)] = 4
+    llm_model_main_fallback: NonEmptyString | None = None
+    llm_model_lite_fallback: NonEmptyString | None = None
     llm_model_fallback: NonEmptyString | None = None
     llm_model_fallback_2: NonEmptyString | None = None
     llm_fallback_enabled: bool = False
@@ -303,7 +305,12 @@ class Settings(BaseSettings):
             fallback_llm=self.llm_fallback_enabled
             and any(
                 model is not None and self.provider_key(model_provider(model)) is not None
-                for model in (self.llm_model_fallback, self.llm_model_fallback_2)
+                for model in (
+                    self.llm_model_main_fallback,
+                    self.llm_model_lite_fallback,
+                    self.llm_model_fallback,
+                    self.llm_model_fallback_2,
+                )
             ),
             langfuse=bool(
                 self.langfuse_public_key and self.langfuse_secret_key and self.langfuse_base_url

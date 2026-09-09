@@ -10,7 +10,7 @@ from litellm.exceptions import AuthenticationError, BadRequestError, RateLimitEr
 from litellm.types.utils import ModelResponse
 from pydantic import SecretStr
 
-from met_agent.agent.models import ModelCall
+from met_agent.agent.models import ModelCall, Route
 from met_agent.config import Settings
 from met_agent.guardrails.intent import Intent
 from met_agent.llm import chat, cost
@@ -143,6 +143,62 @@ def test_fallback_is_only_for_quota_and_timeout(
     assert "reasoning_content" not in result.message
     with pytest.raises(ModelError):
         asyncio.run(LiteLLMChat(settings, router=Router([failure])).complete("lite", []))
+
+
+@pytest.mark.parametrize(
+    "route,expected",
+    [
+        ("lite", ["lite", "lite_fallback"]),
+        ("main", ["main", "main_fallback"]),
+    ],
+)
+def test_rate_limit_uses_matching_tier_fallback_first(
+    settings: Settings, route: Route, expected: list[str]
+) -> None:
+    config = settings.model_copy(
+        update={
+            "llm_max_retries": 0,
+            "llm_model": "gemini/gemini-3.7-flash",
+            "llm_model_lite": "gemini/gemini-3.1-flash-lite",
+            "llm_model_main_fallback": "groq/openai/gpt-oss-120b",
+            "llm_model_lite_fallback": "groq/openai/gpt-oss-20b",
+            "llm_fallback_enabled": True,
+            "groq_api_key": SecretStr("synthetic-groq"),
+        }
+    )
+    quota = RateLimitError("quota", llm_provider="gemini", model="test")
+    router = Router([quota, response()])
+    model = LiteLLMChat(config, router=router)
+
+    asyncio.run(model.complete(route, []))
+
+    assert [call["model"] for call in router.calls] == expected
+
+
+def test_main_chain_deduplicates_models_across_tier_and_shared_fallbacks(
+    settings: Settings,
+) -> None:
+    config = settings.model_copy(
+        update={
+            "llm_model": "gemini/gemini-3.7-flash",
+            "llm_model_lite": "gemini/gemini-3.1-flash-lite",
+            "llm_model_main_fallback": "groq/openai/gpt-oss-120b",
+            "llm_model_lite_fallback": "groq/openai/gpt-oss-20b",
+            "llm_model_fallback": "groq/openai/gpt-oss-120b",
+            "llm_model_fallback_2": "gemini/gemini-3.1-flash-lite",
+            "llm_fallback_enabled": True,
+            "groq_api_key": SecretStr("synthetic-groq"),
+        }
+    )
+    model = LiteLLMChat(config, router=Router([]))
+
+    assert model._candidate_routes("main") == [
+        "main",
+        "main_fallback",
+        "fallback_2",
+        "lite_fallback",
+    ]
+    assert model._candidate_routes("lite") == ["lite", "lite_fallback", "fallback"]
 
 
 def test_groq_tool_protocol_failure_moves_immediately_to_distinct_fallback(
@@ -519,9 +575,11 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
     [
         ("groq/openai/gpt-oss-120b", 0.15, 0.60),
         ("groq/openai/gpt-oss-20b", 0.075, 0.30),
+        ("gemini/gemini-3.7-flash", 0.75, 3.75),
+        ("gemini/gemini-3.1-flash-lite", 0.25, 1.50),
     ],
 )
-def test_groq_prices_use_reported_tokens(
+def test_model_prices_use_reported_tokens(
     model: str, input_price: float, output_price: float
 ) -> None:
     result = response().model_copy(update={"model": model})

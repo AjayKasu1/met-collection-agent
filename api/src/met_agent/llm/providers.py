@@ -15,6 +15,8 @@ def google_model(name: str) -> str:
 def configured_models(settings: Settings) -> dict[str, str]:
     models = {"lite": settings.llm_model_lite, "main": settings.llm_model}
     for alias, model in (
+        ("lite_fallback", settings.llm_model_lite_fallback),
+        ("main_fallback", settings.llm_model_main_fallback),
         ("fallback", settings.llm_model_fallback),
         ("fallback_2", settings.llm_model_fallback_2),
     ):
