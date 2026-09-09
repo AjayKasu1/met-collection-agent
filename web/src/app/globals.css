@@ -164,13 +164,36 @@ summary:focus-visible {
 }
 
 .conversation {
-  width: min(100%, 1120px);
+  width: min(100%, 1280px);
   margin: 0 auto;
   padding: clamp(38px, 7vw, 96px) clamp(18px, 5vw, 72px) 190px;
 }
 
+.conversation-welcome {
+  padding-top: clamp(28px, 3.5vw, 48px);
+}
+
 .welcome {
-  max-width: 920px;
+  position: relative;
+  isolation: isolate;
+  max-width: 1160px;
+}
+
+.welcome::before {
+  position: absolute;
+  z-index: -1;
+  top: -120px;
+  left: 8%;
+  width: min(78vw, 880px);
+  height: 560px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgb(220 214 175 / 26%) 0%, rgb(243 240 232 / 0%) 70%);
+  content: "";
+  pointer-events: none;
+}
+
+.welcome-intro {
+  max-width: 1040px;
 }
 
 .eyebrow,
@@ -190,51 +213,108 @@ summary:focus-visible {
 }
 
 .welcome h1 {
-  max-width: 800px;
+  max-width: 1040px;
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(48px, 8vw, 92px);
+  font-size: clamp(42px, 4.5vw, 58px);
   font-weight: 400;
-  line-height: 0.98;
-  letter-spacing: -0.052em;
+  line-height: 1.01;
+  letter-spacing: -0.046em;
 }
 
 .welcome-copy {
-  max-width: 650px;
-  margin: 32px 0 0;
+  max-width: 850px;
+  margin: 18px 0 0;
   color: var(--muted);
-  font-size: clamp(16px, 2vw, 20px);
-  line-height: 1.6;
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.5;
 }
 
-.example-grid {
+.welcome-card-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  margin-top: 48px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: clamp(24px, 3vw, 38px);
+}
+
+.welcome-card {
+  position: relative;
+  display: flex;
+  min-height: clamp(132px, 18vh, 200px);
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--line);
-  background: var(--line);
-}
-
-.example-grid button {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 14px;
-  min-height: 94px;
-  padding: 22px;
-  border: 0;
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
   text-align: left;
-  line-height: 1.4;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 
-.example-grid button:hover {
+.welcome-card:hover:not(:disabled) {
+  border-color: var(--strong-line);
   background: #fffefb;
+  box-shadow: 0 14px 32px rgb(33 31 26 / 9%);
+  transform: translateY(-3px);
 }
 
-.example-grid span,
+.welcome-card:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.welcome-card-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--accent);
+}
+
+.welcome-card-icon svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.welcome-card-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.welcome-card-copy strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.welcome-card-copy > span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.welcome-card-arrow {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  color: var(--faint);
+  font-size: 18px;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.welcome-card:hover:not(:disabled) .welcome-card-arrow {
+  color: var(--accent);
+  transform: translate(2px, -2px);
+}
+
 .source-number {
   color: var(--accent);
   font-family: Georgia, "Times New Roman", serif;
@@ -677,14 +757,15 @@ footer {
     font-size: clamp(44px, 14vw, 66px);
   }
 
-  .example-grid {
+  .welcome-card-grid {
     grid-template-columns: 1fr;
     margin-top: 34px;
   }
 
-  .example-grid button {
-    min-height: 72px;
-    padding: 16px;
+  .welcome-card {
+    min-height: 148px;
+    gap: 18px;
+    padding: 20px;
   }
 
   .message {
@@ -728,7 +809,19 @@ footer {
   }
 }
 
+@media (min-width: 721px) and (max-width: 980px) {
+  .welcome-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .welcome-card {
+    min-height: 190px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .status-pulse { animation: none; }
+  .welcome-card,
+  .welcome-card-arrow { transition: none; }
 }

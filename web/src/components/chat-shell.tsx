@@ -8,15 +8,9 @@ import { CitationStrip } from "@/components/citation-strip";
 import { CollectionMark } from "@/components/mark";
 import { ProvenancePanel } from "@/components/provenance-panel";
 import { Turnstile, type TurnstileHandle } from "@/components/turnstile";
+import { WelcomePanel } from "@/components/welcome-panel";
 import { messageProvenance, messageText } from "@/lib/messages";
 import type { Language, MuseumMessage } from "@/lib/types";
-
-const examples = [
-  "Show me a Van Gogh landscape in the collection",
-  "What can I see in Gallery 131?",
-  "Is the Temple of Dendur on view today?",
-  "What should families know before visiting?",
-];
 
 const languages: { value: Language; label: string; hint: string }[] = [
   { value: "en", label: "EN", hint: "English" },
@@ -106,23 +100,9 @@ export function ChatShell(): React.ReactNode {
         </div>
       </header>
 
-      <div className="conversation" id="top">
+      <div className={messages.length === 0 ? "conversation conversation-welcome" : "conversation"} id="top">
         {messages.length === 0 ? (
-          <section className="welcome">
-            <p className="eyebrow">Explore 20,000 collection records</p>
-            <h1>Ask the collection.<br />Follow the evidence.</h1>
-            <p className="welcome-copy">
-              Find artworks, compare objects, and plan a visit. Every factual answer is checked against collection records or current visitor information.
-            </p>
-            <div className="example-grid" aria-label="Example questions">
-              {examples.map((example, index) => (
-                <button disabled={busy} key={example} onClick={() => void submit(example)} type="button">
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  {example}
-                </button>
-              ))}
-            </div>
-          </section>
+          <WelcomePanel disabled={busy || !turnstileToken} onSelect={(prompt) => void submit(prompt)} />
         ) : (
           <section aria-label="Conversation" className="messages">
             {messages.map((message) => {
