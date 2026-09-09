@@ -20,7 +20,7 @@ from met_agent.llm.pacing import RequestBudgetError, TokenPacer, prompt_tokens
 from met_agent.llm.providers import chat_routes as chat_routes
 from met_agent.llm.providers import configured_models
 from met_agent.llm.providers import google_model as google_model
-from met_agent.llm.recovery import failure_details, is_groq_tool_protocol_failure, retry_delay
+from met_agent.llm.recovery import failure_details, groq_protocol_failure_code, retry_delay
 from met_agent.llm.structured_output import decode_final, response_format
 
 
@@ -233,11 +233,16 @@ class LiteLLMChat:
                         provider_ms += (time.monotonic() - provider_started) * 1000
                         details = failure_details(error, model=model_name, route=candidate)
                         status = details.get("status")
-                        tool_protocol_failure = tools is not None and is_groq_tool_protocol_failure(
-                            error, model=model_name
+                        protocol_code = groq_protocol_failure_code(error, model=model_name)
+                        protocol_failure = (
+                            protocol_code == "tool_use_failed" and tools is not None
+                        ) or (
+                            protocol_code == "json_validate_failed"
+                            and tools is None
+                            and response_schema is not None
                         )
-                        if tool_protocol_failure:
-                            details["provider_code"] = "tool_use_failed"
+                        if protocol_failure:
+                            details["provider_code"] = protocol_code
                             details["attempt"] = attempt + 1
                             if context:
                                 context.audit("provider_attempt_failed", details)
@@ -249,33 +254,17 @@ class LiteLLMChat:
                                     {
                                         "from": candidate,
                                         "to": candidates[candidates.index(candidate) + 1],
-                                        "reason": "tool_protocol_failure",
+                                        "reason": protocol_code,
                                     },
                                 )
                             break
                         rate_limited = isinstance(error, RateLimitError) or status == 429
-                        validation_failed = (
-                            status == 400 and "json_validate_failed" in str(error).lower()
-                        )
                         retryable = (
                             isinstance(error, (RateLimitError, Timeout))
                             or status in (408, 429)
                             or (isinstance(status, int) and 500 <= status <= 599)
                         )
                         if not retryable:
-                            if validation_failed and candidate != candidates[-1]:
-                                if context:
-                                    context.audit("provider_attempt_failed", details)
-                                    context.audit(
-                                        "model_fallback",
-                                        {
-                                            "from": candidate,
-                                            "to": candidates[candidates.index(candidate) + 1],
-                                            "reason": "json_validate_failed",
-                                        },
-                                    )
-                                self.cooldown_until[model_name] = time.monotonic() + 30
-                                break
                             raise
                         details["attempt"] = attempt + 1
                         if context:

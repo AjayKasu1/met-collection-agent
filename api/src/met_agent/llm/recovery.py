@@ -2,12 +2,15 @@
 
 import math
 import re
+from typing import Literal
 
 from pydantic import JsonValue
 
+ProtocolFailureCode = Literal["tool_use_failed", "json_validate_failed"]
 
-def is_groq_tool_protocol_failure(error: Exception, *, model: str) -> bool:
-    """Recognize only Groq's typed tool-generation failure without retaining its body.
+
+def groq_protocol_failure_code(error: Exception, *, model: str) -> ProtocolFailureCode | None:
+    """Read an allowlisted Groq protocol code without retaining its response body.
 
     Groq may return a failed generation in the same response body. That content is
     untrusted and can contain model output, so only the exact provider error code is
@@ -22,12 +25,14 @@ def is_groq_tool_protocol_failure(error: Exception, *, model: str) -> bool:
         }
         or getattr(error, "llm_provider", None) != "groq"
     ):
-        return False
+        return None
     body = getattr(error, "body", None)
     if not isinstance(body, dict):
-        return False
-    provider_error = body.get("error")
-    return isinstance(provider_error, dict) and provider_error.get("code") == "tool_use_failed"
+        return None
+    nested = body.get("error")
+    provider_error = nested if isinstance(nested, dict) else body
+    code = provider_error.get("code")
+    return code if code in {"tool_use_failed", "json_validate_failed"} else None
 
 
 def failure_details(error: Exception, *, model: str, route: str) -> dict[str, JsonValue]:

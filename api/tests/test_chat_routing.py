@@ -190,7 +190,7 @@ def test_groq_tool_protocol_failure_moves_immediately_to_distinct_fallback(
     assert [call["model"] for call in router.calls] == ["lite", "fallback"]
     assert (
         "model_fallback",
-        {"from": "lite", "to": "fallback", "reason": "tool_protocol_failure"},
+        {"from": "lite", "to": "fallback", "reason": "tool_use_failed"},
     ) in events
     attempt = next(data for kind, data in events if kind == "provider_attempt_failed")
     assert attempt["provider_code"] == "tool_use_failed"
@@ -561,22 +561,32 @@ def test_json_validate_failed_spills_to_fallback(settings: Settings) -> None:
     config = settings.model_copy(
         update={
             "llm_max_retries": 0,
+            "llm_model": "groq/openai/gpt-oss-120b",
+            "groq_api_key": SecretStr("synthetic-groq"),
             "llm_fallback_enabled": True,
-            "llm_model_fallback": "gemini/gemini-2.5-flash",
-            "gemini_api_key": SecretStr("synthetic"),
+            "llm_model_fallback": "gemini/gemini-3.7-flash",
+            "gemini_api_key": SecretStr("synthetic-gemini"),
         }
     )
     validate_err = BadRequestError(
-        "json_validate_failed: failed to validate json schema",
+        "private failed generation",
         llm_provider="groq",
         model="test",
         response=httpx.Response(400, request=httpx.Request("POST", "https://test.local")),
+        body={
+            "error": {
+                "code": "json_validate_failed",
+                "failed_generation": "private model output",
+            }
+        },
     )
     router = Router([validate_err, response()])
     events: list[tuple[str, Any]] = []
     token = CURRENT_CALL.set(CallContext(audit=lambda kind, data: events.append((kind, data))))
     try:
-        reply = asyncio.run(LiteLLMChat(config, router=router).complete("main", []))
+        reply = asyncio.run(
+            LiteLLMChat(config, router=router).complete("main", [], response_schema=Intent)
+        )
         assert reply is not None
     finally:
         CURRENT_CALL.reset(token)
@@ -585,3 +595,4 @@ def test_json_validate_failed_spills_to_fallback(settings: Settings) -> None:
         "model_fallback",
         {"from": "main", "to": "fallback", "reason": "json_validate_failed"},
     ) in events
+    assert "private" not in json.dumps(events)
