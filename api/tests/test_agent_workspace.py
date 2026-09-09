@@ -382,18 +382,8 @@ def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> Non
         "gallery_number": "131",
         "origin": "fifth_avenue_entrance",
     }
-    supported = {
-        "fully_supported": True,
-        "claims": [
-            {
-                "text": "The official route starts in The Great Hall and reaches Gallery 131.",
-                "supported": True,
-                "evidence_keys": ["route:The Great Hall:Gallery 131"],
-            }
-        ],
-    }
     store = EventStore(tmp_path / "wayfinding.sqlite3")
-    model = ScriptedModel([model_decision, supported])
+    model = ScriptedModel([model_decision])
     answer = asyncio.run(
         Agent(model, registry, store).run(
             ChatRequest(message="How do I get to Gallery 131 from the Fifth Avenue entrance?")
@@ -408,7 +398,7 @@ def test_direct_gallery_wayfinding_uses_one_live_map_call(tmp_path: Path) -> Non
     assert executed == [
         GetDirectionsArguments(origin="fifth_avenue_entrance", destination_gallery="131")
     ]
-    assert [call[0] for call in model.calls] == ["lite", "lite"]
+    assert [call[0] for call in model.calls] == ["lite"]
     events = store.read(answer.session_id)
     assert len([event for event in events if event.kind == "tool_call"]) == 1
     assert any(
@@ -456,17 +446,7 @@ def test_gallery_wayfinding_default_is_disclosed_and_grounded(tmp_path: Path) ->
                 "operation": "gallery_wayfinding",
                 "gallery_number": "131",
                 "origin": "unspecified",
-            },
-            {
-                "fully_supported": True,
-                "claims": [
-                    {
-                        "text": "The official route reaches Gallery 131.",
-                        "supported": True,
-                        "evidence_keys": ["route:The Great Hall:Gallery 131"],
-                    }
-                ],
-            },
+            }
         ]
     )
     answer = asyncio.run(
@@ -480,7 +460,59 @@ def test_gallery_wayfinding_default_is_disclosed_and_grounded(tmp_path: Path) ->
         "The Met's official map route starts at The Great Hall"
     )
     assert answer.citations[0].source_url == source_url
-    assert [call[0] for call in model.calls] == ["lite", "lite"]
+    assert [call[0] for call in model.calls] == ["lite"]
+
+
+def test_gallery_wayfinding_fails_closed_when_evidence_disagrees(tmp_path: Path) -> None:
+    registry = ToolRegistry()
+    source_url = "https://maps.metmuseum.org/navigate/" + "a" * 32 + "/" + "b" * 32
+
+    def directions(_: GetDirectionsArguments) -> WayfindingResult:
+        return WayfindingResult(
+            requested_origin="Fifth Avenue entrance",
+            origin="The Great Hall",
+            destination="Gallery 131",
+            floor="Floor 1",
+            distance_metres=178,
+            distance_feet=584,
+            duration_minutes=2,
+            source_url=source_url,
+            fetched_at="2026-09-08T00:00:00Z",
+            text=(
+                "The Met Interactive Map route\nRequested origin: Fifth Avenue entrance\n"
+                "Start: The Great Hall\nDestination: Gallery 131\nFloor: Floor 1\n"
+                "Estimated walking time: 2 minutes\nDistance: 178 metres (999 feet)"
+            ),
+        )
+
+    registry.register(
+        "get_directions",
+        "Official route",
+        GetDirectionsArguments,
+        WayfindingResult,
+        directions,
+    )
+    model = ScriptedModel(
+        [
+            {
+                **intent(category="visitor_info"),
+                "operation": "gallery_wayfinding",
+                "gallery_number": "131",
+                "origin": "unspecified",
+            }
+        ]
+    )
+    answer = asyncio.run(
+        Agent(model, registry, EventStore(tmp_path / "wayfinding-mismatch.sqlite3")).run(
+            ChatRequest(message="directions for gallery 131")
+        )
+    )
+    assert answer.text == (
+        "I couldn't verify that from the available museum sources. Please try a more "
+        "specific question or contact info@metmuseum.org."
+    )
+    assert answer.citations == [] and answer.grounding_score == 0
+    assert [call[0] for call in model.calls] == ["lite"]
 
 
 def test_direct_gallery_wayfinding_fails_closed_without_map_evidence(tmp_path: Path) -> None:

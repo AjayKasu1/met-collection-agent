@@ -13,7 +13,11 @@ from pydantic import JsonValue
 from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
-from met_agent.guardrails.grounding import GroundingCheck, valid_citations
+from met_agent.guardrails.grounding import (
+    GroundingCheck,
+    valid_citations,
+    valid_wayfinding_evidence,
+)
 from met_agent.guardrails.intent import (
     Intent,
     message_numbers,
@@ -178,7 +182,6 @@ class Agent:
                 if gallery_number is None:
                     raise RuntimeError("Wayfinding policy lost its validated gallery number")
                 return await self._wayfinding_workspace(
-                    request,
                     session,
                     turn,
                     started,
@@ -375,7 +378,6 @@ class Agent:
 
     async def _wayfinding_workspace(
         self,
-        request: ChatRequest,
         session: UUID,
         turn: UUID,
         started: float,
@@ -438,30 +440,15 @@ class Agent:
             language="en",
             citations=[Citation(source_url=route.source_url, quote=evidence[0].text)],
         )
-        if not valid_citations(draft, evidence):
-            raise RuntimeError("Server-produced wayfinding citation is invalid")
-        check = await structured(
-            self.model,
-            "lite",
-            load_prompt("grounding_v1"),
-            {
-                "question": request.message,
-                "draft": draft.model_dump(mode="json"),
-                "evidence": [item.model_dump(mode="json") for item in evidence],
-            },
-            GroundingCheck,
-        )
-        score = check.score(evidence)
-        audit(
-            "guardrail",
-            {
-                "policy": "official_map_wayfinding",
-                "score": score,
-                "result": check.model_dump(mode="json"),
-            },
-        )
-        if not check.fully_supported or score != 1:
-            audit("guardrail", {"policy": "citation_or_grounding", "decision": "fail_closed"})
+        if not valid_citations(draft, evidence) or not valid_wayfinding_evidence(route, evidence):
+            audit(
+                "guardrail",
+                {
+                    "policy": "official_map_wayfinding",
+                    "decision": "fail_closed",
+                    "reason": "evidence_mismatch",
+                },
+            )
             return self._answer(
                 session,
                 turn,
@@ -473,6 +460,15 @@ class Agent:
                 [],
                 0.0,
             )
+        audit(
+            "guardrail",
+            {
+                "policy": "official_map_wayfinding",
+                "method": "deterministic_template",
+                "score": 1.0,
+                "evidence_key": evidence[0].key,
+            },
+        )
         return self._answer(
             session,
             turn,
@@ -482,7 +478,7 @@ class Agent:
             context,
             draft.text,
             draft.citations,
-            score,
+            1.0,
         )
 
     async def _gallery_workspace(
