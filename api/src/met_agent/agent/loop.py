@@ -22,6 +22,7 @@ from met_agent.guardrails.intent import (
     Intent,
     message_numbers,
     normalize_intent,
+    social_intent,
 )
 from met_agent.guardrails.interpretive import POLICY, UNVERIFIED
 from met_agent.llm.chat import CURRENT_CALL, CallContext, ChatModel, ModelError, structured
@@ -45,6 +46,49 @@ NOT_FOUND: dict[Language, str] = {
     "fr": "L'objet demandé est introuvable. L'API du Met n'a renvoyé aucune notice d'objet.",
     "es": "No se encontró el objeto solicitado. La API del Met no devolvió ningún registro.",
     "zh": "未找到所请求的藏品。大都会艺术博物馆 API 未返回藏品记录。",
+}
+GREETING: dict[Language, str] = {
+    "en": (
+        "Hello! I can help with The Met's collection, gallery information, directions, "
+        "hours, admission, accessibility, and visitor policies. What would you like to know?"
+    ),
+    "fr": (
+        "Bonjour ! Je peux vous aider avec la collection du Met, les galeries, les itinéraires, "
+        "les horaires, l'admission, l'accessibilité et les règles de visite. Que souhaitez-vous "
+        "savoir ?"
+    ),
+    "es": (
+        "¡Hola! Puedo ayudarle con la colección del Met, las galerías, las indicaciones, los "
+        "horarios, la entrada, la accesibilidad y las normas para visitantes. ¿Qué desea saber?"
+    ),
+    "zh": (
+        "您好! 我可以帮助您查询大都会艺术博物馆的藏品、展厅、路线、开放时间、门票、"
+        "无障碍服务和参观规定。您想了解什么?"
+    ),
+}
+WELLBEING: dict[Language, str] = {
+    "en": "I'm ready to help. What would you like to know about The Met?",
+    "fr": "Je suis prêt à vous aider. Que souhaitez-vous savoir sur le Met ?",
+    "es": "Estoy listo para ayudarle. ¿Qué desea saber sobre el Met?",
+    "zh": "我已准备好为您提供帮助。您想了解大都会艺术博物馆的哪些信息?",
+}
+THANKS: dict[Language, str] = {
+    "en": "You're welcome! Is there anything else you would like to know about The Met?",
+    "fr": "Je vous en prie ! Souhaitez-vous savoir autre chose sur le Met ?",
+    "es": "¡De nada! ¿Desea saber algo más sobre el Met?",
+    "zh": "不客气! 您还想了解大都会艺术博物馆的其他信息吗?",
+}
+FAREWELL: dict[Language, str] = {
+    "en": "Goodbye! I hope you enjoy your visit to The Met.",
+    "fr": "Au revoir ! Je vous souhaite une excellente visite au Met.",
+    "es": "¡Adiós! Espero que disfrute de su visita al Met.",
+    "zh": "再见! 祝您参观愉快。",
+}
+SOCIAL_RESPONSES = {
+    "greeting": GREETING,
+    "wellbeing": WELLBEING,
+    "thanks": THANKS,
+    "farewell": FAREWELL,
 }
 
 
@@ -86,6 +130,28 @@ class Agent:
             },
         )
         try:
+            if social := social_intent(request.message):
+                kind, language = social
+                audit(
+                    "route_policy",
+                    {
+                        "policy": "deterministic_social_turn",
+                        "kind": kind,
+                        "language": language,
+                        "route": "lite",
+                    },
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    language,
+                    "lite",
+                    context,
+                    SOCIAL_RESPONSES[kind][language],
+                    [],
+                    1.0,
+                )
             model_intent = await structured(
                 self.model,
                 "lite",

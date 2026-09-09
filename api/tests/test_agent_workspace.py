@@ -14,7 +14,7 @@ from met_agent.agent.events import EventStore
 from met_agent.agent.loop import Agent
 from met_agent.agent.models import AgentDraft, ChatRequest, Citation, Language, Route
 from met_agent.guardrails.grounding import GroundingCheck, valid_citations
-from met_agent.guardrails.intent import Intent, normalize_intent
+from met_agent.guardrails.intent import Intent, greeting_language, normalize_intent, social_intent
 from met_agent.guardrails.interpretive import POLICY
 from met_agent.ingestion.verify import read_golden
 from met_agent.llm.chat import ModelError, Reply
@@ -152,6 +152,83 @@ def test_simple_visitor_facts_use_lite_while_complex_requests_use_main() -> None
 
     assert simple.route == "lite"
     assert complex_request.route == "main"
+
+
+@pytest.mark.parametrize(
+    ("message", "language"),
+    [
+        ("hi", "en"),
+        ("Hello!", "en"),
+        ("Bonjour", "fr"),
+        ("¡Hola!", "es"),
+        ("你好!", "zh"),
+    ],
+)
+def test_complete_greetings_are_detected(message: str, language: Language) -> None:
+    assert greeting_language(message) == language
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Hi, is the museum open Wednesday?",
+        "Hello, where is Gallery 131?",
+        "Bonjour, quels sont les horaires ?",
+    ],
+)
+def test_greetings_do_not_swallow_museum_questions(message: str) -> None:
+    assert greeting_language(message) is None
+    assert social_intent(message) is None
+
+
+@pytest.mark.parametrize(
+    ("message", "kind", "language"),
+    [
+        ("How are you?", "wellbeing", "en"),
+        ("How's it going?", "wellbeing", "en"),
+        ("Merci!", "thanks", "fr"),
+        ("Adiós", "farewell", "es"),
+    ],
+)
+def test_bounded_social_turns_are_detected(message: str, kind: str, language: Language) -> None:
+    assert social_intent(message) == (kind, language)
+
+
+def test_greeting_short_circuits_models_and_tools(tmp_path: Path) -> None:
+    model = ScriptedModel([])
+    store = EventStore(tmp_path / "greeting.sqlite3")
+    answer = asyncio.run(Agent(model, ToolRegistry(), store).run(ChatRequest(message="Hi!")))
+
+    assert answer.text.startswith("Hello!")
+    assert answer.route == "lite"
+    assert answer.language == "en"
+    assert answer.grounding_score == 1
+    assert answer.citations == []
+    assert answer.model_calls == []
+    assert answer.cost_usd == 0
+    assert model.calls == []
+    assert any(
+        event.kind == "route_policy"
+        and isinstance(event.data, dict)
+        and event.data.get("policy") == "deterministic_social_turn"
+        for event in store.read(answer.session_id)
+    )
+
+
+def test_wellbeing_short_circuits_models_and_tools(tmp_path: Path) -> None:
+    model = ScriptedModel([])
+    store = EventStore(tmp_path / "wellbeing.sqlite3")
+    answer = asyncio.run(
+        Agent(model, ToolRegistry(), store).run(ChatRequest(message="How are you?"))
+    )
+
+    assert answer.text == "I'm ready to help. What would you like to know about The Met?"
+    assert answer.route == "lite"
+    assert answer.grounding_score == 1
+    assert answer.citations == []
+    assert answer.model_calls == []
+    assert answer.cost_usd == 0
+    assert model.calls == []
 
 
 def test_simple_visitor_facts_bypass_model_tool_selection(tmp_path: Path) -> None:

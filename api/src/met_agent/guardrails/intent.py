@@ -1,11 +1,86 @@
 """Represent and normalize routing decisions as a closed, validated taxonomy."""
 
 import re
+import unicodedata
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from met_agent.agent.models import Language, Route
+
+_GREETING_LANGUAGES: dict[str, Language] = {
+    "hi": "en",
+    "hi there": "en",
+    "hello": "en",
+    "hello there": "en",
+    "hey": "en",
+    "good morning": "en",
+    "good afternoon": "en",
+    "good evening": "en",
+    "bonjour": "fr",
+    "bonsoir": "fr",
+    "salut": "fr",
+    "hola": "es",
+    "buenos días": "es",
+    "buenas tardes": "es",
+    "buenas noches": "es",
+    "你好": "zh",
+    "您好": "zh",
+    "早上好": "zh",
+    "晚上好": "zh",
+}
+_WELLBEING_LANGUAGES: dict[str, Language] = {
+    "how are you": "en",
+    "how are you doing": "en",
+    "hows it going": "en",
+    "comment allez vous": "fr",
+    "ça va": "fr",
+    "cómo estás": "es",
+    "cómo está": "es",
+    "你好吗": "zh",
+}
+_THANKS_LANGUAGES: dict[str, Language] = {
+    "thanks": "en",
+    "thank you": "en",
+    "merci": "fr",
+    "gracias": "es",
+    "谢谢": "zh",
+}
+_FAREWELL_LANGUAGES: dict[str, Language] = {
+    "bye": "en",
+    "goodbye": "en",
+    "see you": "en",
+    "au revoir": "fr",
+    "adiós": "es",
+    "再见": "zh",
+}
+SocialIntent = Literal["greeting", "wellbeing", "thanks", "farewell"]
+
+
+def _normalized_message(message: str) -> str:
+    folded = unicodedata.normalize("NFKC", message).casefold()
+    folded = re.sub(r"['\u2019]", "", folded)
+    return " ".join(re.sub(r"[^\w\s]", " ", folded).split())
+
+
+def greeting_language(message: str) -> Language | None:
+    """Recognize a complete greeting without swallowing a museum question."""
+    return _GREETING_LANGUAGES.get(_normalized_message(message))
+
+
+def social_intent(message: str) -> tuple[SocialIntent, Language] | None:
+    """Return a bounded social turn only when the whole message matches."""
+    normalized = _normalized_message(message)
+    groups: tuple[tuple[SocialIntent, dict[str, Language]], ...] = (
+        ("greeting", _GREETING_LANGUAGES),
+        ("wellbeing", _WELLBEING_LANGUAGES),
+        ("thanks", _THANKS_LANGUAGES),
+        ("farewell", _FAREWELL_LANGUAGES),
+    )
+    for kind, phrases in groups:
+        if language := phrases.get(normalized):
+            return kind, language
+    return None
 
 
 class Intent(BaseModel):
