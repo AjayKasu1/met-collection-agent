@@ -42,6 +42,11 @@ printf '%s' "$GROQ_API_KEY_INPUT" | gcloud secrets create met-agent-groq-api-key
   || printf '%s' "$GROQ_API_KEY_INPUT" | gcloud secrets versions add met-agent-groq-api-key --data-file=-
 unset GROQ_API_KEY_INPUT
 
+read -rsp 'Gemini API key: ' GEMINI_API_KEY_INPUT && printf '\n'
+printf '%s' "$GEMINI_API_KEY_INPUT" | gcloud secrets create met-agent-gemini-api-key --data-file=- 2>/dev/null \
+  || printf '%s' "$GEMINI_API_KEY_INPUT" | gcloud secrets versions add met-agent-gemini-api-key --data-file=-
+unset GEMINI_API_KEY_INPUT
+
 read -rsp 'Qdrant API key: ' QDRANT_API_KEY_INPUT && printf '\n'
 printf '%s' "$QDRANT_API_KEY_INPUT" | gcloud secrets create met-agent-qdrant-api-key --data-file=- 2>/dev/null \
   || printf '%s' "$QDRANT_API_KEY_INPUT" | gcloud secrets versions add met-agent-qdrant-api-key --data-file=-
@@ -67,8 +72,8 @@ gcloud run deploy met-collection-agent-api \
   --concurrency 4 \
   --min 1 \
   --max 3 \
-  --set-secrets GROQ_API_KEY=met-agent-groq-api-key:latest,QDRANT_API_KEY=met-agent-qdrant-api-key:latest,AUDIT_DATABASE_URL=met-agent-audit-database-url:latest,EDGE_ORIGIN_TOKEN=met-agent-edge-origin-token:latest \
-  --set-env-vars "^@^APP_ENV=production@LOG_LEVEL=INFO@LLM_MODEL=groq/openai/gpt-oss-120b@LLM_MODEL_LITE=groq/openai/gpt-oss-20b@LLM_FALLBACK_ENABLED=false@LLM_PACING_ENABLED=false@CHAT_DEADLINE_SECONDS=120@USE_AI_GATEWAY=false@EMBEDDING_PROVIDER=local@EMBEDDING_MODEL=intfloat/multilingual-e5-large@EMBEDDING_DIMENSIONS=1024@EMBEDDING_THREADS=4@QDRANT_URL=${QDRANT_URL}@QDRANT_COLLECTION=met_objects@QDRANT_VISITOR_COLLECTION=met_visitor_info_live@AUDIT_STORE_REQUIRED=true@EDGE_AUTH_REQUIRED=true@CORS_ORIGINS=[\"https://met-collection-agent.ajaykasu7.workers.dev\"]@DATA_DIR=/tmp/met-agent@GIT_SHA=$(git rev-parse HEAD)"
+  --set-secrets GEMINI_API_KEY=met-agent-gemini-api-key:latest,GROQ_API_KEY=met-agent-groq-api-key:latest,QDRANT_API_KEY=met-agent-qdrant-api-key:latest,AUDIT_DATABASE_URL=met-agent-audit-database-url:latest,EDGE_ORIGIN_TOKEN=met-agent-edge-origin-token:latest \
+  --set-env-vars "^@^APP_ENV=production@LOG_LEVEL=INFO@LLM_MODEL=gemini/gemini-3.8-flash@LLM_MODEL_LITE=gemini/gemini-3.1-flash-lite@LLM_MODEL_MAIN_FALLBACK=groq/openai/gpt-oss-120b@LLM_MODEL_LITE_FALLBACK=groq/openai/gpt-oss-20b@LLM_FALLBACK_ENABLED=true@LLM_PACING_ENABLED=false@CHAT_DEADLINE_SECONDS=120@USE_AI_GATEWAY=false@EMBEDDING_PROVIDER=local@EMBEDDING_MODEL=intfloat/multilingual-e5-large@EMBEDDING_DIMENSIONS=1024@EMBEDDING_THREADS=4@QDRANT_URL=${QDRANT_URL}@QDRANT_COLLECTION=met_objects@QDRANT_VISITOR_COLLECTION=met_visitor_info_live@AUDIT_STORE_REQUIRED=true@EDGE_AUTH_REQUIRED=true@CORS_ORIGINS=[\"https://met-collection-agent.ajaykasu7.workers.dev\"]@DATA_DIR=/tmp/met-agent@GIT_SHA=$(git rev-parse HEAD)"
 ```
 
 Cloud Run injects `PORT`; the image honors it and exposes liveness at `/health` and dependency readiness at `/ready`. The first semantic query downloads the pinned 2.24 GB local embedding model. Four CPUs, 8 GiB memory, minimum instance count one, and concurrency four reduce cold-start and memory pressure. Adjust them only after measuring production traffic and memory. PostgreSQL retains audits across revisions and instances. With the default pool maximum of four and three Cloud Run instances, reserve at least twelve application connections plus database administration headroom.
@@ -141,6 +146,6 @@ The tag workflow authenticates with GitHub's short-lived workflow token, builds 
 
 ## Render fallback
 
-Create a Render Web Service from `AjayKasu1/met-collection-agent` with the Docker runtime, root directory `api`, health check path `/health`, and region nearest the Qdrant cluster. Set the same non-secret values used for Cloud Run, add `GROQ_API_KEY` and `QDRANT_API_KEY` as secrets, set `DATA_DIR=/tmp/met-agent`, and allocate at least 8 GiB memory for the local embedding model. Point the Cloudflare build variable at the resulting HTTPS service URL and add the Worker origin to `CORS_ORIGINS`.
+Create a Render Web Service from `AjayKasu1/met-collection-agent` with the Docker runtime, root directory `api`, health check path `/health`, and region nearest the Qdrant cluster. Set the same non-secret values used for Cloud Run, add `GEMINI_API_KEY`, `GROQ_API_KEY`, and `QDRANT_API_KEY` as secrets, set `DATA_DIR=/tmp/met-agent`, and allocate at least 8 GiB memory for the local embedding model. Point the Cloudflare build variable at the resulting HTTPS service URL and add the Worker origin to `CORS_ORIGINS`.
 
 Render's local filesystem is also unsuitable for durable multi-instance session audits. The same authentication, rate-limit, model-cache, and durable-audit requirements apply.

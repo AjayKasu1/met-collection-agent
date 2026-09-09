@@ -36,7 +36,7 @@ To use Gemini embeddings, explicitly set `EMBEDDING_PROVIDER=gemini`, `EMBEDDING
 | --- | --- |
 | Qdrant | `QDRANT_URL`, default `http://localhost:6333` |
 | AI Gateway | `USE_AI_GATEWAY=true`, `CF_AI_GATEWAY_URL`, `CF_AI_GATEWAY_TOKEN` |
-| Fallback model | `GROQ_API_KEY`, `LLM_MODEL_FALLBACK` |
+| Fallback models | `LLM_FALLBACK_ENABLED=true`, a tier or shared fallback model, and that provider's key |
 | Langfuse | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` |
 | Hugging Face dataset | `HF_DATASET_REPO`; a public download needs no token |
 | R2 | `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` |
@@ -74,4 +74,4 @@ The original build instructions, root-level duplicate golden file, credentials, 
 
 ## Chat providers
 
-Main and lite models require their selected provider keys. Gemini credentials are optional when chat and embeddings use other providers. Missing fallback keys disable only their own routes, and startup logs list active fallbacks. See [provider routing](provider-routing.md) for model prefixes, minute budgets, and verified availability.
+Main and lite models require their selected provider keys. Gemini credentials are optional when chat and embeddings use other providers. `LLM_MODEL_MAIN_FALLBACK` and `LLM_MODEL_LITE_FALLBACK` select role-matched recovery models. The older shared fallback fields remain available for deployments that need an additional provider. Missing fallback keys disable only their own routes, and startup logs list active fallbacks. See [provider routing](provider-routing.md) for ordering, model prefixes, minute budgets, and verified availability.

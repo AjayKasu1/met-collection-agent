@@ -1,7 +1,7 @@
 # ADR 0002: Use explicit model routes with bounded fallback
 
 - Status: Accepted
-- Date: 2026-09-05
+- Date: 2026-09-05, amended 2026-09-09
 
 ## Context
 
@@ -9,7 +9,7 @@ Intent classification and grounding checks need less capacity than tool planning
 
 ## Decision
 
-Configure exact `main` and `lite` model identifiers and credentials through the typed settings boundary. Use the lite route for structured classification and verification; select the answer route from classified intent. Pace by model token and request limits. Disable fallbacks by default. When explicitly enabled, skip routes with missing keys, retry only timeouts, rate limits, and 5xx responses, and quarantine authentication or permission failures for operator review.
+Configure exact `main` and `lite` model identifiers and credentials through the typed settings boundary. Use the lite route for structured classification and verification; select the answer route from classified intent. Pace by model token and request limits. Disable fallbacks by default. When explicitly enabled, use separate main and lite fallback settings before legacy shared fallbacks. Skip routes with missing keys, retry only timeouts, rate limits, and 5xx responses, and quarantine authentication or permission failures for operator review. Deduplicate the chain by model identifier and never call a fallback after a successful response.
 
 ## Consequences
 

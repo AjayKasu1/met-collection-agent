@@ -98,6 +98,6 @@ Application request logs are separate. They include request ID, route template, 
 
 ## Failure behavior
 
-Client validation failures return bounded 4xx responses. Provider access errors do not trigger fallback; the model is quarantined for operator review. Timeouts, rate limits, and 5xx responses have bounded retries with jitter and may use an explicitly enabled configured fallback. Missing fallback credentials disable that route at startup. The complete answer path has a deadline and returns a safe temporary failure when verification cannot finish.
+Client validation failures return bounded 4xx responses. Provider access errors do not trigger fallback; the model is quarantined for operator review. Timeouts, rate limits, and 5xx responses have bounded retries with jitter and may use an explicitly enabled route-specific fallback. Lite and main fallbacks are configured separately so a recovery preserves the task's capacity tier. Missing fallback credentials disable only that route at startup. The complete answer path has a deadline and returns a safe temporary failure when verification cannot finish.
 
 Tool errors are typed as invalid arguments, unknown tool, unavailable upstream, or confirmed not found. A confirmed Met API 404 can produce a deterministic cited not-found answer. Other source failures cannot be restated as facts.

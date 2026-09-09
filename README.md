@@ -60,16 +60,20 @@ Install Docker Desktop and Git, then run from the repository root:
 cp .env.example .env
 ```
 
-Set these local values in `.env`:
+Set these local values in `.env` for the recommended cross-provider routing:
 
 ```dotenv
+GEMINI_API_KEY=
 GROQ_API_KEY=
-LLM_MODEL=groq/openai/gpt-oss-120b
-LLM_MODEL_LITE=groq/openai/gpt-oss-20b
+LLM_MODEL=gemini/gemini-3.8-flash
+LLM_MODEL_LITE=gemini/gemini-3.1-flash-lite
+LLM_MODEL_MAIN_FALLBACK=groq/openai/gpt-oss-120b
+LLM_MODEL_LITE_FALLBACK=groq/openai/gpt-oss-20b
+LLM_FALLBACK_ENABLED=true
 HF_DATASET_REPO=AJAYKASU/met-collection-index
 ```
 
-Place the Groq key after `GROQ_API_KEY=` and keep it only in the ignored local file. Keep the checked-in local embedding defaults. Then start the complete stack:
+Place the provider keys after their names and keep them only in the ignored local file. Keep the checked-in local embedding defaults. Then start the complete stack:
 
 ```sh
 make demo
