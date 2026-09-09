@@ -6,6 +6,30 @@ import re
 from pydantic import JsonValue
 
 
+def is_groq_tool_protocol_failure(error: Exception, *, model: str) -> bool:
+    """Recognize only Groq's typed tool-generation failure without retaining its body.
+
+    Groq may return a failed generation in the same response body. That content is
+    untrusted and can contain model output, so only the exact provider error code is
+    inspected and nothing from the body is logged.
+    """
+
+    if (
+        model
+        not in {
+            "groq/openai/gpt-oss-120b",
+            "groq/openai/gpt-oss-20b",
+        }
+        or getattr(error, "llm_provider", None) != "groq"
+    ):
+        return False
+    body = getattr(error, "body", None)
+    if not isinstance(body, dict):
+        return False
+    provider_error = body.get("error")
+    return isinstance(provider_error, dict) and provider_error.get("code") == "tool_use_failed"
+
+
 def failure_details(error: Exception, *, model: str, route: str) -> dict[str, JsonValue]:
     response = getattr(error, "response", None)
     headers = getattr(response, "headers", {})

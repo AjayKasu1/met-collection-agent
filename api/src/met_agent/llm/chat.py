@@ -20,7 +20,7 @@ from met_agent.llm.pacing import RequestBudgetError, TokenPacer, prompt_tokens
 from met_agent.llm.providers import chat_routes as chat_routes
 from met_agent.llm.providers import configured_models
 from met_agent.llm.providers import google_model as google_model
-from met_agent.llm.recovery import failure_details, retry_delay
+from met_agent.llm.recovery import failure_details, is_groq_tool_protocol_failure, retry_delay
 from met_agent.llm.structured_output import decode_final, response_format
 
 
@@ -233,6 +233,26 @@ class LiteLLMChat:
                         provider_ms += (time.monotonic() - provider_started) * 1000
                         details = failure_details(error, model=model_name, route=candidate)
                         status = details.get("status")
+                        tool_protocol_failure = tools is not None and is_groq_tool_protocol_failure(
+                            error, model=model_name
+                        )
+                        if tool_protocol_failure:
+                            details["provider_code"] = "tool_use_failed"
+                            details["attempt"] = attempt + 1
+                            if context:
+                                context.audit("provider_attempt_failed", details)
+                            if candidate == candidates[-1]:
+                                raise
+                            if context:
+                                context.audit(
+                                    "model_fallback",
+                                    {
+                                        "from": candidate,
+                                        "to": candidates[candidates.index(candidate) + 1],
+                                        "reason": "tool_protocol_failure",
+                                    },
+                                )
+                            break
                         rate_limited = isinstance(error, RateLimitError) or status == 429
                         retryable = (
                             isinstance(error, (RateLimitError, Timeout))

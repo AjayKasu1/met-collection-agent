@@ -145,6 +145,88 @@ def test_fallback_is_only_for_quota_and_timeout(
         asyncio.run(LiteLLMChat(settings, router=Router([failure])).complete("lite", []))
 
 
+def test_groq_tool_protocol_failure_moves_immediately_to_distinct_fallback(
+    settings: Settings,
+) -> None:
+    failure = BadRequestError(
+        "private failed generation",
+        model="openai/gpt-oss-20b",
+        llm_provider="groq",
+        response=httpx.Response(
+            400,
+            request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions"),
+        ),
+        body={
+            "error": {
+                "code": "tool_use_failed",
+                "failed_generation": "private model output",
+            }
+        },
+    )
+    config = settings.model_copy(
+        update={
+            "llm_model": "groq/openai/gpt-oss-120b",
+            "llm_model_lite": "groq/openai/gpt-oss-20b",
+            "groq_api_key": SecretStr("synthetic-groq"),
+            "llm_fallback_enabled": True,
+            "llm_model_fallback": "gemini/gemini-3.7-flash",
+            "gemini_api_key": SecretStr("synthetic-gemini"),
+        }
+    )
+    router = Router([failure, response()])
+    events: list[tuple[str, Any]] = []
+    token = CURRENT_CALL.set(CallContext(audit=lambda kind, data: events.append((kind, data))))
+    try:
+        asyncio.run(
+            LiteLLMChat(config, router=router).complete(
+                "lite",
+                [{"role": "user", "content": "visitor policy"}],
+                tools=[{"type": "function"}],
+            )
+        )
+    finally:
+        CURRENT_CALL.reset(token)
+
+    assert [call["model"] for call in router.calls] == ["lite", "fallback"]
+    assert (
+        "model_fallback",
+        {"from": "lite", "to": "fallback", "reason": "tool_protocol_failure"},
+    ) in events
+    attempt = next(data for kind, data in events if kind == "provider_attempt_failed")
+    assert attempt["provider_code"] == "tool_use_failed"
+    assert "private" not in json.dumps(events)
+
+
+def test_groq_tool_protocol_failure_never_hides_non_tool_request_errors(
+    settings: Settings,
+) -> None:
+    failure = BadRequestError(
+        "private failed generation",
+        model="openai/gpt-oss-20b",
+        llm_provider="groq",
+        response=httpx.Response(
+            400,
+            request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions"),
+        ),
+        body={"error": {"code": "tool_use_failed"}},
+    )
+    config = settings.model_copy(
+        update={
+            "llm_model_lite": "groq/openai/gpt-oss-20b",
+            "groq_api_key": SecretStr("synthetic-groq"),
+            "llm_fallback_enabled": True,
+            "llm_model_fallback": "gemini/gemini-3.7-flash",
+            "gemini_api_key": SecretStr("synthetic-gemini"),
+        }
+    )
+    router = Router([failure])
+
+    with pytest.raises(ModelError):
+        asyncio.run(LiteLLMChat(config, router=router).complete("lite", []))
+
+    assert [call["model"] for call in router.calls] == ["lite"]
+
+
 @pytest.mark.parametrize(
     "failure,code",
     [
