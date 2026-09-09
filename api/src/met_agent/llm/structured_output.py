@@ -1,4 +1,4 @@
-"""Adapt Pydantic schemas to Groq's strict constrained-decoding contract."""
+"""Adapt Pydantic schemas to provider-native constrained decoding."""
 
 import copy
 import json
@@ -36,6 +36,9 @@ def response_format(
         "groq/openai/gpt-oss-120b",
         "groq/openai/gpt-oss-20b",
         "groq/qwen/qwen3.8-27b",
+        "gemini/gemini-3.8-flash",
+        "gemini/gemini-3.7-flash",
+        "gemini/gemini-3.1-flash-lite",
     }
     if native:
         shape = strict_schema(FinalAnswerReferences if catalog is not None else schema)
@@ -72,7 +75,7 @@ class CitationWire(BaseModel):
 
 
 class FinalAnswerWire(BaseModel):
-    """Disjoint source keys satisfy Groq's stricter anyOf decoder without weakening citations."""
+    """Disjoint source keys keep cross-provider citation decoding unambiguous."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
     text: str = Field(min_length=1, max_length=8000)

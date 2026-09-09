@@ -94,3 +94,19 @@ def test_display_space_normalization_never_changes_citation_quotes() -> None:
     answer = AgentDraft(text=quote, language="en", citations=[Citation(object_id=1, quote=quote)])
     assert answer.text == "Name with narrow spacing"
     assert answer.citations[0].quote == quote
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini/gemini-3.8-flash",
+        "gemini/gemini-3.7-flash",
+        "gemini/gemini-3.1-flash-lite",
+    ],
+)
+def test_gemini_models_use_native_json_schema(model: str) -> None:
+    shape = response_format(AgentDraft, model)
+
+    assert shape["type"] == "json_schema"
+    assert shape["json_schema"]["strict"] is True
+    assert shape["json_schema"]["schema"]["additionalProperties"] is False

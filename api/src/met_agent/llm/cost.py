@@ -12,6 +12,7 @@ from met_agent.agent.models import ModelCall
 MODEL_PRICES: dict[str, tuple[float, float]] = {
     "groq/openai/gpt-oss-120b": (0.15, 0.60),
     "groq/openai/gpt-oss-20b": (0.075, 0.30),
+    "gemini/gemini-3.8-flash": (0.75, 3.75),
     "gemini/gemini-3.7-flash": (0.75, 3.75),
     "gemini/gemini-3.1-flash-lite": (0.25, 1.50),
 }

@@ -158,7 +158,7 @@ def test_rate_limit_uses_matching_tier_fallback_first(
     config = settings.model_copy(
         update={
             "llm_max_retries": 0,
-            "llm_model": "gemini/gemini-3.7-flash",
+            "llm_model": "gemini/gemini-3.8-flash",
             "llm_model_lite": "gemini/gemini-3.1-flash-lite",
             "llm_model_main_fallback": "groq/openai/gpt-oss-120b",
             "llm_model_lite_fallback": "groq/openai/gpt-oss-20b",
@@ -180,7 +180,7 @@ def test_main_chain_deduplicates_models_across_tier_and_shared_fallbacks(
 ) -> None:
     config = settings.model_copy(
         update={
-            "llm_model": "gemini/gemini-3.7-flash",
+            "llm_model": "gemini/gemini-3.8-flash",
             "llm_model_lite": "gemini/gemini-3.1-flash-lite",
             "llm_model_main_fallback": "groq/openai/gpt-oss-120b",
             "llm_model_lite_fallback": "groq/openai/gpt-oss-20b",
@@ -575,6 +575,7 @@ def test_native_final_schema_is_separate_from_tool_selection(settings: Settings)
     [
         ("groq/openai/gpt-oss-120b", 0.15, 0.60),
         ("groq/openai/gpt-oss-20b", 0.075, 0.30),
+        ("gemini/gemini-3.8-flash", 0.75, 3.75),
         ("gemini/gemini-3.7-flash", 0.75, 3.75),
         ("gemini/gemini-3.1-flash-lite", 0.25, 1.50),
     ],

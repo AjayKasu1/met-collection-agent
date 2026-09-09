@@ -215,7 +215,9 @@ class LiteLLMChat:
                     options["response_format"] = response_format(
                         response_schema, model_name, catalog=citation_catalog
                     )
-                if "gpt-oss" in model_name:
+                if model_name.startswith("gemini/gemini-3"):
+                    options["reasoning_effort"] = "minimal" if route == "lite" else "low"
+                elif "gpt-oss" in model_name:
                     options["reasoning_effort"] = "low"
                 else:
                     options.pop("reasoning_effort", None)
