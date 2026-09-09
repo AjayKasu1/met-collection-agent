@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
 
   api:
+    image: met-collection-agent-api:local
     build:
       context: api
     env_file:

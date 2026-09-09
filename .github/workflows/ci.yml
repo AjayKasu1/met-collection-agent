@@ -89,7 +89,7 @@ jobs:
       - name: Verify bundled inference with no network or writable model cache
         run: >-
           docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m
-          --entrypoint python "$(docker compose images -q api)"
+          --entrypoint python met-collection-agent-api:local
           -m met_agent.retrieval.prepare_models --cache-dir /app/models --verify-only
 
   evals:
