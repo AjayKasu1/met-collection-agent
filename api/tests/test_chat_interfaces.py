@@ -29,10 +29,15 @@ from met_agent.config import Settings
 from met_agent.llm.chat import ModelError
 from met_agent.main import create_app
 from met_agent.mcp.server import create_server
+from met_agent.retrieval.hybrid import RetrievedChunk, ScoreBreakdown
 from met_agent.retrieval.service import SearchService
 from met_agent.tools.get_directions import WayfindingClient
 from met_agent.tools.get_object import LiveObjectClient, ObjectNotFound
-from met_agent.tools.models import GetObjectArguments
+from met_agent.tools.models import (
+    GetObjectArguments,
+    SearchVisitorArguments,
+    VisitorSearchResult,
+)
 from met_agent.tools.registry import create_registry
 from scripts.demo_check import parse_answer
 from scripts.demo_check import run as demo_run
@@ -42,7 +47,15 @@ class Service:
     def __init__(self, tmp_path: Path, replies: list[Any]) -> None:
         self.events = EventStore(tmp_path / "events.sqlite3")
         self.model = ScriptedModel(replies)
-        self.agent = Agent(self.model, registry_with_calls([]), self.events)
+        registry = registry_with_calls([])
+        registry.register(
+            "search_visitor_info",
+            "Visitor search",
+            SearchVisitorArguments,
+            VisitorSearchResult,
+            self.search_visitor,
+        )
+        self.agent = Agent(self.model, registry, self.events)
         self.live = SimpleNamespace(get=self.get)
         self.closed = False
         self.failure: Exception | None = None
@@ -53,6 +66,21 @@ class Service:
         if args.object_id == 500:
             raise RuntimeError("private-token")
         return live_object(args.object_id)
+
+    def search_visitor(self, _: SearchVisitorArguments) -> VisitorSearchResult:
+        return VisitorSearchResult(
+            chunks=[
+                RetrievedChunk(
+                    point_id="fixture",
+                    source_url="https://www.metmuseum.org/plan-your-visit",
+                    page_title="Plan Your Visit",
+                    section_heading="Hours",
+                    fetched_at="2026-09-04T00:00:00Z",
+                    text="Temple",
+                    scores=ScoreBreakdown(dense=1, sparse=1, rrf=1, rerank=1),
+                )
+            ]
+        )
 
     async def chat(self, request: ChatRequest) -> AgentAnswer:
         if self.failure:
@@ -201,9 +229,26 @@ def test_demo_prints_required_fields_and_returns_failure(
             draft(),
             judgment(),
             intent(category="visitor_info"),
-            calls("get_object"),
-            draft(),
-            judgment(),
+            {
+                "text": "Temple",
+                "language": "en",
+                "citations": [
+                    {
+                        "source_url": "https://www.metmuseum.org/plan-your-visit",
+                        "quote": "Temple",
+                    }
+                ],
+            },
+            {
+                "fully_supported": True,
+                "claims": [
+                    {
+                        "text": "Temple",
+                        "supported": True,
+                        "evidence_keys": ["page:fixture"],
+                    }
+                ],
+            },
             intent(category="interpretive"),
         ],
     )

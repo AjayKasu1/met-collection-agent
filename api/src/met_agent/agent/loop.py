@@ -27,7 +27,9 @@ from met_agent.tools.models import (
     Evidence,
     Handoff,
     LiveObject,
+    SearchVisitorArguments,
     ToolResult,
+    VisitorSearchResult,
     WayfindingResult,
 )
 from met_agent.tools.registry import ToolRegistry
@@ -179,6 +181,28 @@ class Agent:
                     context,
                     audit,
                 )
+            if intent.category == "visitor_info" and intent.difficulty == "simple":
+                audit(
+                    "route_policy",
+                    {
+                        "policy": "direct_visitor_search",
+                        "model_category": model_intent.category,
+                        "model_difficulty": model_intent.difficulty,
+                        "category": intent.category,
+                        "difficulty": intent.difficulty,
+                        "route": "lite",
+                        "search_query": intent.search_query,
+                    },
+                )
+                return await self._visitor_workspace(
+                    request,
+                    session,
+                    turn,
+                    started,
+                    intent,
+                    context,
+                    audit,
+                )
             answer = await self._workspace(
                 request, session, turn, started, intent, context, history, audit
             )
@@ -202,6 +226,146 @@ class Agent:
         finally:
             CURRENT_CALL.reset(token)
             await asyncio.to_thread(self.events.append_many, session, turn, buffered_events)
+
+    async def _visitor_workspace(
+        self,
+        request: ChatRequest,
+        session: UUID,
+        turn: UUID,
+        started: float,
+        intent: Intent,
+        context: CallContext,
+        audit: Callable[[str, JsonValue], None],
+    ) -> AgentAnswer:
+        """Search visitor evidence directly after a validated simple visitor intent."""
+
+        arguments = SearchVisitorArguments(query=intent.search_query, k=5).model_dump_json()
+        audit("tool_call", {"name": "search_visitor_info", "arguments": arguments, "number": 1})
+        tool_started = time.monotonic()
+        result = await self.tools.execute("search_visitor_info", arguments)
+        audit(
+            "tool_timing",
+            {"name": "search_visitor_info", "latency_ms": (time.monotonic() - tool_started) * 1000},
+        )
+        audit(
+            "validation_error" if result.error else "tool_result",
+            result.model_dump(mode="json"),
+        )
+        evidence = result.model_evidence()
+        audit(
+            "evidence_context",
+            [item.model_dump(mode="json", exclude_none=True) for item in evidence],
+        )
+        if not isinstance(result.output, VisitorSearchResult) or not evidence:
+            audit("guardrail", {"policy": "direct_visitor_search", "decision": "fail_closed"})
+            return self._answer(
+                session,
+                turn,
+                started,
+                intent.language,
+                "lite",
+                context,
+                UNVERIFIED[intent.language],
+                [],
+                0.0,
+            )
+
+        reply = await self.model.complete(
+            "lite",
+            [
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "question": request.message,
+                            "detected_language": intent.language,
+                            "english_search_query": intent.search_query,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "direct-visitor-search",
+                    "content": result.model_context(),
+                },
+            ],
+            response_schema=AgentDraft,
+        )
+        try:
+            draft = AgentDraft.model_validate_json(reply.text)
+        except ValueError:
+            draft = None
+        citations_ok = (
+            draft is not None
+            and draft.language == intent.language
+            and valid_citations(draft, evidence)
+        )
+        if draft is None or not citations_ok:
+            audit(
+                "guardrail",
+                {
+                    "policy": "direct_visitor_search",
+                    "decision": "fail_closed",
+                    "citations_valid": citations_ok,
+                },
+            )
+            return self._answer(
+                session,
+                turn,
+                started,
+                intent.language,
+                "lite",
+                context,
+                UNVERIFIED[intent.language],
+                [],
+                0.0,
+            )
+
+        check = await structured(
+            self.model,
+            "lite",
+            load_prompt("grounding_v1"),
+            {
+                "question": request.message,
+                "draft": draft.model_dump(mode="json"),
+                "evidence": [item.model_dump(mode="json") for item in evidence],
+            },
+            GroundingCheck,
+        )
+        score = check.score(evidence)
+        audit(
+            "guardrail",
+            {
+                "policy": "direct_visitor_search",
+                "score": score,
+                "result": check.model_dump(mode="json"),
+            },
+        )
+        if not check.fully_supported or score != 1 or (not draft.citations and check.claims):
+            audit("guardrail", {"policy": "citation_or_grounding", "decision": "fail_closed"})
+            return self._answer(
+                session,
+                turn,
+                started,
+                intent.language,
+                "lite",
+                context,
+                UNVERIFIED[intent.language],
+                [],
+                0.0,
+            )
+        return self._answer(
+            session,
+            turn,
+            started,
+            intent.language,
+            "lite",
+            context,
+            draft.text,
+            draft.citations,
+            score,
+        )
 
     async def _wayfinding_workspace(
         self,

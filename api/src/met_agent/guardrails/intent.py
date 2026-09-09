@@ -26,7 +26,11 @@ class Intent(BaseModel):
 
     @property
     def route(self) -> Route:
-        return "lite" if self.category == "collection" and self.difficulty == "simple" else "main"
+        return (
+            "lite"
+            if self.category in {"collection", "visitor_info"} and self.difficulty == "simple"
+            else "main"
+        )
 
 
 def message_numbers(message: str) -> set[str]:

@@ -19,7 +19,12 @@ from met_agent.guardrails.interpretive import POLICY
 from met_agent.ingestion.verify import read_golden
 from met_agent.llm.chat import ModelError, Reply
 from met_agent.llm.prompts import load_prompt, prompt_hash
-from met_agent.retrieval.hybrid import RetrievedObject, ScoreBreakdown, SearchFilters
+from met_agent.retrieval.hybrid import (
+    RetrievedChunk,
+    RetrievedObject,
+    ScoreBreakdown,
+    SearchFilters,
+)
 from met_agent.tools.get_object import ObjectNotFound
 from met_agent.tools.handoff import handoff
 from met_agent.tools.models import (
@@ -31,6 +36,8 @@ from met_agent.tools.models import (
     HandoffArguments,
     LiveObject,
     SearchCollectionArguments,
+    SearchVisitorArguments,
+    VisitorSearchResult,
     WayfindingResult,
 )
 from met_agent.tools.registry import ToolRegistry
@@ -132,6 +139,106 @@ def test_direct_gallery_questions_have_a_stable_lite_route(message: str) -> None
     assert normalized.difficulty == "simple"
     assert normalized.search_query == "Objects in Gallery 131"
     assert normalized.route == "lite"
+
+
+def test_simple_visitor_facts_use_lite_while_complex_requests_use_main() -> None:
+    simple = Intent.model_validate(
+        {
+            **intent(category="visitor_info"),
+            "search_query": "large luggage and wine coat-check policy",
+        }
+    )
+    complex_request = simple.model_copy(update={"difficulty": "complex"})
+
+    assert simple.route == "lite"
+    assert complex_request.route == "main"
+
+
+def test_simple_visitor_facts_bypass_model_tool_selection(tmp_path: Path) -> None:
+    source_url = "https://www.metmuseum.org/policies/visitor-guidelines"
+    policy = (
+        "The following items are not allowed in the building or at coat check:\n"
+        "- Large bags, luggage\n"
+        "- Glass containers and liquids other than water"
+    )
+    searches: list[SearchVisitorArguments] = []
+
+    def search(arguments: SearchVisitorArguments) -> VisitorSearchResult:
+        searches.append(arguments)
+        return VisitorSearchResult(
+            chunks=[
+                RetrievedChunk(
+                    point_id="policy",
+                    source_url=source_url,
+                    page_title="Visitor Guidelines",
+                    section_heading="Policy",
+                    fetched_at="2026-09-04T10:11:54Z",
+                    text=policy,
+                    scores=ScoreBreakdown(dense=0.9, sparse=0.8, rrf=0.7, rerank=0.95),
+                )
+            ]
+        )
+
+    registry = ToolRegistry()
+    registry.register(
+        "search_visitor_info",
+        "Visitor search",
+        SearchVisitorArguments,
+        VisitorSearchResult,
+        search,
+    )
+    decision = {
+        **intent(category="visitor_info"),
+        "search_query": "large luggage and wine coat-check policy",
+    }
+    answer_text = "No. Large luggage and wine are not allowed in the building or at coat check."
+    model = ScriptedModel(
+        [
+            decision,
+            {
+                "text": answer_text,
+                "language": "en",
+                "citations": [{"source_url": source_url, "quote": policy}],
+            },
+            {
+                "fully_supported": True,
+                "claims": [
+                    {
+                        "text": answer_text,
+                        "supported": True,
+                        "evidence_keys": ["page:policy"],
+                    }
+                ],
+            },
+        ]
+    )
+    store = EventStore(tmp_path / "visitor-fast-path.sqlite3")
+
+    answer = asyncio.run(
+        Agent(model, registry, store).run(
+            ChatRequest(
+                message=(
+                    "Can I bring a large suitcase and wine inside if I leave them at coat check?"
+                )
+            )
+        )
+    )
+
+    assert answer.text == answer_text
+    assert answer.route == "lite" and answer.grounding_score == 1
+    assert [call[0] for call in model.calls] == ["lite", "lite", "lite"]
+    assert all(call[2] is None for call in model.calls)
+    assert searches == [
+        SearchVisitorArguments(query="large luggage and wine coat-check policy", k=5)
+    ]
+    events = store.read(answer.session_id)
+    assert len([event for event in events if event.kind == "tool_call"]) == 1
+    assert any(
+        event.kind == "route_policy"
+        and isinstance(event.data, dict)
+        and event.data.get("policy") == "direct_visitor_search"
+        for event in events
+    )
 
 
 def test_gallery_normalization_does_not_collapse_complex_or_policy_requests() -> None:
@@ -583,7 +690,7 @@ def test_model_error_malformed_envelope_and_honest_no_claims(tmp_path: Path) -> 
         assert store.read(session)[-1].kind == "turn_error"
     model = ScriptedModel(
         [
-            intent(category="visitor_info"),
+            intent(category="multi_hop"),
             {"text": "I have no matching information.", "language": "en", "citations": []},
             {"fully_supported": True, "claims": []},
         ]
