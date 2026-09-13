@@ -218,7 +218,9 @@ def test_greeting_short_circuits_models_and_tools(tmp_path: Path) -> None:
     assert answer.text.startswith("Hello!")
     assert answer.route == "lite"
     assert answer.language == "en"
-    assert answer.grounding_score == 1
+    assert answer.grounding_score is None
+    assert answer.answer_kind == "social"
+    assert answer.verification_status == "not_applicable"
     assert answer.citations == []
     assert answer.model_calls == []
     assert answer.cost_usd == 0
@@ -240,7 +242,9 @@ def test_wellbeing_short_circuits_models_and_tools(tmp_path: Path) -> None:
 
     assert answer.text == "I'm ready to help. What would you like to know about The Met?"
     assert answer.route == "lite"
-    assert answer.grounding_score == 1
+    assert answer.grounding_score is None
+    assert answer.answer_kind == "social"
+    assert answer.verification_status == "not_applicable"
     assert answer.citations == []
     assert answer.model_calls == []
     assert answer.cost_usd == 0
@@ -415,7 +419,7 @@ def test_unverified_numeric_general_route_emits_review_event(tmp_path: Path) -> 
             ChatRequest(message="gimme info on room 131")
         )
     )
-    assert answer.grounding_score == 0
+    assert answer.grounding_score is None and answer.answer_kind == "unavailable"
     events = [e for e in store.read(answer.session_id) if e.kind == "routing_deviation"]
     assert len(events) == 1
     assert isinstance(events[0].data, dict)
@@ -637,7 +641,9 @@ def test_gallery_wayfinding_fails_closed_when_evidence_disagrees(tmp_path: Path)
         "I couldn't verify that from the available museum sources. Please try a more "
         "specific question or contact info@metmuseum.org."
     )
-    assert answer.citations == [] and answer.grounding_score == 0
+    assert answer.citations == []
+    assert answer.grounding_score is None
+    assert answer.answer_kind == "unavailable"
     assert [call[0] for call in model.calls] == ["lite"]
 
 
@@ -669,7 +675,9 @@ def test_direct_gallery_wayfinding_fails_closed_without_map_evidence(tmp_path: P
             ChatRequest(message="Directions to Gallery 131 from the Fifth Avenue entrance")
         )
     )
-    assert answer.grounding_score == 0 and not answer.citations
+    assert answer.grounding_score is None
+    assert not answer.citations
+    assert answer.answer_kind == "unavailable"
     assert (
         answer.text
         == "I couldn't verify that from the available museum sources. Please try a more "
@@ -796,7 +804,9 @@ def test_verified_answer_and_current_turn_citations(tmp_path: Path, language: La
     # An earlier turn's valid object is not citation authority for a new turn.
     model.replies.extend([intent(language), draft(language), draft(language)])
     failed = asyncio.run(agent.run(ChatRequest(message="Repeat", session_id=answer.session_id)))
-    assert failed.grounding_score == 0 and not failed.citations
+    assert failed.grounding_score is None
+    assert not failed.citations
+    assert failed.answer_kind == "unavailable"
     assert executed == [1]
 
 
@@ -888,7 +898,7 @@ def test_red_team_short_unverified_factual_claim_fails_closed(tmp_path: Path) ->
             ChatRequest(message="Does the museum admit everyone free on Mondays?")
         )
     )
-    assert answer.grounding_score == 0.0
+    assert answer.grounding_score is None and answer.answer_kind == "unavailable"
     assert answer.citations == []
     assert answer.text == (
         "I couldn't verify that from the available museum sources. Please try a more "
@@ -913,7 +923,7 @@ def test_six_attempt_budget_and_sequential_execution(tmp_path: Path, invalid: bo
         Agent(model, registry_with_calls(executed), store).run(ChatRequest(message="many"))
     )
     assert len(executed) == (0 if invalid else 6)
-    assert result.grounding_score == 0
+    assert result.grounding_score is None and result.answer_kind == "unavailable"
     events = store.read(result.session_id)
     assert len([e for e in events if e.kind == "tool_call"]) == 6
     assert any(e.kind == "tool_limit" for e in events)
@@ -1006,7 +1016,9 @@ def test_model_error_malformed_envelope_and_honest_no_claims(tmp_path: Path) -> 
             ChatRequest(message="hours")
         )
     )
-    assert answer.route == "main" and answer.grounding_score == 0
+    assert answer.route == "main"
+    assert answer.grounding_score is None
+    assert answer.answer_kind == "unavailable"
     assert answer.text == (
         "I couldn't verify that from the available museum sources. Please try a more "
         "specific question or contact info@metmuseum.org."
@@ -1132,7 +1144,8 @@ def test_quote_identity_and_append_only_redacted_audit(tmp_path: Path) -> None:
         "input_tokens": 10,
     }
     assert store.read(uuid4()) == [] and store.read(session, after=events[0].sequence) == []
-    for kwargs in ({"after": -1}, {"limit": 0}, {"limit": 501}):
+    invalid_kwargs: list[dict[str, Any]] = [{"after": -1}, {"limit": 0}, {"limit": 501}]
+    for kwargs in invalid_kwargs:
         with pytest.raises(ValueError):
             store.read(session, **kwargs)
     with sqlite3.connect(store.path) as connection:

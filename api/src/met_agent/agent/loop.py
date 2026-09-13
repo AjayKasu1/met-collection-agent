@@ -1,7 +1,9 @@
+# ruff: noqa: RUF001
 """Run bounded sequential tools and release only drafts that pass citation and claim checks."""
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -10,10 +12,20 @@ from uuid import UUID, uuid4
 import structlog
 from pydantic import JsonValue
 
+from met_agent.agent.context import SessionContext, VerifiedObjectRef
 from met_agent.agent.distributed import get_session_lock
 from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
-from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
+from met_agent.agent.models import (
+    AgentAnswer,
+    AgentDraft,
+    AnswerKind,
+    ChatRequest,
+    Citation,
+    Language,
+    Route,
+    VerificationStatus,
+)
 from met_agent.guardrails.grounding import (
     GroundingCheck,
     valid_citations,
@@ -47,50 +59,51 @@ NOT_FOUND: dict[Language, str] = {
     "en": "The requested object was not found. The Met API returned no object record.",
     "fr": "L'objet demandé est introuvable. L'API du Met n'a renvoyé aucune notice d'objet.",
     "es": "No se encontró el objeto solicitado. La API del Met no devolvió ningún registro.",
-    "zh": "未找到所请求的藏品。大都会艺术博物馆 API 未返回藏品记录。",
+    "zh": "未找到所请求的藏品。大都会艺术博物馆 API 未返回任何藏品记录。",
 }
 GREETING: dict[Language, str] = {
-    "en": (
-        "Hello! I can help with The Met's collection, gallery information, directions, "
-        "hours, admission, accessibility, and visitor policies. What would you like to know?"
-    ),
-    "fr": (
-        "Bonjour ! Je peux vous aider avec la collection du Met, les galeries, les itinéraires, "
-        "les horaires, l'admission, l'accessibilité et les règles de visite. Que souhaitez-vous "
-        "savoir ?"
-    ),
-    "es": (
-        "¡Hola! Puedo ayudarle con la colección del Met, las galerías, las indicaciones, los "
-        "horarios, la entrada, la accesibilidad y las normas para visitantes. ¿Qué desea saber?"
-    ),
-    "zh": (
-        "您好! 我可以帮助您查询大都会艺术博物馆的藏品、展厅、路线、开放时间、门票、"
-        "无障碍服务和参观规定。您想了解什么?"
-    ),
+    "en": "Hello! What would you like to explore or know before your visit?",
+    "fr": "Bonjour ! Que souhaitez-vous explorer ou savoir avant votre visite ?",
+    "es": "¡Hola! ¿Qué le gustaría explorar o saber antes de su visita?",
+    "zh": "您好！在参观前您想了解或探索哪些展品和信息？",
+}
+REACTION: dict[Language, str] = {
+    "en": "😄",
+    "fr": "😄",
+    "es": "😄",
+    "zh": "😄",
 }
 WELLBEING: dict[Language, str] = {
     "en": "I'm ready to help. What would you like to know about The Met?",
     "fr": "Je suis prêt à vous aider. Que souhaitez-vous savoir sur le Met ?",
     "es": "Estoy listo para ayudarle. ¿Qué desea saber sobre el Met?",
-    "zh": "我已准备好为您提供帮助。您想了解大都会艺术博物馆的哪些信息?",
+    "zh": "我已准备好为您提供帮助。您想了解大都会艺术博物馆的哪些信息？",
 }
 THANKS: dict[Language, str] = {
-    "en": "You're welcome! Is there anything else you would like to know about The Met?",
-    "fr": "Je vous en prie ! Souhaitez-vous savoir autre chose sur le Met ?",
-    "es": "¡De nada! ¿Desea saber algo más sobre el Met?",
-    "zh": "不客气! 您还想了解大都会艺术博物馆的其他信息吗?",
+    "en": "You're welcome!",
+    "fr": "Je vous en prie !",
+    "es": "¡De nada!",
+    "zh": "不客气！",
 }
 FAREWELL: dict[Language, str] = {
     "en": "Goodbye! I hope you enjoy your visit to The Met.",
     "fr": "Au revoir ! Je vous souhaite une excellente visite au Met.",
     "es": "¡Adiós! Espero que disfrute de su visita al Met.",
-    "zh": "再见! 祝您参观愉快。",
+    "zh": "再见！祝您参观愉快。",
+}
+DISSATISFACTION: dict[Language, str] = {
+    "en": "Sorry I missed what you needed. Which part should I clarify?",
+    "fr": "Désolé d'avoir manqué ce dont vous aviez besoin. Quelle partie dois-je clarifier ?",
+    "es": "Disculpe si no entendí lo que necesitaba. ¿Qué parte desea que aclare?",
+    "zh": "抱歉未能解答您的疑问。请问您需要我澄清哪一部分？",
 }
 SOCIAL_RESPONSES = {
     "greeting": GREETING,
+    "reaction": REACTION,
     "wellbeing": WELLBEING,
     "thanks": THANKS,
     "farewell": FAREWELL,
+    "dissatisfaction": DISSATISFACTION,
 }
 
 
@@ -131,6 +144,9 @@ class Agent:
                 for name in ("system_v2", "tools_v1", "intent_v4", "grounding_v1", "citations_v1")
             },
         )
+        session_ctx = await asyncio.to_thread(
+            self.events.get_session_context, session
+        ) or SessionContext(language=request.language or "en")
         try:
             if social := social_intent(request.message):
                 kind, language = social
@@ -143,6 +159,15 @@ class Agent:
                         "route": "lite",
                     },
                 )
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="social",
+                    language=language,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
                 return self._answer(
                     session,
                     turn,
@@ -152,7 +177,9 @@ class Agent:
                     context,
                     SOCIAL_RESPONSES[kind][language],
                     [],
-                    1.0,
+                    None,
+                    answer_kind="social",
+                    verification_status="not_applicable",
                 )
             if asks_for_first_message(request.message):
                 first_message = await asyncio.to_thread(self.events.first_user_message, session)
@@ -170,6 +197,15 @@ class Agent:
                     if first_message is not None
                     else "This is your first message in this session."
                 )
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="factual",
+                    language="en",
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
                 return self._answer(
                     session,
                     turn,
@@ -180,7 +216,108 @@ class Agent:
                     text,
                     [],
                     1.0,
+                    answer_kind="factual",
+                    verification_status="verified",
                 )
+            has_pronoun = bool(re.search(r"\b(?:it|that|this)\b", request.message, re.IGNORECASE))
+            if has_pronoun and session_ctx.verified_objects:
+                ref, clarify_prompt = session_ctx.resolve_referent()
+                if clarify_prompt is not None:
+                    audit("route_policy", {"policy": "referent_clarification", "route": "lite"})
+                    session_ctx.record_turn(
+                        turn_id=turn,
+                        user_message=request.message,
+                        answer_kind="clarification",
+                        language=request.language or "en",
+                    )
+                    await asyncio.to_thread(
+                        self.events.save_session_context, session, turn, session_ctx
+                    )
+                    return self._answer(
+                        session,
+                        turn,
+                        started,
+                        request.language or "en",
+                        "lite",
+                        context,
+                        clarify_prompt,
+                        [],
+                        None,
+                        answer_kind="clarification",
+                        verification_status="not_applicable",
+                    )
+                if ref is not None:
+                    msg_lower = request.message.lower()
+                    if any(
+                        word in msg_lower
+                        for word in (
+                            "upstairs",
+                            "downstairs",
+                            "gallery",
+                            "where",
+                            "floor",
+                            "located",
+                            "room",
+                        )
+                    ):
+                        obj_res = await self.tools.execute(
+                            "get_object", json.dumps({"object_id": ref.object_id})
+                        )
+                        audit(
+                            "tool_call",
+                            {"name": "get_object", "arguments": {"object_id": ref.object_id}},
+                        )
+                        audit("tool_result", obj_res.model_dump(mode="json"))
+                        live_obj = (
+                            obj_res.output if isinstance(obj_res.output, LiveObject) else None
+                        )
+                        if live_obj and live_obj.is_on_view and live_obj.gallery_number:
+                            gallery = live_obj.gallery_number
+                            gallery_num = int(gallery) if gallery.isdigit() else None
+                            is_upstairs = gallery_num is not None and (300 <= gallery_num <= 999)
+                            if "upstairs" in msg_lower:
+                                ans_text = (
+                                    f"Yes, {ref.title} is upstairs in Gallery {gallery} "
+                                    "(second floor)."
+                                    if is_upstairs
+                                    else f"No, {ref.title} is on the first floor in Gallery "
+                                    f"{gallery}, not upstairs."
+                                )
+                            elif "downstairs" in msg_lower:
+                                ans_text = (
+                                    f"No, {ref.title} is on the second floor in Gallery "
+                                    f"{gallery}, not downstairs."
+                                    if is_upstairs
+                                    else f"No, {ref.title} is on the first floor in Gallery "
+                                    f"{gallery}."
+                                )
+                            else:
+                                ans_text = f"{ref.title} is currently on view in Gallery {gallery}."
+                            citation = Citation(object_id=ref.object_id, quote=f"Gallery {gallery}")
+                            session_ctx.record_turn(
+                                turn_id=turn,
+                                user_message=request.message,
+                                answer_kind="factual",
+                                verified_object=ref,
+                                gallery_number=gallery,
+                                language="en",
+                            )
+                            await asyncio.to_thread(
+                                self.events.save_session_context, session, turn, session_ctx
+                            )
+                            return self._answer(
+                                session,
+                                turn,
+                                started,
+                                request.language or "en",
+                                "lite",
+                                context,
+                                ans_text,
+                                [citation],
+                                1.0,
+                                answer_kind="factual",
+                                verification_status="verified",
+                            )
             model_intent = await structured(
                 self.model,
                 "lite",
@@ -214,6 +351,15 @@ class Agent:
                 )
             if intent.category == "interpretive":
                 audit("guardrail", {"policy": "non_interpretive", "decision": "refuse"})
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="policy_refusal",
+                    language=intent.language,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
                 return self._answer(
                     session,
                     turn,
@@ -223,7 +369,9 @@ class Agent:
                     context,
                     POLICY[intent.language],
                     [],
-                    1.0,
+                    None,
+                    answer_kind="policy_refusal",
+                    verification_status="not_applicable",
                     refusal=True,
                 )
             if intent.category == "out_of_scope":
@@ -243,6 +391,15 @@ class Agent:
                 audit("tool_call", {"name": "handoff", "arguments": {"reason": "out_of_scope"}})
                 audit("tool_result", result.model_dump(mode="json"))
                 handoff = result.output if isinstance(result.output, Handoff) else None
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="handoff",
+                    language=intent.language,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
                 return self._answer(
                     session,
                     turn,
@@ -252,7 +409,9 @@ class Agent:
                     context,
                     UNVERIFIED[intent.language],
                     [],
-                    1.0,
+                    None,
+                    answer_kind="handoff",
+                    verification_status="not_applicable",
                     handoff=handoff,
                 )
             if routing_policy == "direct_gallery_question":
@@ -310,7 +469,7 @@ class Agent:
             answer = await self._workspace(
                 request, session, turn, started, intent, context, history, audit
             )
-            if answer.grounding_score < 1 and (
+            if (answer.grounding_score is None or answer.grounding_score < 1) and (
                 intent.gallery_number is not None or message_numbers(request.message)
             ):
                 deviation: dict[str, JsonValue] = {
@@ -323,6 +482,24 @@ class Agent:
                 }
                 audit("routing_deviation", deviation)
                 structlog.get_logger(__name__).warning("routing_deviation", **deviation)
+            verified_obj = None
+            if answer.citations:
+                for cit in answer.citations:
+                    if cit.object_id:
+                        verified_obj = VerifiedObjectRef(
+                            object_id=cit.object_id,
+                            title=intent.search_query.strip() or f"Object {cit.object_id}",
+                        )
+                        break
+            session_ctx.record_turn(
+                turn_id=turn,
+                user_message=request.message,
+                answer_kind=answer.answer_kind,
+                verified_object=verified_obj,
+                gallery_number=intent.gallery_number,
+                language=answer.language,
+            )
+            await asyncio.to_thread(self.events.save_session_context, session, turn, session_ctx)
             return answer
         except ModelError as error:
             audit("turn_error", {"code": error.code, "message": str(error)})
@@ -371,7 +548,9 @@ class Agent:
                 context,
                 UNVERIFIED[intent.language],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
 
         reply = await self.model.complete(
@@ -423,7 +602,9 @@ class Agent:
                 context,
                 UNVERIFIED[intent.language],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
 
         check = await structured(
@@ -457,7 +638,9 @@ class Agent:
                 context,
                 UNAVAILABLE[intent.language],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
         return self._answer(
             session,
@@ -469,6 +652,8 @@ class Agent:
             draft.text,
             draft.citations,
             score,
+            answer_kind="factual",
+            verification_status="verified",
         )
 
     async def _wayfinding_workspace(
@@ -510,7 +695,9 @@ class Agent:
                 context,
                 UNVERIFIED["en"],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
 
         route = result.output
@@ -553,7 +740,9 @@ class Agent:
                 context,
                 UNVERIFIED["en"],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
         audit(
             "guardrail",
@@ -574,6 +763,8 @@ class Agent:
             draft.text,
             draft.citations,
             1.0,
+            answer_kind="factual",
+            verification_status="verified",
         )
 
     async def _gallery_workspace(
@@ -629,7 +820,9 @@ class Agent:
                 context,
                 UNVERIFIED["en"],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
 
         confirmed: list[tuple[LiveObject, Evidence]] = []
@@ -666,7 +859,9 @@ class Agent:
                 context,
                 UNVERIFIED["en"],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
 
         labels = [obj.title.strip() or f"Object {obj.object_id}" for obj, _ in confirmed]
@@ -723,7 +918,9 @@ class Agent:
                 context,
                 UNAVAILABLE["en"],
                 [],
-                0.0,
+                None,
+                answer_kind="unavailable",
+                verification_status="unverified",
             )
         return self._answer(
             session,
@@ -735,6 +932,8 @@ class Agent:
             draft.text,
             draft.citations,
             score,
+            answer_kind="factual",
+            verification_status="verified",
         )
 
     async def _workspace(
@@ -800,7 +999,9 @@ class Agent:
                             context,
                             UNVERIFIED[intent.language],
                             [],
-                            0.0,
+                            None,
+                            answer_kind="unavailable",
+                            verification_status="unverified",
                         )
                     tool_count += 1
                     function = call.get("function") or {}
@@ -868,6 +1069,8 @@ class Agent:
                             lookup_draft.text,
                             lookup_draft.citations,
                             1.0,
+                            answer_kind="factual",
+                            verification_status="verified",
                         )
                     if isinstance(result.output, Handoff):
                         audit("terminal_handoff", result.output.model_dump(mode="json"))
@@ -880,7 +1083,9 @@ class Agent:
                             context,
                             UNVERIFIED[intent.language],
                             [],
-                            1.0,
+                            None,
+                            answer_kind="handoff",
+                            verification_status="not_applicable",
                             handoff=result.output,
                         )
                 if tool_rounds == MAX_TOOL_ROUNDS:
@@ -930,6 +1135,8 @@ class Agent:
                         draft.text,
                         draft.citations,
                         score,
+                        answer_kind="factual",
+                        verification_status="verified",
                     )
             audit(
                 "guardrail",
@@ -964,7 +1171,9 @@ class Agent:
             context,
             UNAVAILABLE[intent.language],
             [],
-            0.0,
+            None,
+            answer_kind="unavailable",
+            verification_status="unverified",
         )
 
     def _answer(
@@ -977,8 +1186,10 @@ class Agent:
         context: CallContext,
         text: str,
         citations: list[Citation],
-        score: float,
+        score: float | None = None,
         *,
+        answer_kind: AnswerKind = "factual",
+        verification_status: VerificationStatus = "verified",
         refusal: bool = False,
         handoff: Handoff | None = None,
     ) -> AgentAnswer:
@@ -988,6 +1199,8 @@ class Agent:
             text=text,
             citations=citations,
             language=language,
+            answer_kind=answer_kind,
+            verification_status=verification_status,
             handoff=handoff,
             route=route,
             cost_usd=context.ledger.cost,

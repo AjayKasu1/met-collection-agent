@@ -54,6 +54,50 @@ _FAREWELL_LANGUAGES: dict[str, Language] = {
     "adiós": "es",
     "再见": "zh",
 }
+_REACTION_LANGUAGES: dict[str, Language] = {
+    "lol": "en",
+    "haha": "en",
+    "hahaha": "en",
+    "lmao": "en",
+    "rofl": "en",
+    "cool": "en",
+    "nice": "en",
+    "awesome": "en",
+    "great": "en",
+    "mdr": "fr",
+    "ptdr": "fr",
+    "super": "fr",
+    "chouette": "fr",
+    "jaja": "es",
+    "jajaja": "es",
+    "genial": "es",
+    "guay": "es",
+    "哈哈": "zh",
+    "哈哈哈": "zh",
+    "真棒": "zh",
+    "太棒了": "zh",
+}
+_DISSATISFACTION_LANGUAGES: dict[str, Language] = {
+    "that didnt help": "en",
+    "that did not help": "en",
+    "this didnt help": "en",
+    "this did not help": "en",
+    "that didnt answer my question": "en",
+    "that did not answer my question": "en",
+    "thanks for nothing": "en",
+    "you didnt answer my question": "en",
+    "that wasnt helpful": "en",
+    "that was not helpful": "en",
+    "ca na pas aide": "fr",
+    "cela na pas aide": "fr",
+    "vous navez pas repondu": "fr",
+    "eso no ayudo": "es",
+    "no me sirvio": "es",
+    "no respondiste a mi pregunta": "es",
+    "这没有帮助": "zh",
+    "你没有回答我的问题": "zh",
+    "没用": "zh",
+}
 _FIRST_MESSAGE_RECALL = {
     "what did i ask first",
     "what did i ask you first",
@@ -61,7 +105,7 @@ _FIRST_MESSAGE_RECALL = {
     "what was the first thing i asked",
     "what i asked first",
 }
-SocialIntent = Literal["greeting", "wellbeing", "thanks", "farewell"]
+SocialIntent = Literal["greeting", "wellbeing", "thanks", "farewell", "reaction", "dissatisfaction"]
 
 
 def _normalized_message(message: str) -> str:
@@ -83,6 +127,8 @@ def social_intent(message: str) -> tuple[SocialIntent, Language] | None:
         ("wellbeing", _WELLBEING_LANGUAGES),
         ("thanks", _THANKS_LANGUAGES),
         ("farewell", _FAREWELL_LANGUAGES),
+        ("reaction", _REACTION_LANGUAGES),
+        ("dissatisfaction", _DISSATISFACTION_LANGUAGES),
     )
     for kind, phrases in groups:
         if language := phrases.get(normalized):
@@ -110,6 +156,9 @@ class Intent(BaseModel):
     handoff_contact: Literal["info@metmuseum.org", "store.support@metmuseum.org"] = (
         "info@metmuseum.org"
     )
+    factual_request: bool = True
+    referenced_entity: str | None = None
+    requires_clarification: bool = False
 
     @property
     def route(self) -> Route:

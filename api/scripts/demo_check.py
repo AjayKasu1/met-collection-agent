@@ -99,10 +99,13 @@ async def run(settings: Settings, *, app: Any = None) -> int:
                 )
                 print("Model paths: " + ", ".join(call.path for call in answer.model_calls))
                 records.append({"id": question_id, "answer": answer.model_dump(mode="json")})
-                if (
-                    answer.grounding_score < 1
-                    or (question_id.startswith("ref-") and not answer.policy_refusal)
-                    or (not question_id.startswith("ref-") and not answer.citations)
+                if question_id.startswith("ref-"):
+                    if not answer.policy_refusal or answer.grounding_score is not None:
+                        failed = True
+                elif (
+                    answer.grounding_score is None
+                    or answer.grounding_score < 1
+                    or not answer.citations
                 ):
                     failed = True
             except (RuntimeError, ValueError, ValidationError, httpx.HTTPError) as error:
