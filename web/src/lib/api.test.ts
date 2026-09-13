@@ -18,12 +18,28 @@ describe("chat request boundary", () => {
       parseChatRequest({
         messages,
         session_id: sessionId,
+        session_token: "test-token",
         language: "fr",
         turnstile_token: "unit-test-token",
       }),
     ).toEqual({
       messages,
       session_id: sessionId,
+      session_token: "test-token",
+      language: "fr",
+      turnstile_token: "unit-test-token",
+    });
+    expect(
+      parseChatRequest({
+        messages,
+        session_id: null,
+        language: "fr",
+        turnstile_token: "unit-test-token",
+      }),
+    ).toEqual({
+      messages,
+      session_id: null,
+      session_token: null,
       language: "fr",
       turnstile_token: "unit-test-token",
     });
@@ -45,11 +61,11 @@ describe("chat request boundary", () => {
   });
 
   it("maps provider errors to bounded public messages", () => {
-    expect(parseApiError({ code: "provider_unavailable", message: "secret detail" }).message).toBe(
-      "The model provider is temporarily unavailable. Try again shortly.",
+    expect(parseApiError({ code: "service_unavailable", message: "secret detail" }).message).toBe(
+      "The museum assistant is temporarily unavailable.",
     );
     expect(parseApiError({ code: "unknown", message: "secret detail" }).message).toBe(
-      "The museum assistant is unavailable.",
+      "The museum assistant is temporarily unavailable.",
     );
   });
 });

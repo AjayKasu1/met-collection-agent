@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
   group: deploy-web-production
@@ -28,16 +29,30 @@ jobs:
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
     steps:
       - name: Enforce verified CI deployment gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TARGET_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "Enforcing CI quality gate for commit $TARGET_SHA"
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "Triggered by CI workflow completion for commit ${{ github.event.workflow_run.head_sha }}"
             if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
               echo "Deployment blocked: CI conclusion was ${{ github.event.workflow_run.conclusion }}"
               exit 1
             fi
-          else
-            echo "Deployment manually triggered by workflow_dispatch"
           fi
+          CHECK_RUNS=$(curl -sSL -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/$TARGET_SHA/check-runs")
+          PYTHON_OK=$(echo "$CHECK_RUNS" | grep -A 10 '"name": "Python 3.12 quality checks"' | grep '"conclusion": "success"' || true)
+          WEB_OK=$(echo "$CHECK_RUNS" | grep -A 10 '"name": "Node 20 web and Workers checks"' | grep '"conclusion": "success"' || true)
+          CONTAINER_OK=$(echo "$CHECK_RUNS" | grep -A 10 '"name": "Production container builds"' | grep '"conclusion": "success"' || true)
+          if [ -z "$PYTHON_OK" ] || [ -z "$WEB_OK" ] || [ -z "$CONTAINER_OK" ]; then
+            echo "Deployment blocked: All required CI checks must pass before deployment."
+            echo "Python check status: $(echo "$CHECK_RUNS" | grep -A 10 '"name": "Python 3.12 quality checks"' | grep '"conclusion"' || echo 'not found')"
+            echo "Web check status: $(echo "$CHECK_RUNS" | grep -A 10 '"name": "Node 20 web and Workers checks"' | grep '"conclusion"' || echo 'not found')"
+            exit 1
+          fi
+          echo "Verified: Required CI checks passed with success for $TARGET_SHA."
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}

@@ -53,7 +53,12 @@ class PostgresSessionLock:
                 self.conn = None
 
     async def __aenter__(self) -> PostgresSessionLock:
-        await asyncio.to_thread(self._acquire)
+        try:
+            await asyncio.to_thread(self._acquire)
+        except BaseException:
+            if self.conn is not None:
+                await asyncio.to_thread(self._release)
+            raise
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -98,13 +103,16 @@ class DistributedTokenPacer(TokenPacer):
         if self.pool is None:
             return None, 0.0
         with self.pool.connection() as conn, conn.transaction():
+            # Serialize check-and-insert per model across instances using transaction advisory lock
+            conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"pacing:{model}",))
             conn.execute(
                 "DELETE FROM met_agent_provider_pacing "
                 "WHERE created_at < now() - INTERVAL '60 seconds'"
             )
             row = conn.execute(
                 """
-                SELECT count(*), coalesce(sum(tokens), 0), min(created_at)
+                SELECT count(*), coalesce(sum(tokens), 0),
+                       coalesce(extract(epoch from (now() - min(created_at))), 60)
                 FROM met_agent_provider_pacing
                 WHERE model = %s AND created_at >= now() - INTERVAL '60 seconds'
                 """,
@@ -112,7 +120,7 @@ class DistributedTokenPacer(TokenPacer):
             ).fetchone()
             req_count = int(row[0]) if row and row[0] is not None else 0
             current_tokens = int(row[1]) if row and row[1] is not None else 0
-            earliest = row[2] if row else None
+            oldest_age = float(row[2]) if row and row[2] is not None else 60.0
 
             if (
                 req_count < limit.requests_per_minute
@@ -132,9 +140,7 @@ class DistributedTokenPacer(TokenPacer):
                 return reservation, 0.0
 
             # Compute wait time until oldest entry rolls past 60s
-            wait = 0.5
-            if earliest is not None:
-                wait = 0.5
+            wait = max(0.1, min(1.0, 60.0 - oldest_age + 0.05))
             return None, wait
 
     def _reconcile_postgres(self, reservation: Reservation, actual_tokens: int) -> None:

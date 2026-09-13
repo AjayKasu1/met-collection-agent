@@ -19,10 +19,6 @@ const languages: { value: Language; label: string; hint: string }[] = [
   { value: "zh", label: "中文", hint: "中文" },
 ];
 
-function newSessionId(): string {
-  return crypto.randomUUID();
-}
-
 export function ChatShell(): React.ReactNode {
   const transport = useMemo(() => new DefaultChatTransport<MuseumMessage>({ api: "/api/chat" }), []);
   const { messages, sendMessage, status, error, stop, setMessages, clearError } = useChat<MuseumMessage>({
@@ -31,7 +27,8 @@ export function ChatShell(): React.ReactNode {
   });
   const [input, setInput] = useState("");
   const [language, setLanguage] = useState<Language>("en");
-  const [sessionId, setSessionId] = useState(newSessionId);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstile = useRef<TurnstileHandle>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -42,6 +39,22 @@ export function ChatShell(): React.ReactNode {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, status]);
 
+  useEffect(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg && msg.role === "assistant") {
+        const provenance = messageProvenance(msg);
+        if (provenance?.answer.session_id) {
+          setSessionId(provenance.answer.session_id);
+        }
+        if (provenance?.session_token) {
+          setSessionToken(provenance.session_token);
+        }
+        break;
+      }
+    }
+  }, [messages]);
+
   async function submit(question: string): Promise<void> {
     const text = question.trim();
     if (!text || busy || !turnstileToken) return;
@@ -50,7 +63,7 @@ export function ChatShell(): React.ReactNode {
     try {
       await sendMessage(
         { text },
-        { body: { session_id: sessionId, language, turnstile_token: turnstileToken } },
+        { body: { session_id: sessionId, session_token: sessionToken, language, turnstile_token: turnstileToken } },
       );
     } finally {
       turnstile.current?.reset();
@@ -67,7 +80,8 @@ export function ChatShell(): React.ReactNode {
     setMessages([]);
     clearError();
     setInput("");
-    setSessionId(newSessionId());
+    setSessionId(null);
+    setSessionToken(null);
   }
 
   return (

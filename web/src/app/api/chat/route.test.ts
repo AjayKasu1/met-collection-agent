@@ -68,6 +68,7 @@ describe("AI SDK chat adapter", () => {
     expect(upstreamBody).toEqual({
       message: "Where is Dendur?",
       session_id: sessionId,
+      session_token: null,
       language: "en",
     });
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({

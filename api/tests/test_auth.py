@@ -15,7 +15,7 @@ def test_session_token_signing_and_verification() -> None:
     assert verify_session_token(session_id, token, secret) is True
 
     # Tampered token fails
-    tampered = "a" + token[1:]
+    tampered = ("0" if token[0] != "0" else "1") + token[1:]
     assert verify_session_token(session_id, tampered, secret) is False
 
     # Different session ID fails with same token

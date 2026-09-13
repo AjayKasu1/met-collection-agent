@@ -32,20 +32,29 @@ export function latestUserText(messages: UIMessage[]): string {
 
 export function parseChatRequest(value: unknown): {
   messages: UIMessage[];
-  session_id: string;
+  session_id: string | null;
+  session_token: string | null;
   language: Language;
   turnstile_token: string;
 } {
   if (!isRecord(value) || !Array.isArray(value.messages)) {
     throw new PublicApiError("invalid_request", "The chat request is invalid.");
   }
-  if (
-    typeof value.session_id !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      value.session_id,
-    )
-  ) {
-    throw new PublicApiError("invalid_request", "The chat session is invalid.");
+  let sessionId: string | null = null;
+  let sessionToken: string | null = null;
+  if (value.session_id !== null && value.session_id !== undefined && value.session_id !== "") {
+    if (
+      typeof value.session_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        value.session_id,
+      )
+    ) {
+      throw new PublicApiError("invalid_request", "The chat session is invalid.");
+    }
+    sessionId = value.session_id;
+    if (typeof value.session_token === "string" && value.session_token.length > 0) {
+      sessionToken = value.session_token;
+    }
   }
   if (!(["en", "fr", "es", "zh"] as unknown[]).includes(value.language)) {
     throw new PublicApiError("invalid_request", "The language selection is invalid.");
@@ -59,7 +68,8 @@ export function parseChatRequest(value: unknown): {
   }
   return {
     messages: value.messages as UIMessage[],
-    session_id: value.session_id,
+    session_id: sessionId,
+    session_token: sessionToken,
     language: value.language as Language,
     turnstile_token: value.turnstile_token,
   };
@@ -68,14 +78,15 @@ export function parseChatRequest(value: unknown): {
 export function parseApiError(value: unknown): PublicApiError {
   if (isRecord(value) && typeof value.code === "string" && typeof value.message === "string") {
     const messages: Record<string, string> = {
-      access_denied: "The model provider needs operator attention.",
-      provider_unavailable: "The model provider is temporarily unavailable. Try again shortly.",
-      verification_unavailable: "The answer could not be verified in time. Try again shortly.",
-      model_not_found: "The configured model is unavailable.",
+      service_unavailable: "The museum assistant is temporarily unavailable.",
+      request_timeout: "The assistant took too long to answer. Try asking about a specific work.",
+      verification_required: "Complete the security check and try again.",
+      invalid_request: "Check your question and try again.",
+      invalid_response: "The assistant returned an unexpected response. Try again.",
     };
-    return new PublicApiError(value.code, messages[value.code] ?? "The museum assistant is unavailable.");
+    return new PublicApiError(value.code, messages[value.code] ?? "The museum assistant is temporarily unavailable.");
   }
-  return new PublicApiError("service_unavailable", "The museum assistant is unavailable.");
+  return new PublicApiError("service_unavailable", "The museum assistant is temporarily unavailable.");
 }
 
 export function toolTrace(events: AuditEvent[]): ToolTrace[] {
@@ -102,10 +113,13 @@ export async function fetchToolTrace(
   sessionId: string,
   signal: AbortSignal,
   headers: HeadersInit = {},
+  sessionToken?: string | null,
 ): Promise<ToolTrace[]> {
   try {
-    const response = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events?limit=200`, {
-      headers: { Accept: "application/json", ...headers },
+    const query = sessionToken ? `?limit=200&token=${encodeURIComponent(sessionToken)}` : "?limit=200";
+    const authHeaders: Record<string, string> = sessionToken ? { "X-Session-Token": sessionToken } : {};
+    const response = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events${query}`, {
+      headers: { Accept: "application/json", ...headers, ...authHeaders },
       cache: "no-store",
       signal,
     });

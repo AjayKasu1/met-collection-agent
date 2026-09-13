@@ -62,6 +62,7 @@ export async function POST(request: Request): Promise<Response> {
         body: JSON.stringify({
           message: question,
           session_id: chatRequest.session_id,
+          session_token: chatRequest.session_token,
           language: chatRequest.language,
         }),
         cache: "no-store",
@@ -84,14 +85,23 @@ export async function POST(request: Request): Promise<Response> {
       let started = false;
       let streamedText = "";
       let finalAnswer: AgentAnswer | null = null;
+      let resolvedSessionId: string | null = chatRequest.session_id;
+      let sessionToken: string | null = chatRequest.session_token;
 
       for await (const event of readServerEvents(upstream.body)) {
         if (event.event === "session") {
           if (
             !isRecord(event.data) ||
-            event.data.session_id !== chatRequest.session_id
+            typeof event.data.session_id !== "string"
           ) {
             throw new PublicApiError("invalid_response", "The assistant returned an invalid session.");
+          }
+          if (chatRequest.session_id && event.data.session_id !== chatRequest.session_id) {
+            throw new PublicApiError("invalid_response", "The assistant returned an invalid session.");
+          }
+          resolvedSessionId = event.data.session_id;
+          if (typeof event.data.session_token === "string") {
+            sessionToken = event.data.session_token;
           }
           continue;
         }
@@ -117,7 +127,7 @@ export async function POST(request: Request): Promise<Response> {
         if (event.event === "error") throw parseApiError(event.data);
       }
 
-      if (!finalAnswer || finalAnswer.session_id !== chatRequest.session_id) {
+      if (!finalAnswer || (resolvedSessionId && finalAnswer.session_id !== resolvedSessionId)) {
         throw new PublicApiError("invalid_response", "The assistant response was incomplete.");
       }
 
@@ -131,10 +141,10 @@ export async function POST(request: Request): Promise<Response> {
         throw new PublicApiError("invalid_response", "The verified response changed while streaming.");
       }
 
-      const tools = await fetchToolTrace(finalAnswer.session_id, request.signal, originHeaders);
+      const tools = await fetchToolTrace(finalAnswer.session_id, request.signal, originHeaders, sessionToken);
       writer.write({
         type: "data-provenance",
-        data: { answer: finalAnswer, tools },
+        data: { answer: finalAnswer, tools, session_token: sessionToken },
       });
       writer.write({ type: "text-end", id: textId });
     },

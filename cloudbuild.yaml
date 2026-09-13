@@ -1,4 +1,43 @@
 steps:
+  - id: Verify-CI-Gate
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        echo "Validating GitHub CI gate for commit ${COMMIT_SHA}..."
+        CHECKS_API="https://api.github.com/repos/AjayKasu1/met-collection-agent/commits/${COMMIT_SHA}/check-runs"
+        START_TIME=$$(date +%s)
+        TIMEOUT=600
+
+        while true; do
+          RESPONSE=$$(curl -sSL -H "Accept: application/vnd.github+json" "$${CHECKS_API}")
+          PYTHON_OK=$$(echo "$${RESPONSE}" | grep -A 10 '"name": "Python 3.12 quality checks"' | grep '"conclusion": "success"' || true)
+          CONTAINER_OK=$$(echo "$${RESPONSE}" | grep -A 10 '"name": "Production container builds"' | grep '"conclusion": "success"' || true)
+          PYTHON_FAIL=$$(echo "$${RESPONSE}" | grep -A 10 '"name": "Python 3.12 quality checks"' | grep -E '"conclusion": "(failure|cancelled|timed_out)"' || true)
+          CONTAINER_FAIL=$$(echo "$${RESPONSE}" | grep -A 10 '"name": "Production container builds"' | grep -E '"conclusion": "(failure|cancelled|timed_out)"' || true)
+
+          if [ -n "$${PYTHON_FAIL}" ] || [ -n "$${CONTAINER_FAIL}" ]; then
+            echo "Deployment blocked: GitHub CI failed for commit ${COMMIT_SHA}."
+            exit 1
+          fi
+
+          if [ -n "$${PYTHON_OK}" ] && [ -n "$${CONTAINER_OK}" ]; then
+            echo "Verified: Required GitHub CI checks passed with success for ${COMMIT_SHA}."
+            break
+          fi
+
+          CURRENT_TIME=$$(date +%s)
+          ELAPSED=$$((CURRENT_TIME - START_TIME))
+          if [ $$ELAPSED -ge $$TIMEOUT ]; then
+            echo "Deployment blocked: Timed out waiting for GitHub CI to pass for commit ${COMMIT_SHA}."
+            exit 1
+          fi
+
+          echo "Waiting for GitHub CI completion ($${ELAPSED}s elapsed)..."
+          sleep 15
+        done
+
   - id: Build
     name: gcr.io/cloud-builders/docker
     args:

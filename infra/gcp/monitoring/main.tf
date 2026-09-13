@@ -172,3 +172,59 @@ resource "google_monitoring_alert_policy" "api_latency" {
   notification_channels = var.notification_channel_ids
   depends_on            = [google_project_service.monitoring]
 }
+
+resource "google_logging_metric" "api_stream_errors" {
+  project = var.project_id
+  name    = "met_agent_stream_errors"
+  filter  = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.service_name}\" AND jsonPayload.event=\"stream_error_emitted\""
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = "Met collection API SSE stream errors"
+  }
+}
+
+resource "google_monitoring_alert_policy" "api_stream_errors" {
+  project      = var.project_id
+  display_name = "Met collection API elevated stream errors"
+  combiner     = "OR"
+  enabled      = true
+
+  documentation {
+    content = "Mid-stream SSE failures were emitted to clients. Because SSE starts with HTTP 200, these errors are tracked via jsonPayload.event=stream_error_emitted rather than 5xx metrics."
+  }
+
+  conditions {
+    display_name = "Stream errors emitted within five minutes"
+
+    condition_threshold {
+      filter = join(" AND ", [
+        "metric.type=\"logging.googleapis.com/user/${google_logging_metric.api_stream_errors.name}\"",
+        "resource.type=\"cloud_run_revision\"",
+      ])
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "300s"
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields      = ["resource.label.service_name"]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
+
+  notification_channels = var.notification_channel_ids
+  depends_on            = [google_project_service.monitoring]
+}

@@ -50,6 +50,7 @@ export type ToolTrace = {
 export type AnswerProvenance = {
   answer: AgentAnswer;
   tools: ToolTrace[];
+  session_token?: string | null;
 };
 
 export type MuseumDataParts = {

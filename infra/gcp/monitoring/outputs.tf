@@ -8,6 +8,7 @@ output "alert_policy_names" {
   value = {
     latency      = google_monitoring_alert_policy.api_latency.name
     server_error = google_monitoring_alert_policy.api_server_errors.name
+    stream_error = google_monitoring_alert_policy.api_stream_errors.name
     unavailable  = google_monitoring_alert_policy.api_unavailable.name
   }
 }
