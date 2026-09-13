@@ -49,9 +49,10 @@ class Telemetry:
                 self.client.update_current_span(
                     output=self.events.redact(answer.model_dump(mode="json"))
                 )
-                self.client.score_current_trace(
-                    name="grounding_score", value=answer.grounding_score
-                )
+                if answer.grounding_score is not None:
+                    self.client.score_current_trace(
+                        name="grounding_score", value=answer.grounding_score
+                    )
                 return answer
 
         return await cast(Callable[..., Awaitable[AgentAnswer]], observed)(

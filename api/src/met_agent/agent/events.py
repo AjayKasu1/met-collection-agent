@@ -9,12 +9,14 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, JsonValue
+
+from met_agent.agent.context import SessionContext
 
 
 class Event(BaseModel):
@@ -37,11 +39,17 @@ class AuditStore(Protocol):
         self, session: UUID, turn: UUID, events: Sequence[tuple[str, JsonValue]]
     ) -> None: ...
 
-    def read(self, session: UUID, *, after: int = 0, limit: int = 200) -> list[Event]: ...
+    def read(
+        self, session: UUID, *, after: int = 0, limit: int = 200, turn: UUID | None = None
+    ) -> list[Event]: ...
 
     def history(self, session: UUID) -> list[dict[str, str]]: ...
 
     def first_user_message(self, session: UUID) -> str | None: ...
+
+    def get_session_context(self, session: UUID) -> SessionContext | None: ...
+
+    def save_session_context(self, session: UUID, turn: UUID, context: SessionContext) -> None: ...
 
     def ready(self) -> bool: ...
 
@@ -90,6 +98,12 @@ class EventStore(RedactingStore):
                     timestamp TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS events_session ON events(session_id, sequence);
+                CREATE TABLE IF NOT EXISTS session_contexts (
+                    session_id TEXT PRIMARY KEY,
+                    turn_id TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    data TEXT NOT NULL
+                );
                 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
                 BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
                 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
@@ -129,17 +143,23 @@ class EventStore(RedactingStore):
                 ],
             )
 
-    def read(self, session: UUID, *, after: int = 0, limit: int = 200) -> list[Event]:
+    def read(
+        self, session: UUID, *, after: int = 0, limit: int = 200, turn: UUID | None = None
+    ) -> list[Event]:
         if after < 0 or not 1 <= limit <= 500:
             raise ValueError("Invalid audit cursor or limit")
+        query = (
+            "SELECT sequence,session_id,turn_id,timestamp,kind,data FROM events "
+            "WHERE session_id=? AND sequence>?"
+        )
+        params: list[Any] = [str(session), after]
+        if turn is not None:
+            query += " AND turn_id=?"
+            params.append(str(turn))
+        query += " ORDER BY sequence LIMIT ?"
+        params.append(limit)
         with self._connect() as connection:
-            rows = connection.execute(
-                (
-                    "SELECT sequence,session_id,turn_id,timestamp,kind,data FROM events "
-                    "WHERE session_id=? AND sequence>? ORDER BY sequence LIMIT ?"
-                ),
-                (str(session), after, limit),
-            ).fetchall()
+            rows = connection.execute(query, tuple(params)).fetchall()
         return [
             Event(
                 sequence=row[0],
@@ -180,6 +200,29 @@ class EventStore(RedactingStore):
                 (str(session),),
             ).fetchone()
         return str(json.loads(row[0])["message"]) if row else None
+
+    def get_session_context(self, session: UUID) -> SessionContext | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT data FROM session_contexts WHERE session_id=?",
+                (str(session),),
+            ).fetchone()
+        if not row:
+            return None
+        return SessionContext.model_validate_json(row[0])
+
+    def save_session_context(self, session: UUID, turn: UUID, context: SessionContext) -> None:
+        timestamp = datetime.now(UTC).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                (
+                    "INSERT INTO session_contexts(session_id, turn_id, updated_at, data) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(session_id) DO UPDATE SET "
+                    "turn_id=excluded.turn_id, updated_at=excluded.updated_at, data=excluded.data"
+                ),
+                (str(session), str(turn), timestamp, json.dumps(context.model_dump(mode="json"))),
+            )
 
     def ready(self) -> bool:
         with self._connect() as connection:
@@ -254,6 +297,14 @@ class PostgresEventStore(RedactingStore):
                 ON met_agent_provider_pacing(model, created_at)
             """)
             connection.execute("""
+                CREATE TABLE IF NOT EXISTS met_agent_session_contexts (
+                    session_id UUID PRIMARY KEY,
+                    turn_id UUID NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL,
+                    data JSONB NOT NULL
+                )
+            """)
+            connection.execute("""
                 CREATE OR REPLACE FUNCTION met_agent_events_immutable()
                 RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
@@ -318,18 +369,23 @@ class PostgresEventStore(RedactingStore):
         finally:
             self._purge_lock.release()
 
-    def read(self, session: UUID, *, after: int = 0, limit: int = 200) -> list[Event]:
+    def read(
+        self, session: UUID, *, after: int = 0, limit: int = 200, turn: UUID | None = None
+    ) -> list[Event]:
         if after < 0 or not 1 <= limit <= 500:
             raise ValueError("Invalid audit cursor or limit")
+        query = (
+            "SELECT sequence,session_id,turn_id,timestamp,kind,data "
+            "FROM met_agent_events WHERE session_id=%s AND sequence>%s"
+        )
+        params: list[Any] = [session, after]
+        if turn is not None:
+            query += " AND turn_id=%s"
+            params.append(turn)
+        query += " ORDER BY sequence LIMIT %s"
+        params.append(limit)
         with self.pool.connection() as connection:
-            rows = connection.execute(
-                (
-                    "SELECT sequence,session_id,turn_id,timestamp,kind,data "
-                    "FROM met_agent_events WHERE session_id=%s AND sequence>%s "
-                    "ORDER BY sequence LIMIT %s"
-                ),
-                (session, after, limit),
-            ).fetchall()
+            rows = connection.execute(query, tuple(params)).fetchall()
         return [
             Event(
                 sequence=row[0],
@@ -371,6 +427,31 @@ class PostgresEventStore(RedactingStore):
                 (session,),
             ).fetchone()
         return str(row[0]["message"]) if row else None
+
+    def get_session_context(self, session: UUID) -> SessionContext | None:
+        with self.pool.connection() as connection:
+            row = connection.execute(
+                "SELECT data FROM met_agent_session_contexts WHERE session_id=%s",
+                (session,),
+            ).fetchone()
+        if not row:
+            return None
+        data = row[0]
+        if isinstance(data, str):
+            return SessionContext.model_validate_json(data)
+        return SessionContext.model_validate(data)
+
+    def save_session_context(self, session: UUID, turn: UUID, context: SessionContext) -> None:
+        with self.pool.connection() as connection:
+            connection.execute(
+                (
+                    "INSERT INTO met_agent_session_contexts(session_id, turn_id, updated_at, data) "
+                    "VALUES (%s, %s, now(), %s) "
+                    "ON CONFLICT(session_id) DO UPDATE SET "
+                    "turn_id=EXCLUDED.turn_id, updated_at=EXCLUDED.updated_at, data=EXCLUDED.data"
+                ),
+                (session, turn, Jsonb(context.model_dump(mode="json"))),
+            )
 
     def ready(self) -> bool:
         with self.pool.connection() as connection:

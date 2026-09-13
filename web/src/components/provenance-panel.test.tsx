@@ -24,4 +24,26 @@ describe("ProvenancePanel", () => {
     expect(screen.getByText("Search Collection")).toBeInTheDocument();
     expect(screen.getByText("Get Object")).toBeInTheDocument();
   });
+
+  it("hides grounding percentage and sources for social answers", () => {
+    render(
+      <ProvenancePanel
+        provenance={{
+          answer: {
+            ...validAnswer,
+            answer_kind: "social",
+            verification_status: "not_applicable",
+            grounding_score: null,
+            cost_usd: 0,
+          },
+          tools: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Social")).toBeInTheDocument();
+    expect(screen.queryByText("Grounding")).not.toBeInTheDocument();
+    expect(screen.queryByText("100%")).not.toBeInTheDocument();
+    expect(screen.queryByText("Evidence path")).not.toBeInTheDocument();
+  });
 });

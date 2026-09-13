@@ -114,14 +114,19 @@ export async function fetchToolTrace(
   signal: AbortSignal,
   headers: HeadersInit = {},
   sessionToken?: string | null,
+  turnId?: string | null,
 ): Promise<ToolTrace[]> {
   try {
     const authHeaders: Record<string, string> = sessionToken ? { "X-Session-Token": sessionToken } : {};
-    const response = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events?limit=200`, {
-      headers: { Accept: "application/json", ...headers, ...authHeaders },
-      cache: "no-store",
-      signal,
-    });
+    const turnParam = turnId ? `&turn_id=${encodeURIComponent(turnId)}` : "";
+    const response = await fetch(
+      `${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events?limit=200${turnParam}`,
+      {
+        headers: { Accept: "application/json", ...headers, ...authHeaders },
+        cache: "no-store",
+        signal,
+      },
+    );
     if (!response.ok) return [];
     return toolTrace(parseAuditEvents(await response.json()));
   } catch (error) {

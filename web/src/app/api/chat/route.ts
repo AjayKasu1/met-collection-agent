@@ -141,7 +141,13 @@ export async function POST(request: Request): Promise<Response> {
         throw new PublicApiError("invalid_response", "The verified response changed while streaming.");
       }
 
-      const tools = await fetchToolTrace(finalAnswer.session_id, request.signal, originHeaders, sessionToken);
+      const tools = await fetchToolTrace(
+        finalAnswer.session_id,
+        request.signal,
+        originHeaders,
+        sessionToken,
+        finalAnswer.turn_id,
+      );
       writer.write({
         type: "data-provenance",
         data: { answer: finalAnswer, tools, session_token: sessionToken },

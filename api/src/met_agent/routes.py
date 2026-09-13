@@ -122,6 +122,7 @@ async def session_events(
     session_id: UUID,
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    turn_id: Annotated[UUID | None, Query()] = None,
     token: Annotated[str | None, Query()] = None,
 ) -> list[Event]:
     secret = get_session_secret(request.app.state.settings)
@@ -132,4 +133,4 @@ async def session_events(
     store = runtime(request).events
     if not await asyncio.to_thread(store.read, session_id, limit=1):
         raise HTTPException(404, "Session not found")
-    return await asyncio.to_thread(store.read, session_id, after=after, limit=limit)
+    return await asyncio.to_thread(store.read, session_id, after=after, limit=limit, turn=turn_id)

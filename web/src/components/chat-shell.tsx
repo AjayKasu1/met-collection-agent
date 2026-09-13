@@ -128,7 +128,7 @@ export function ChatShell(): React.ReactNode {
                     <p className="answer-text">{messageText(message)}</p>
                     {provenance?.answer.handoff && (
                       <aside className="handoff">
-                        <strong>Staff help recommended</strong>
+                        <strong>Referral / Contact Staff</strong>
                         <span>{provenance.answer.handoff.reason}</span>
                         <a href={`mailto:${provenance.answer.handoff.suggested_contact}`}>
                           {provenance.answer.handoff.suggested_contact}
