@@ -27,17 +27,32 @@ export type Handoff = {
   suggested_contact: "info@metmuseum.org" | "store.support@metmuseum.org";
 };
 
+export type AnswerKind =
+  | "social"
+  | "clarification"
+  | "factual"
+  | "policy_refusal"
+  | "unavailable"
+  | "handoff";
+
+export type VerificationStatus =
+  | "verified"
+  | "not_applicable"
+  | "unverified";
+
 export type AgentAnswer = {
   text: string;
   citations: Citation[];
   language: Language;
   session_id: string;
   turn_id: string;
+  answer_kind?: AnswerKind;
+  verification_status?: VerificationStatus;
   handoff: Handoff | null;
   route: "lite" | "main";
   cost_usd: number | null;
   latency_ms: number;
-  grounding_score: number;
+  grounding_score: number | null;
   policy_refusal: boolean;
   model_calls: ModelCall[];
 };

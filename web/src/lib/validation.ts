@@ -116,16 +116,27 @@ export function parseAgentAnswer(value: unknown): AgentAnswer {
     }
     parsedHandoff = { reason: stringValue(handoff, "reason"), suggested_contact: contact };
   }
-  const grounding = finiteNumber(value, "grounding_score");
-  if (grounding < 0 || grounding > 1 || typeof value.policy_refusal !== "boolean") {
+  const grounding = nullableNumber(value, "grounding_score");
+  if (grounding !== null && (grounding < 0 || grounding > 1)) {
     throw new Error("Invalid verification state");
   }
+  if (typeof value.policy_refusal !== "boolean") {
+    throw new Error("Invalid verification state");
+  }
+  const answerKind =
+    typeof value.answer_kind === "string" ? (value.answer_kind as AgentAnswer["answer_kind"]) : undefined;
+  const verificationStatus =
+    typeof value.verification_status === "string"
+      ? (value.verification_status as AgentAnswer["verification_status"])
+      : undefined;
   return {
     text: stringValue(value, "text"),
     citations: value.citations.map(parseCitation),
     language: language as Language,
     session_id: stringValue(value, "session_id"),
     turn_id: stringValue(value, "turn_id"),
+    answer_kind: answerKind,
+    verification_status: verificationStatus,
     handoff: parsedHandoff,
     route,
     cost_usd: nullableNumber(value, "cost_usd"),
