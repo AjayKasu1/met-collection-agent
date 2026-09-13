@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     cors_origins: CorsOrigins = ("http://localhost:3000",)
     edge_auth_required: bool = False
     edge_origin_token: Credential | None = Field(default=None, repr=False)
+    session_secret: Credential | None = Field(default=None, repr=False)
 
     gemini_api_key: Credential | None = Field(default=None, repr=False)
     llm_model: NonEmptyString

@@ -242,6 +242,18 @@ class PostgresEventStore(RedactingStore):
                 ON met_agent_events(session_id, sequence)
             """)
             connection.execute("""
+                CREATE TABLE IF NOT EXISTS met_agent_provider_pacing (
+                    id BIGSERIAL PRIMARY KEY,
+                    model TEXT NOT NULL,
+                    tokens INTEGER NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            """)
+            connection.execute("""
+                CREATE INDEX IF NOT EXISTS met_agent_provider_pacing_model_created
+                ON met_agent_provider_pacing(model, created_at)
+            """)
+            connection.execute("""
                 CREATE OR REPLACE FUNCTION met_agent_events_immutable()
                 RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN

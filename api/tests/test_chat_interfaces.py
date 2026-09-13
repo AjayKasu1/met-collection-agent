@@ -39,7 +39,7 @@ from met_agent.tools.models import (
     VisitorSearchResult,
 )
 from met_agent.tools.registry import create_registry
-from scripts.demo_check import parse_answer
+from scripts.demo_check import parse_answer, parse_session
 from scripts.demo_check import run as demo_run
 
 
@@ -100,7 +100,10 @@ def test_verified_sse_audit_and_live_proxy(settings: Settings, tmp_path: Path) -
     with TestClient(app) as client:
         response = client.post("/chat", json={"message": "Temple"})
         assert response.headers["content-type"].startswith("text/event-stream")
+        session_id_str, session_token = parse_session(response.text)
+        assert session_token
         answer = parse_answer(response.text)
+        assert str(answer.session_id) == session_id_str
         assert all(citation.object_id != 999 for citation in answer.citations)
         pieces = [
             json.loads(block.split("data: ", 1)[1])["text"]
@@ -109,17 +112,68 @@ def test_verified_sse_audit_and_live_proxy(settings: Settings, tmp_path: Path) -
         ]
         assert "999" not in "".join(pieces)
         assert "".join(pieces) == answer.text
-        events = client.get(f"/sessions/{answer.session_id}/events").json()
+
+        # Authorized session events retrieval with header
+        events = client.get(
+            f"/sessions/{answer.session_id}/events",
+            headers={"X-Session-Token": session_token},
+        ).json()
         assert events[-1]["kind"] == "final_answer"
+
+        # Authorized session events retrieval with query param
         assert (
             client.get(
-                f"/sessions/{answer.session_id}/events", params={"after": events[-1]["sequence"]}
+                f"/sessions/{answer.session_id}/events",
+                params={"after": events[-1]["sequence"], "token": session_token},
             ).json()
             == []
         )
-        assert client.get(f"/sessions/{uuid4()}/events").status_code == 404
-        assert client.get(f"/sessions/{answer.session_id}/events?limit=501").status_code == 422
-        assert client.get("/sessions/not-an-id/events").status_code == 422
+
+        # Unauthorized access to session events
+        assert client.get(f"/sessions/{answer.session_id}/events").status_code == 401
+        assert (
+            client.get(
+                f"/sessions/{answer.session_id}/events",
+                headers={"X-Session-Token": "invalid-token"},
+            ).status_code
+            == 401
+        )
+        assert client.get(f"/sessions/{uuid4()}/events").status_code == 401
+        assert (
+            client.get(
+                f"/sessions/{answer.session_id}/events?limit=501",
+                headers={"X-Session-Token": session_token},
+            ).status_code
+            == 422
+        )
+        assert (
+            client.get(
+                "/sessions/not-an-id/events",
+                headers={"X-Session-Token": session_token},
+            ).status_code
+            == 422
+        )
+
+        # Unauthorized session continuation without token or with forged token
+        assert (
+            client.post(
+                "/chat",
+                json={"message": "Temple", "session_id": str(answer.session_id)},
+            ).status_code
+            == 401
+        )
+        assert (
+            client.post(
+                "/chat",
+                json={
+                    "message": "Temple",
+                    "session_id": str(answer.session_id),
+                    "session_token": "wrong-token",
+                },
+            ).status_code
+            == 401
+        )
+
         assert client.post("/chat", json={"message": " "}).status_code == 422
         assert client.get("/objects/1").json()["gallery_number"] == "131"
         assert client.get("/objects/0").status_code == 422

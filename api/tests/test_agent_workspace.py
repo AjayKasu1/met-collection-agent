@@ -850,11 +850,51 @@ def test_unsupported_claim_rewritten_and_scored(tmp_path: Path) -> None:
     assert GroundingCheck.model_validate(judgment()).score([]) == 0
     assert GroundingCheck(fully_supported=False, claims=[]).score([]) == 0
     assert (
-        GroundingCheck(fully_supported=True, claims=[]).score(evidence, draft_text="Short") == 1.0
+        GroundingCheck(fully_supported=True, claims=[]).score(evidence, draft_text="Short") == 0.0
+    )
+    assert (
+        GroundingCheck(fully_supported=True, claims=[]).score(
+            evidence, draft_text="The museum admits everyone free on Mondays"
+        )
+        == 0.0
     )
     assert (
         GroundingCheck(fully_supported=True, claims=[]).score(evidence, draft_text="A" * 85) == 0.0
     )
+
+
+def test_red_team_short_unverified_factual_claim_fails_closed(tmp_path: Path) -> None:
+    """Astra red-team regression: short ungrounded statements without citations must fail closed."""
+    unverified_draft = {
+        "text": "The museum admits everyone free on Mondays",
+        "citations": [],
+    }
+    empty_claims_judgment = {
+        "fully_supported": True,
+        "claims": [],
+    }
+    model = ScriptedModel(
+        [
+            intent(category="visitor_info"),
+            unverified_draft,
+            empty_claims_judgment,
+            # Regeneration also fails to ground:
+            unverified_draft,
+            empty_claims_judgment,
+        ]
+    )
+    answer = asyncio.run(
+        Agent(model, ToolRegistry(), EventStore(tmp_path / "red-team.sqlite3")).run(
+            ChatRequest(message="Does the museum admit everyone free on Mondays?")
+        )
+    )
+    assert answer.grounding_score == 0.0
+    assert answer.citations == []
+    assert answer.text == (
+        "I couldn't verify that from the available museum sources. Please try a more "
+        "specific question or contact info@metmuseum.org."
+    )
+    assert "admits everyone free on Mondays" not in answer.text
 
 
 @pytest.mark.parametrize("invalid", [True, False])
@@ -957,6 +997,8 @@ def test_model_error_malformed_envelope_and_honest_no_claims(tmp_path: Path) -> 
             intent(category="multi_hop"),
             {"text": "I have no matching information.", "language": "en", "citations": []},
             {"fully_supported": True, "claims": []},
+            {"text": "I have no matching information.", "language": "en", "citations": []},
+            {"fully_supported": True, "claims": []},
         ]
     )
     answer = asyncio.run(
@@ -964,7 +1006,11 @@ def test_model_error_malformed_envelope_and_honest_no_claims(tmp_path: Path) -> 
             ChatRequest(message="hours")
         )
     )
-    assert answer.route == "main" and answer.grounding_score == 1
+    assert answer.route == "main" and answer.grounding_score == 0
+    assert answer.text == (
+        "I couldn't verify that from the available museum sources. Please try a more "
+        "specific question or contact info@metmuseum.org."
+    )
 
 
 def test_confirmed_missing_object_returns_verified_answer_without_third_model_call(

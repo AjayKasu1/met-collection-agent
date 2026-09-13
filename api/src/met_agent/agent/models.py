@@ -70,6 +70,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=4000)
     session_id: UUID | None = None
+    session_token: str | None = None
     language: Language | None = None
 
     @model_validator(mode="after")

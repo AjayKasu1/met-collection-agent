@@ -6,6 +6,7 @@ from uuid import uuid4
 import httpx
 from pydantic import SecretStr
 
+from met_agent.agent.distributed import DistributedTokenPacer
 from met_agent.agent.events import AuditStore, EventStore, PostgresEventStore
 from met_agent.agent.loop import Agent
 from met_agent.agent.models import AgentAnswer, ChatRequest
@@ -79,9 +80,13 @@ class Runtime:
     def prepare_agent(self) -> None:
         """Initialize provider adapters without making a paid generation request."""
         if self.agent is None:
+            pool = getattr(self.events, "pool", None)
+            pacer = DistributedTokenPacer(self.settings, pool)
             self.agent = Agent(
                 LiteLLMChat(
-                    self.settings, callback=self.telemetry.callback if self.telemetry else None
+                    self.settings,
+                    callback=self.telemetry.callback if self.telemetry else None,
+                    pacer=pacer,
                 ),
                 self.tools,
                 self.events,

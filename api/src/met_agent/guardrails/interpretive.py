@@ -43,3 +43,5 @@ UNVERIFIED: dict[Language, str] = {
     ),
     "zh": "我无法通过现有博物馆资料核实这一点。请提供更具体的问题，或联系 info@metmuseum.org。",
 }
+
+UNAVAILABLE: dict[Language, str] = UNVERIFIED

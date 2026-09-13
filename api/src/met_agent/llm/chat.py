@@ -84,10 +84,17 @@ async def structured[T: BaseModel](
 class LiteLLMChat:
     """Recover from bounded transient failures without retrying client or access errors."""
 
-    def __init__(self, settings: Settings, *, router: Any = None, callback: Any = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        router: Any = None,
+        callback: Any = None,
+        pacer: TokenPacer | None = None,
+    ) -> None:
         self.settings, self.callback = settings, callback
         self.models = configured_models(settings)
-        self.pacer = TokenPacer(settings)
+        self.pacer = pacer if pacer is not None else TokenPacer(settings)
         self.quarantined: set[str] = set()
         self.cooldown_until: dict[str, float] = {}
         logging.getLogger(__name__).info(

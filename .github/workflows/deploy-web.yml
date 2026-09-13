@@ -2,12 +2,12 @@ name: Deploy web Worker
 
 on:
   workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["CI"]
     branches:
       - main
-    paths:
-      - "web/**"
-      - ".github/workflows/deploy-web.yml"
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   deploy:
     name: Build and deploy to Cloudflare
-    if: vars.ENABLE_WEB_DEPLOY == 'true'
+    if: ${{ (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') && vars.ENABLE_WEB_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -27,8 +27,20 @@ jobs:
       NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
     steps:
+      - name: Enforce verified CI deployment gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "Triggered by CI workflow completion for commit ${{ github.event.workflow_run.head_sha }}"
+            if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+              echo "Deployment blocked: CI conclusion was ${{ github.event.workflow_run.conclusion }}"
+              exit 1
+            fi
+          else
+            echo "Deployment manually triggered by workflow_dispatch"
+          fi
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:

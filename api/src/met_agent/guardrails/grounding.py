@@ -8,9 +8,6 @@ from met_agent.tools.models import Evidence, WayfindingResult
 MIN_QUOTE_LENGTH = 20
 """Minimum characters for a citation quote to be non-trivial."""
 
-_SUBSTANTIVE_LENGTH = 80
-"""Drafts longer than this must produce at least one verifiable claim."""
-
 
 class ClaimCheck(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -27,9 +24,7 @@ class GroundingCheck(BaseModel):
     def score(self, evidence: list[Evidence], *, draft_text: str = "") -> float:
         keys = {item.key for item in evidence}
         if not self.claims:
-            if len(draft_text.strip()) > _SUBSTANTIVE_LENGTH:
-                return 0.0
-            return 1.0 if self.fully_supported else 0.0
+            return 0.0
         return sum(
             claim.supported and bool(claim.evidence_keys) and set(claim.evidence_keys) <= keys
             for claim in self.claims

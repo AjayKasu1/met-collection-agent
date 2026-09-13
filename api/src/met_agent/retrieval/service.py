@@ -1,7 +1,7 @@
 """Share lazy local model instances and serialize CPU inference across requests."""
 
 import time
-from threading import Lock
+from threading import Lock, RLock
 
 import structlog
 from qdrant_client import QdrantClient, models
@@ -20,7 +20,10 @@ class SearchService:
 
     def __init__(self, client: QdrantClient, settings: Settings) -> None:
         self.client, self.settings = client, settings
-        self._lock = Lock()
+        self._inference_lock = RLock()
+        self._lock = self._inference_lock  # Compatibility alias
+        self._stores: dict[str, HybridStore] = {}
+        self._stores_lock = Lock()
         self._dense: IdentifiedEmbedder | None = None
         self._sparse: BM25Embedder | None = None
         self._reranker: LocalReranker | None = None
@@ -28,22 +31,23 @@ class SearchService:
 
     def _models(self) -> tuple[IdentifiedEmbedder, BM25Embedder, LocalReranker]:
         """Called under the inference lock so concurrent requests share one model set."""
-        cache = self.settings.model_cache_dir or self.settings.data_dir / "models"
-        if self._dense is None:
-            self._dense = create_embedder(self.settings)
-        if self._sparse is None:
-            self._sparse = BM25Embedder(cache, local_files_only=self.settings.models_offline)
-        if self._reranker is None:
-            self._reranker = LocalReranker(
-                cache,
-                threads=self.settings.embedding_threads,
-                local_files_only=self.settings.models_offline,
-            )
-        return self._dense, self._sparse, self._reranker
+        with self._inference_lock:
+            cache = self.settings.model_cache_dir or self.settings.data_dir / "models"
+            if self._dense is None:
+                self._dense = create_embedder(self.settings)
+            if self._sparse is None:
+                self._sparse = BM25Embedder(cache, local_files_only=self.settings.models_offline)
+            if self._reranker is None:
+                self._reranker = LocalReranker(
+                    cache,
+                    threads=self.settings.embedding_threads,
+                    local_files_only=self.settings.models_offline,
+                )
+            return self._dense, self._sparse, self._reranker
 
     def warmup(self) -> None:
         """Exercise local inference once; never spend remote embedding quota on a probe."""
-        with self._lock:
+        with self._inference_lock:
             if self.warmed:
                 return
             started = time.monotonic()
@@ -63,42 +67,43 @@ class SearchService:
             )
 
     def store(self, collection: str) -> HybridStore:
-        info = self.client.get_collection(collection)
-        raw = (info.config.metadata or {}).get("image")
-        image = ImageVectorSpec.model_validate(raw) if raw is not None else None
-        store = HybridStore(
-            self.client,
-            collection,
-            self.settings.embedding_model,
-            self.settings.embedding_dimensions,
-            embedding_provider=self.settings.embedding_provider,
-            image=image,
-        )
-        store.validate_collection()
-        return store
+        with self._stores_lock:
+            if collection in self._stores:
+                return self._stores[collection]
+            info = self.client.get_collection(collection)
+            raw = (info.config.metadata or {}).get("image")
+            image = ImageVectorSpec.model_validate(raw) if raw is not None else None
+            store = HybridStore(
+                self.client,
+                collection,
+                self.settings.embedding_model,
+                self.settings.embedding_dimensions,
+                embedding_provider=self.settings.embedding_provider,
+                image=image,
+            )
+            store.validate_collection()
+            self._stores[collection] = store
+            return store
 
     def search(
         self, collection: str, query: str, *, filters: SearchFilters | None = None, k: int = 8
     ) -> list[tuple[models.ScoredPoint, ScoreBreakdown]]:
         queued = time.monotonic()
-        with self._lock:
-            acquired = time.monotonic()
-            store = self.store(collection)
-            validated = time.monotonic()
-            dense, sparse, reranker = self._models()
-            loaded = time.monotonic()
-            result = HybridRetriever(store, dense, sparse, reranker).search(
-                query, filters=filters, k=k
-            )
-            structlog.get_logger(__name__).info(
-                "retrieval_request_timing",
-                queue_wait_ms=(acquired - queued) * 1000,
-                index_validation_ms=(validated - acquired) * 1000,
-                model_load_ms=(loaded - validated) * 1000,
-                search_ms=(time.monotonic() - loaded) * 1000,
-                total_ms=(time.monotonic() - queued) * 1000,
-            )
-            return result
+        store = self.store(collection)
+        validated = time.monotonic()
+        dense, sparse, reranker = self._models()
+        loaded = time.monotonic()
+        result = HybridRetriever(store, dense, sparse, reranker, self._inference_lock).search(
+            query, filters=filters, k=k
+        )
+        structlog.get_logger(__name__).info(
+            "retrieval_request_timing",
+            index_validation_ms=(validated - queued) * 1000,
+            model_load_ms=(loaded - validated) * 1000,
+            search_ms=(time.monotonic() - loaded) * 1000,
+            total_ms=(time.monotonic() - queued) * 1000,
+        )
+        return result
 
     def gallery(
         self, collection: str, gallery_number: str, *, k: int = 5
@@ -108,15 +113,14 @@ class SearchService:
         if not 1 <= k <= 40:
             raise ValueError("Gallery lookup requires k from 1 to 40")
         started = time.monotonic()
-        with self._lock:
-            self.store(collection)
-            records, _ = self.client.scroll(
-                collection,
-                scroll_filter=filters.qdrant(),
-                limit=k,
-                with_payload=True,
-                with_vectors=False,
-            )
+        self.store(collection)
+        records, _ = self.client.scroll(
+            collection,
+            scroll_filter=filters.qdrant(),
+            limit=k,
+            with_payload=True,
+            with_vectors=False,
+        )
         results: list[tuple[models.ScoredPoint, ScoreBreakdown]] = []
         for rank, record in enumerate(records, 1):
             payload = record.payload or {}

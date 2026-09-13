@@ -20,6 +20,7 @@ class RequestBudgetError(ValueError):
 class Reservation:
     started: float
     tokens: int
+    db_id: int | None = None
 
 
 def prompt_tokens(

@@ -140,7 +140,7 @@ Create a GitHub `production` environment with these settings:
 | Repository variable | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Production Turnstile site key |
 | Repository variable | `ENABLE_WEB_DEPLOY` | `true` |
 
-Before the first workflow deployment, add `TURNSTILE_SECRET` and `ORIGIN_AUTH_TOKEN` directly to the existing Worker with the Cloudflare dashboard. The `Deploy web Worker` workflow then runs for web changes on `main` and can also be started manually. It fails before building when required public configuration is absent. Keep `ENABLE_WEB_DEPLOY=false` to disable it without modifying the workflow.
+Before the first workflow deployment, add `TURNSTILE_SECRET` and `ORIGIN_AUTH_TOKEN` directly to the existing Worker with the Cloudflare dashboard. The `Deploy web Worker` workflow triggers automatically upon successful completion of the `CI` workflow on `main` (enforced deployment gate) and can also be started manually. It fails before building when required public configuration is absent. Keep `ENABLE_WEB_DEPLOY=false` to disable it without modifying the workflow.
 
 ## API image publication
 

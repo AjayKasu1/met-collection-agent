@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import structlog
 from pydantic import JsonValue
 
+from met_agent.agent.distributed import get_session_lock
 from met_agent.agent.events import AuditStore
 from met_agent.agent.evidence import pack_evidence
 from met_agent.agent.models import AgentAnswer, AgentDraft, ChatRequest, Citation, Language, Route
@@ -25,7 +26,7 @@ from met_agent.guardrails.intent import (
     normalize_intent,
     social_intent,
 )
-from met_agent.guardrails.interpretive import POLICY, UNVERIFIED
+from met_agent.guardrails.interpretive import POLICY, UNAVAILABLE, UNVERIFIED
 from met_agent.llm.chat import CURRENT_CALL, CallContext, ChatModel, ModelError, structured
 from met_agent.llm.prompts import load_prompt, prompt_hash
 from met_agent.tools.models import (
@@ -104,7 +105,7 @@ class Agent:
         lock = self._sessions.setdefault(session, asyncio.Lock())
         self._users[session] = self._users.get(session, 0) + 1
         try:
-            async with lock:
+            async with lock, get_session_lock(self.events, session):
                 return await self._turn(request, session)
         finally:
             self._users[session] -= 1
@@ -445,7 +446,7 @@ class Agent:
                 "result": check.model_dump(mode="json"),
             },
         )
-        if not check.fully_supported or score != 1 or (not draft.citations and check.claims):
+        if not check.fully_supported or score != 1 or not draft.citations or not check.claims:
             audit("guardrail", {"policy": "citation_or_grounding", "decision": "fail_closed"})
             return self._answer(
                 session,
@@ -454,7 +455,7 @@ class Agent:
                 intent.language,
                 "lite",
                 context,
-                UNVERIFIED[intent.language],
+                UNAVAILABLE[intent.language],
                 [],
                 0.0,
             )
@@ -708,7 +709,7 @@ class Agent:
                 "result": check.model_dump(mode="json"),
             },
         )
-        if not check.fully_supported or score != 1:
+        if not check.fully_supported or score != 1 or not check.claims:
             audit(
                 "guardrail",
                 {"policy": "citation_or_grounding", "decision": "fail_closed"},
@@ -720,7 +721,7 @@ class Agent:
                 "en",
                 "lite",
                 context,
-                UNVERIFIED["en"],
+                UNAVAILABLE["en"],
                 [],
                 0.0,
             )
@@ -918,7 +919,7 @@ class Agent:
                         "result": check.model_dump(mode="json"),
                     },
                 )
-                if check.fully_supported and score == 1 and (draft.citations or not check.claims):
+                if check.fully_supported and score == 1 and draft.citations and check.claims:
                     return self._answer(
                         session,
                         turn,
@@ -961,7 +962,7 @@ class Agent:
             intent.language,
             intent.route,
             context,
-            UNVERIFIED[intent.language],
+            UNAVAILABLE[intent.language],
             [],
             0.0,
         )

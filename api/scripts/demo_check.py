@@ -6,7 +6,6 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 import httpx
 from pydantic import ValidationError
@@ -17,6 +16,17 @@ from met_agent.ingestion.verify import read_golden
 from met_agent.main import create_app
 
 DEMO_IDS = ("col-003", "vis-001", "ref-001")
+
+
+def parse_session(text: str) -> tuple[str, str]:
+    for block in text.split("\n\n"):
+        lines = block.splitlines()
+        name = next((line[7:] for line in lines if line.startswith("event: ")), "")
+        data = "\n".join(line[6:] for line in lines if line.startswith("data: "))
+        if name == "session":
+            payload = json.loads(data)
+            return payload.get("session_id", ""), payload.get("session_token", "")
+    return "", ""
 
 
 def parse_answer(text: str) -> AgentAnswer:
@@ -46,13 +56,13 @@ async def run(settings: Settings, *, app: Any = None) -> int:
         for question_id in DEMO_IDS:
             row = questions[question_id]
             print(f"\n{question_id}: {row.question}", flush=True)
-            session_id = str(uuid4())
             started = time.monotonic()
+            session_id = ""
+            session_token = ""
             try:
-                response = await client.post(
-                    "/chat", json={"message": row.question, "session_id": session_id}
-                )
+                response = await client.post("/chat", json={"message": row.question})
                 response.raise_for_status()
+                session_id, session_token = parse_session(response.text)
                 answer = parse_answer(response.text)
                 print(f"Answer: {answer.text}")
                 print(
@@ -107,7 +117,7 @@ async def run(settings: Settings, *, app: Any = None) -> int:
                 )
                 failed = True
             events_response = await client.get(
-                f"/sessions/{session_id}/events", params={"limit": 500}
+                f"/sessions/{session_id}/events", params={"limit": 500, "token": session_token}
             )
             events = events_response.json() if events_response.is_success else []
             records[-1]["events"] = events

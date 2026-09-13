@@ -1,7 +1,10 @@
 """Fuse dense and BM25 candidates, preserve score evidence, and rerank bounded results."""
 
+from __future__ import annotations
+
 import time
 from collections.abc import Sequence
+from threading import Lock, RLock
 from typing import Protocol
 
 import structlog
@@ -23,7 +26,7 @@ class SearchFilters(BaseModel):
     on_view: bool | None = None
 
     @model_validator(mode="after")
-    def ordered_dates(self) -> "SearchFilters":
+    def ordered_dates(self) -> SearchFilters:
         if (
             self.date_from is not None
             and self.date_to is not None
@@ -106,8 +109,10 @@ class HybridRetriever:
         dense: IdentifiedEmbedder,
         sparse: SparseEmbedder,
         reranker: Reranker,
+        inference_lock: Lock | RLock | None = None,
     ) -> None:
         self.store, self.dense, self.sparse, self.reranker = store, dense, sparse, reranker
+        self.inference_lock = inference_lock
 
     def search(
         self, query: str, *, filters: SearchFilters | None = None, k: int = 8
@@ -115,8 +120,13 @@ class HybridRetriever:
         if not query.strip() or not 1 <= k <= 40:
             raise ValueError("Search requires a query and k from 1 to 40")
         started = time.monotonic()
-        vector = self.store.embed_query(query, self.dense)
-        sparse_vectors = self.sparse.embed([query])
+        if self.inference_lock is not None:
+            with self.inference_lock:
+                vector = self.store.embed_query(query, self.dense)
+                sparse_vectors = self.sparse.embed([query])
+        else:
+            vector = self.store.embed_query(query, self.dense)
+            sparse_vectors = self.sparse.embed([query])
         if len(sparse_vectors) != 1:
             raise IndexCompatibilityError("Sparse query vector count differs from input")
         embedded = time.monotonic()
@@ -155,7 +165,11 @@ class HybridRetriever:
         if any(not text for text in texts):
             raise IndexCompatibilityError("Retrieved records lack their indexed text")
         searched = time.monotonic()
-        reranked = self.reranker.score(query, texts)
+        if self.inference_lock is not None:
+            with self.inference_lock:
+                reranked = self.reranker.score(query, texts)
+        else:
+            reranked = self.reranker.score(query, texts)
         structlog.get_logger(__name__).info(
             "retrieval_timing",
             query_embedding_ms=(embedded - started) * 1000,

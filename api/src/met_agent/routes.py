@@ -11,6 +11,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 
+from met_agent.agent.auth import get_session_secret, sign_session_token, verify_session_token
 from met_agent.agent.events import Event
 from met_agent.agent.models import ChatRequest
 from met_agent.llm.chat import ModelError
@@ -34,13 +35,27 @@ def event(name: str, payload: object) -> str:
 
 @router.post("/chat")
 async def chat(request: Request, body: ChatRequest) -> StreamingResponse:
+    secret = get_session_secret(request.app.state.settings)
+    if body.session_id is None:
+        session_id = uuid4()
+        session_token = sign_session_token(session_id, secret)
+        body = body.model_copy(update={"session_id": session_id, "session_token": session_token})
+    else:
+        if not body.session_token or not verify_session_token(
+            body.session_id, body.session_token, secret
+        ):
+            raise HTTPException(status_code=401, detail="Invalid or missing session token")
+        session_token = body.session_token
+
     service = runtime(request)
-    body = body.model_copy(update={"session_id": body.session_id or uuid4()})
 
     async def stream() -> AsyncIterator[str]:
         task = asyncio.create_task(service.chat(body))
         try:
-            yield event("session", {"session_id": str(body.session_id)})
+            yield event(
+                "session",
+                {"session_id": str(body.session_id), "session_token": session_token},
+            )
             while not task.done():
                 done, _ = await asyncio.wait({task}, timeout=15)
                 if not done:
@@ -56,9 +71,19 @@ async def chat(request: Request, body: ChatRequest) -> StreamingResponse:
                 error_code=error.code,
                 error_type=type(error).__name__,
             )
+            logger.error(
+                "stream_error_emitted",
+                error_code=error.code,
+                error_type=type(error).__name__,
+            )
             yield event("error", {"code": error.code, "message": str(error)})
         except Exception as error:
             logger.exception("chat_stream_failed", error_type=type(error).__name__)
+            logger.error(
+                "stream_error_emitted",
+                error_code="service_unavailable",
+                error_type=type(error).__name__,
+            )
             yield event(
                 "error", {"code": "service_unavailable", "message": "Chat service unavailable"}
             )
@@ -97,7 +122,13 @@ async def session_events(
     session_id: UUID,
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    token: Annotated[str | None, Query()] = None,
 ) -> list[Event]:
+    secret = get_session_secret(request.app.state.settings)
+    header_token = request.headers.get("X-Session-Token")
+    session_token = header_token or token
+    if not session_token or not verify_session_token(session_id, session_token, secret):
+        raise HTTPException(401, "Invalid or missing session token")
     store = runtime(request).events
     if not await asyncio.to_thread(store.read, session_id, limit=1):
         raise HTTPException(404, "Session not found")

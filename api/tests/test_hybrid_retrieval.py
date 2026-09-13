@@ -199,3 +199,51 @@ def test_small_reranker_registration_is_idempotent_and_batches_are_bounded(
         assert rerank.LocalReranker(tmp_path).score("Query", ["A", "B"]) == [1.0, 1.0]
     assert len(registered) == 1
     assert registered[0]["sources"].hf == rerank.MODEL
+
+
+def test_retrieval_concurrent_network_queries_do_not_block_each_other() -> None:
+    """Verify that network queries to Qdrant run concurrently while CPU inference lock is free."""
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    in_flight = 0
+    max_in_flight = 0
+    in_flight_lock = threading.Lock()
+
+    client = QdrantClient(location=":memory:")
+    store = HybridStore(client, "test", "fixture", 2, embedding_provider="local")
+    docs = [
+        IndexDocument(point_id=1, text="Object 1", payload={"text": "Object 1"}),
+        IndexDocument(point_id=2, text="Object 2", payload={"text": "Object 2"}),
+    ]
+    store.ingest(docs, Dense(), Sparse(), batch_size=2)
+
+    orig_query = client.query_points
+
+    def tracked_query_points(*args: Any, **kwargs: Any) -> Any:
+        nonlocal in_flight, max_in_flight
+        with in_flight_lock:
+            in_flight += 1
+            if in_flight > max_in_flight:
+                max_in_flight = in_flight
+        time.sleep(0.05)
+        res = orig_query(*args, **kwargs)
+        with in_flight_lock:
+            in_flight -= 1
+        return res
+
+    client.query_points = tracked_query_points  # type: ignore[method-assign]
+    inference_lock = threading.Lock()
+    retriever = HybridRetriever(store, Dense(), Sparse(), Rank(), inference_lock=inference_lock)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(retriever.search, "object one")
+        f2 = executor.submit(retriever.search, "object two")
+        r1 = f1.result()
+        r2 = f2.result()
+
+    assert len(r1) == 2
+    assert len(r2) == 2
+    # Verify that both network queries overlapped concurrently!
+    assert max_in_flight >= 2
