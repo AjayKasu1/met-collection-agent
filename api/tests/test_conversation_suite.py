@@ -570,7 +570,7 @@ def test_independent_sessions_isolation(tmp_path: Path) -> None:
 
 
 def test_assistant_identity_response(tmp_path: Path) -> None:
-    """Questions about assistant identity or model return approved identity text with 0 model calls."""
+    """Assistant identity or model queries return approved identity text with 0 model calls."""
     phrases = [
         ("what model are you?", "en", "I'm an independent AI guide to The Met."),
         ("which model are you", "en", "I'm an independent AI guide to The Met."),
@@ -671,7 +671,7 @@ def test_first_versus_previous_message(tmp_path: Path) -> None:
 
 
 def test_topic_specific_recall(tmp_path: Path) -> None:
-    """'What did I ask about the sphinx?' recalls the prior sphinx question without collection search."""
+    """'What did I ask about sphinx?' recalls the prior question without collection search."""
     model = ScriptedModel([])
     store = EventStore(tmp_path / "topic_recall.sqlite3")
     agent = Agent(model, ToolRegistry(), store)
@@ -703,8 +703,7 @@ def test_topic_specific_recall(tmp_path: Path) -> None:
     assert recall_ans.citations == []
     assert recall_ans.grounding_score == 1.0
     assert recall_ans.text == (
-        'Regarding "sphinx", you previously asked: '
-        '"What materials were used to sculpt the Sphinx?"'
+        'Regarding "sphinx", you previously asked: "What materials were used to sculpt the Sphinx?"'
     )
     # Ensure zero model calls occurred
     assert len(model.calls) == 0
@@ -758,7 +757,7 @@ def test_distinguish_empty_expired_and_db_failure_history(tmp_path: Path) -> Non
 
     # 3. Database failure: user_messages raises an exception
     class FailingAuditStore(EventStore):
-        def user_messages(self, session, *, exclude_turn=None):
+        def user_messages(self, session: object, *, exclude_turn: object = None) -> list[str]:
             raise RuntimeError("Database connection timed out")
 
     fail_store = FailingAuditStore(tmp_path / "failing.sqlite3")
@@ -823,7 +822,7 @@ def test_malicious_stored_text_is_quoted_safely() -> None:
 def test_unsupported_conversational_receives_capability_explanation_no_handoff(
     tmp_path: Path,
 ) -> None:
-    """External conversational queries (e.g. coding help) receive capability explanation without handoff."""
+    """External conversational queries receive capability explanation without handoff."""
     script = {
         **intent(category="out_of_scope"),
         "search_query": "write python script",
