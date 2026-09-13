@@ -1,8 +1,183 @@
-"""Context-aware deterministic social response policy for The Met Collection Agent."""
+from __future__ import annotations
+
+import re
 
 from met_agent.agent.context import SessionContext
 from met_agent.agent.models import Language
-from met_agent.guardrails.intent import SocialIntent
+from met_agent.guardrails.intent import RecallTarget, SocialIntent
+
+
+def safe_quote(text: str, max_length: int = 240) -> str:
+    """Sanitize and safely escape stored user message as inert data, not instructions."""
+    cleaned = re.sub(r"[\r\n\t]+", " ", text).strip()
+    cleaned = " ".join(cleaned.split())
+    if len(cleaned) > max_length:
+        cleaned = cleaned[:max_length].rstrip() + "..."
+    return cleaned.replace('"', "'")
+
+
+def resolve_identity_response(language: Language = "en") -> tuple[str, str]:
+    """Return approved identity response explaining assistant role and model flexibility."""
+    replies: dict[Language, str] = {
+        "en": (
+            "I'm an independent AI guide to The Met. Different models may handle "
+            "different requests."
+        ),
+        "fr": (
+            "Je suis un guide IA independant pour le Met. Differents modeles peuvent traiter "
+            "differentes demandes."
+        ),
+        "es": (
+            "Soy una guia de IA independiente para el Met. Diferentes modelos pueden atender "
+            "distintas consultas."
+        ),
+        "zh": ("我是大都会艺术博物馆的独立人工智能导览助手. 不同的模型可能会处理不同的请求."),
+    }
+    return replies.get(language, replies["en"]), "assistant_identity"
+
+
+def resolve_recall_response(
+    target: RecallTarget,
+    history_messages: list[str],
+    language: Language = "en",
+    topic: str | None = None,
+    *,
+    is_expired: bool = False,
+    db_failed: bool = False,
+) -> tuple[str, str]:
+    """Return deterministic session conversation recall with safe inert quotes."""
+    if db_failed:
+        replies: dict[Language, str] = {
+            "en": (
+                "I couldn't retrieve your previous questions due to a temporary database "
+                "error. Please try again."
+            ),
+            "fr": (
+                "Je n'ai pas pu recuperer vos questions precedentes en raison d'une "
+                "erreur temporaire. Veuillez reessayer."
+            ),
+            "es": (
+                "No pude recuperar sus preguntas anteriores debido a un error temporal "
+                "de la base de datos. Por favor, intentelo de nuevo."
+            ),
+            "zh": "由于数据库临时故障, 无法检索您之前的提问. 请稍后重试.",
+        }
+        return replies.get(language, replies["en"]), "recall_db_error"
+
+    if is_expired:
+        replies = {
+            "en": "Conversation history for this session has expired.",
+            "fr": "L'historique de conversation de cette session a expire.",
+            "es": "El historial de conversacion de esta sesion ha caducado.",
+            "zh": "此会话的对话记录已过期.",
+        }
+        return replies.get(language, replies["en"]), "recall_expired"
+
+    if not history_messages:
+        replies = {
+            "en": "I don't have any earlier questions recorded in this session.",
+            "fr": "Je n'ai pas de questions precedentes enregistrees dans cette session.",
+            "es": "No tengo preguntas anteriores registradas en esta sesion.",
+            "zh": "在此会话中没有记录到更早的提问.",
+        }
+        return replies.get(language, replies["en"]), "recall_empty"
+
+    if target == "topic" and topic:
+        topic_clean = topic.strip().casefold()
+        match_msg: str | None = None
+        for msg in reversed(history_messages):
+            if topic_clean in msg.casefold():
+                match_msg = msg
+                break
+
+        if match_msg is not None:
+            quoted = safe_quote(match_msg)
+            if language == "fr":
+                return (
+                    f'Concernant "{topic}", vous aviez demande : "{quoted}"',
+                    "recall_topic",
+                )
+            if language == "es":
+                return (
+                    f'Respecto a "{topic}", anteriormente pregunto: "{quoted}"',
+                    "recall_topic",
+                )
+            if language == "zh":
+                return (
+                    f'关于"{topic}", 您之前问过: "{quoted}"',
+                    "recall_topic",
+                )
+            return (
+                f'Regarding "{topic}", you previously asked: "{quoted}"',
+                "recall_topic",
+            )
+
+        # Topic not found in session history
+        if language == "fr":
+            return (
+                f'Je n\'ai pas de question enregistree sur "{topic}" dans cette session.',
+                "recall_topic_missing",
+            )
+        if language == "es":
+            return (
+                f'No tengo una pregunta registrada sobre "{topic}" en esta sesion.',
+                "recall_topic_missing",
+            )
+        if language == "zh":
+            return (
+                f'在此会话中没有找到关于"{topic}"的提问记录.',
+                "recall_topic_missing",
+            )
+        return (
+            f'I don\'t have a recorded question about "{topic}" in this session.',
+            "recall_topic_missing",
+        )
+
+    if target == "first":
+        quoted = safe_quote(history_messages[0])
+        if language == "fr":
+            return f'Vous avez d\'abord demande : "{quoted}"', "recall_first"
+        if language == "es":
+            return f'Primero pregunto: "{quoted}"', "recall_first"
+        if language == "zh":
+            return f'您最先问的是: "{quoted}"', "recall_first"
+        return f'You first asked: "{quoted}"', "recall_first"
+
+    # Default: previous message
+    quoted = safe_quote(history_messages[-1])
+    if language == "fr":
+        return f'Votre question precedente etait : "{quoted}"', "recall_previous"
+    if language == "es":
+        return f'Su pregunta anterior fue: "{quoted}"', "recall_previous"
+    if language == "zh":
+        return f'您上一个问题是: "{quoted}"', "recall_previous"
+    return f'Your previous question was: "{quoted}"', "recall_previous"
+
+
+def resolve_capability_explanation(language: Language = "en") -> tuple[str, str]:
+    """Explain assistant scope when handling non-museum conversational requests without handoff."""
+    replies: dict[Language, str] = {
+        "en": (
+            "I am an independent guide focused on The Met's art collection, galleries, and visitor "
+            "information. I cannot assist with external tasks or unrelated topics, but I'm happy "
+            "to help you discover artworks or plan your visit."
+        ),
+        "fr": (
+            "Je suis un guide independant dedie a la collection d'art, aux galeries et aux "
+            "informations pratiques du Met. Je ne peux pas vous aider pour des taches externes, "
+            "mais je serai ravi de vous aider a decouvrir des oeuvres ou a preparer votre visite."
+        ),
+        "es": (
+            "Soy una guia independiente enfocada en la coleccion de arte, galerias e informacion "
+            "para visitantes del Met. No puedo ayudar con tareas externas, pero con gusto le ayudo "
+            "a descubrir obras o planificar su visita."
+        ),
+        "zh": (
+            "我是专注于大都会艺术博物馆藏品、展厅及参观信息的独立导览助手. "
+            "我无法协助处理外部任务或无关话题, 但非常乐意协助您探索艺术藏品或规划参观路线."
+        ),
+    }
+    return replies.get(language, replies["en"]), "capability_explanation"
 
 
 def resolve_social_response(

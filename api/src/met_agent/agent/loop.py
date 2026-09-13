@@ -26,7 +26,12 @@ from met_agent.agent.models import (
     Route,
     VerificationStatus,
 )
-from met_agent.agent.social_policy import resolve_social_response
+from met_agent.agent.social_policy import (
+    resolve_capability_explanation,
+    resolve_identity_response,
+    resolve_recall_response,
+    resolve_social_response,
+)
 from met_agent.guardrails.grounding import (
     GroundingCheck,
     valid_citations,
@@ -34,9 +39,12 @@ from met_agent.guardrails.grounding import (
 )
 from met_agent.guardrails.intent import (
     Intent,
-    asks_for_first_message,
+    RecallTarget,
+    classify_conversational_fallback,
+    identity_intent,
     message_numbers,
     normalize_intent,
+    recall_intent,
     social_intent,
 )
 from met_agent.guardrails.interpretive import POLICY, UNAVAILABLE, UNVERIFIED
@@ -53,6 +61,8 @@ from met_agent.tools.models import (
     WayfindingResult,
 )
 from met_agent.tools.registry import ToolRegistry
+
+logger = structlog.get_logger(__name__)
 
 MAX_TOOL_CALLS = 6
 MAX_TOOL_ROUNDS = 2
@@ -211,7 +221,106 @@ class Agent:
                         verification_status="verified",
                     )
 
-            # 2. Context-aware deterministic social fast path
+            # 2. Assistant identity fast path
+            if identity := identity_intent(request.message):
+                _, language = identity
+                reply_text, response_id = resolve_identity_response(language)
+                audit(
+                    "route_policy",
+                    {
+                        "policy": "assistant_identity",
+                        "language": language,
+                        "response_id": response_id,
+                        "route": "lite",
+                    },
+                )
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="social",
+                    language=language,
+                    social_response_id=response_id,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    language,
+                    "lite",
+                    context,
+                    reply_text,
+                    [],
+                    None,
+                    answer_kind="social",
+                    verification_status="not_applicable",
+                )
+
+            # 3. Conversation recall fast path
+            if recall := recall_intent(request.message):
+                _, target, language, topic = recall
+                try:
+                    history_messages = await asyncio.to_thread(
+                        self.events.user_messages, session, exclude_turn=turn
+                    )
+                    db_failed = False
+                except Exception:
+                    logger.exception("Failed to query user messages for recall")
+                    history_messages = []
+                    db_failed = True
+
+                is_expired = (
+                    not db_failed
+                    and len(history_messages) == 0
+                    and (session_ctx.turn_count > 0 or session_ctx.first_user_message is not None)
+                )
+                reply_text, response_id = resolve_recall_response(
+                    target,
+                    history_messages,
+                    language=language,
+                    topic=topic,
+                    is_expired=is_expired,
+                    db_failed=db_failed,
+                )
+                audit(
+                    "route_policy",
+                    {
+                        "policy": "deterministic_session_recall",
+                        "target": target,
+                        "topic": topic,
+                        "language": language,
+                        "response_id": response_id,
+                        "route": "lite",
+                    },
+                )
+                is_grounded = response_id in {"recall_first", "recall_previous", "recall_topic"}
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="factual" if is_grounded else "social",
+                    language=language,
+                    social_response_id=response_id,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    language,
+                    "lite",
+                    context,
+                    reply_text,
+                    [],
+                    1.0 if is_grounded else None,
+                    answer_kind="factual" if is_grounded else "social",
+                    verification_status="verified" if is_grounded else "not_applicable",
+                )
+
+            # 4. Context-aware deterministic social fast path
             if social := social_intent(
                 request.message,
                 last_answer_kind=session_ctx.last_answer_kind,
@@ -251,44 +360,6 @@ class Agent:
                     None,
                     answer_kind="social",
                     verification_status="not_applicable",
-                )
-            if asks_for_first_message(request.message):
-                first_message = await asyncio.to_thread(self.events.first_user_message, session)
-                audit(
-                    "route_policy",
-                    {
-                        "policy": "deterministic_session_recall",
-                        "operation": "first_user_message",
-                        "found": first_message is not None,
-                        "route": "lite",
-                    },
-                )
-                text = (
-                    f'You first asked: "{first_message}"'
-                    if first_message is not None
-                    else "This is your first message in this session."
-                )
-                session_ctx.record_turn(
-                    turn_id=turn,
-                    user_message=request.message,
-                    answer_kind="factual",
-                    language="en",
-                )
-                await asyncio.to_thread(
-                    self.events.save_session_context, session, turn, session_ctx
-                )
-                return self._answer(
-                    session,
-                    turn,
-                    started,
-                    "en",
-                    "lite",
-                    context,
-                    text,
-                    [],
-                    1.0,
-                    answer_kind="factual",
-                    verification_status="verified",
                 )
             has_pronoun = bool(re.search(r"\b(?:it|that|this)\b", request.message, re.IGNORECASE))
             if has_pronoun:
@@ -449,17 +520,129 @@ class Agent:
                     verification_status="not_applicable",
                     refusal=True,
                 )
+            conv_fallback = classify_conversational_fallback(request.message, intent)
+            if conv_fallback.outcome == "assistant_identity":
+                reply_text, response_id = resolve_identity_response(intent.language)
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="social",
+                    language=intent.language,
+                    social_response_id=response_id,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    intent.language,
+                    intent.route,
+                    context,
+                    reply_text,
+                    [],
+                    None,
+                    answer_kind="social",
+                    verification_status="not_applicable",
+                )
+            if conv_fallback.outcome == "conversation_recall":
+                try:
+                    history_messages = await asyncio.to_thread(
+                        self.events.user_messages, session, exclude_turn=turn
+                    )
+                    db_failed = False
+                except Exception:
+                    logger.exception("Failed to query user messages for recall")
+                    history_messages = []
+                    db_failed = True
+
+                is_expired = (
+                    not db_failed
+                    and len(history_messages) == 0
+                    and (session_ctx.turn_count > 0 or session_ctx.first_user_message is not None)
+                )
+                recall_target: RecallTarget = (
+                    "previous"
+                    if conv_fallback.recall_target == "none"
+                    else conv_fallback.recall_target
+                )
+                reply_text, response_id = resolve_recall_response(
+                    recall_target,
+                    history_messages,
+                    language=intent.language,
+                    topic=conv_fallback.recall_topic,
+                    is_expired=is_expired,
+                    db_failed=db_failed,
+                )
+                is_grounded = response_id in {"recall_first", "recall_previous", "recall_topic"}
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="factual" if is_grounded else "social",
+                    language=intent.language,
+                    social_response_id=response_id,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    intent.language,
+                    intent.route,
+                    context,
+                    reply_text,
+                    [],
+                    1.0 if is_grounded else None,
+                    answer_kind="factual" if is_grounded else "social",
+                    verification_status="verified" if is_grounded else "not_applicable",
+                )
+            if conv_fallback.outcome == "capability_explanation":
+                reply_text, response_id = resolve_capability_explanation(intent.language)
+                session_ctx.record_turn(
+                    turn_id=turn,
+                    user_message=request.message,
+                    answer_kind="social",
+                    language=intent.language,
+                    social_response_id=response_id,
+                )
+                await asyncio.to_thread(
+                    self.events.save_session_context, session, turn, session_ctx
+                )
+                return self._answer(
+                    session,
+                    turn,
+                    started,
+                    intent.language,
+                    intent.route,
+                    context,
+                    reply_text,
+                    [],
+                    None,
+                    answer_kind="social",
+                    verification_status="not_applicable",
+                )
+            if (
+                conv_fallback.outcome == "collection_or_visitor"
+                and intent.category == "out_of_scope"
+            ):
+                intent = intent.model_copy(
+                    update={"category": "visitor_info", "search_query": request.message}
+                )
             if intent.category == "out_of_scope":
+                contact = conv_fallback.handoff_contact or intent.handoff_contact
+                reason = conv_fallback.handoff_reason or (
+                    "This request concerns account, purchase, or information "
+                    "outside the collection and visitor workspace."
+                )
                 result = await self.tools.execute(
                     "handoff",
                     json.dumps(
                         {
-                            "reason": (
-                                "This request concerns account, purchase, or information "
-                                "outside the "
-                                "collection and visitor workspace."
-                            ),
-                            "suggested_contact": intent.handoff_contact,
+                            "reason": reason,
+                            "suggested_contact": contact,
                         }
                     ),
                 )

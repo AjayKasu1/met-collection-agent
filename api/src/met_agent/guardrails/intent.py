@@ -121,13 +121,94 @@ _DISSATISFACTION_LANGUAGES: dict[str, Language] = {
     "没用": "zh",
     "没有帮助": "zh",
 }
-_FIRST_MESSAGE_RECALL = {
-    "what did i ask first",
-    "what did i ask you first",
-    "what was my first question",
-    "what was the first thing i asked",
-    "what i asked first",
+_IDENTITY_LANGUAGES: dict[str, Language] = {
+    "what model are you": "en",
+    "which model are you": "en",
+    "what model is this": "en",
+    "what model do you use": "en",
+    "what is your model": "en",
+    "what llm are you": "en",
+    "who are you": "en",
+    "what are you": "en",
+    "are you an ai": "en",
+    "are you a bot": "en",
+    "are you chatgpt": "en",
+    "what is your name": "en",
+    "who made you": "en",
+    "who created you": "en",
+    "quel modele etes vous": "fr",
+    "qui etes vous": "fr",
+    "etes vous une ia": "fr",
+    "quel est votre nom": "fr",
+    "qui vous a cree": "fr",
+    "que modelo eres": "es",
+    "quien eres": "es",
+    "eres una ia": "es",
+    "como te llamas": "es",
+    "quien te creo": "es",
+    "你是哪个模型": "zh",
+    "你是什么模型": "zh",
+    "你是谁": "zh",
+    "你是ai吗": "zh",
+    "你的名字是什么": "zh",
+    "谁创造了你": "zh",
 }
+_RECALL_FIRST_PHRASES: dict[str, Language] = {
+    "what did i ask first": "en",
+    "what did i ask you first": "en",
+    "what was my first question": "en",
+    "what was the first thing i asked": "en",
+    "what i asked first": "en",
+    "first question": "en",
+    "quai je demande en premier": "fr",
+    "quelle etait ma premiere question": "fr",
+    "premiere question": "fr",
+    "que pregunte primero": "es",
+    "cual fue mi primera pregunta": "es",
+    "primera pregunta": "es",
+    "我最先问了什么": "zh",
+    "我的第一个问题是什么": "zh",
+    "第一个问题": "zh",
+}
+_RECALL_PREVIOUS_PHRASES: dict[str, Language] = {
+    "what question i asked recent": "en",
+    "what question did i ask recent": "en",
+    "what question did i ask recently": "en",
+    "what question did i ask": "en",
+    "what did i ask recently": "en",
+    "what did i ask recent": "en",
+    "what did i just ask": "en",
+    "what was my last question": "en",
+    "what was my previous question": "en",
+    "what was the last thing i asked": "en",
+    "what did i ask last": "en",
+    "what did i ask before": "en",
+    "what did i ask before this": "en",
+    "what was my prior question": "en",
+    "repeat my last question": "en",
+    "repeat what i just asked": "en",
+    "previous question": "en",
+    "last question": "en",
+    "what did i ask": "en",
+    "quelle etait ma question precedente": "fr",
+    "que viens je de demander": "fr",
+    "quai je demande recemment": "fr",
+    "ma derniere question": "fr",
+    "question precedente": "fr",
+    "cual fue mi pregunta anterior": "es",
+    "que acabo de preguntar": "es",
+    "que pregunte recientemente": "es",
+    "mi ultima pregunta": "es",
+    "pregunta anterior": "es",
+    "我刚才问了什么": "zh",
+    "我上一个问题是什么": "zh",
+    "我最近问了什么": "zh",
+    "上一个问题": "zh",
+    "上个问题": "zh",
+}
+_FIRST_MESSAGE_RECALL = set(_RECALL_FIRST_PHRASES.keys())
+
+RecallTarget = Literal["previous", "first", "topic"]
 SocialIntent = Literal[
     "greeting",
     "wellbeing",
@@ -136,6 +217,8 @@ SocialIntent = Literal[
     "thanks",
     "farewell",
     "dissatisfaction",
+    "assistant_identity",
+    "conversation_recall",
 ]
 
 
@@ -148,6 +231,112 @@ def _normalized_message(message: str) -> str:
 def greeting_language(message: str) -> Language | None:
     """Recognize a complete greeting without swallowing a museum question."""
     return _GREETING_LANGUAGES.get(_normalized_message(message))
+
+
+def identity_intent(message: str) -> tuple[Literal["assistant_identity"], Language] | None:
+    """Recognize questions about the assistant model or identity without swallowing art facts."""
+    if re.search(
+        (
+            r"\b(?:gallery|room|painting|sculpture|armor|statue|artist|"
+            r"exhibition|artifact|collection)\b"
+        ),
+        message,
+        re.IGNORECASE,
+    ):
+        return None
+    normalized = _normalized_message(message)
+    if language := _IDENTITY_LANGUAGES.get(normalized):
+        return "assistant_identity", language
+    if re.search(
+        r"\b(?:what|which)\s+(?:model|llm)\s+(?:are\s+you|is\s+this)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return "assistant_identity", "en"
+    if re.search(r"\bwho\s+are\s+you\b", message, re.IGNORECASE):
+        return "assistant_identity", "en"
+    return None
+
+
+def recall_intent(
+    message: str,
+) -> tuple[Literal["conversation_recall"], RecallTarget, Language, str | None] | None:
+    """Recognize exact or pattern-based requests to recall earlier conversation questions."""
+    normalized = _normalized_message(message)
+
+    # 1. First message check
+    if language := _RECALL_FIRST_PHRASES.get(normalized):
+        return "conversation_recall", "first", language, None
+
+    # 2. Topic-specific recall check (e.g. "What did I ask about the sphinx?")
+    topic_match = re.search(
+        r"\bwhat\s+(?:did\s+)?i\s+ask\s+(?:about|regarding)\s+(?:the\s+)?(?P<topic>[a-zA-Z0-9\s]+?)\??$",
+        message.strip(),
+        re.IGNORECASE,
+    )
+    if topic_match:
+        topic = topic_match.group("topic").strip()
+        if topic:
+            return "conversation_recall", "topic", "en", topic
+
+    fr_topic = re.search(
+        r"\bqu['\s]*ai[\s-]*je\s+demande\s+(?:sur|a\s+propos\s+de)\s+(?:le\s+|la\s+|l['\s]*)?(?P<topic>[^?.,!]+)\??$",
+        message.strip(),
+        re.IGNORECASE,
+    )
+    if fr_topic:
+        topic = fr_topic.group("topic").strip()
+        if topic:
+            return "conversation_recall", "topic", "fr", topic
+
+    es_topic = re.search(
+        r"\bque\s+pregunte\s+(?:sobre|acerca\s+de)\s+(?:el\s+|la\s+|los\s+|las\s+)?(?P<topic>[^?.,!]+)\??$",
+        message.strip(),
+        re.IGNORECASE,
+    )
+    if es_topic:
+        topic = es_topic.group("topic").strip()
+        if topic:
+            return "conversation_recall", "topic", "es", topic
+
+    zh_topic = re.search(
+        r"\b我(?:刚才|之前)?问了关于(?P<topic>[^?.,!]+)的什么\b",
+        message.strip(),
+    )
+    if zh_topic:
+        topic = zh_topic.group("topic").strip()
+        if topic:
+            return "conversation_recall", "topic", "zh", topic
+
+    # 3. Previous / last / recent message check
+    if language := _RECALL_PREVIOUS_PHRASES.get(normalized):
+        return "conversation_recall", "previous", language, None
+
+    if re.search(
+        (
+            r"\bwhat\s+(?:question\s+)?(?:did\s+)?i\s+ask(?:ed)?\s+"
+            r"(?:recent(?:ly)?|last|before|just\s+now)\b"
+        ),
+        message,
+        re.IGNORECASE,
+    ):
+        return "conversation_recall", "previous", "en", None
+    if re.search(
+        r"\bwhat\s+(?:was|is)\s+my\s+(?:last|previous|prior|recent)\s+question\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return "conversation_recall", "previous", "en", None
+    if re.search(r"\bwhat\s+did\s+i\s+just\s+ask\b", message, re.IGNORECASE):
+        return "conversation_recall", "previous", "en", None
+    if re.search(
+        r"\brepeat\s+(?:my\s+last\s+question|what\s+i\s+just\s+asked)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return "conversation_recall", "previous", "en", None
+
+    return None
 
 
 def social_intent(
@@ -203,6 +392,99 @@ def social_intent(
 def asks_for_first_message(message: str) -> bool:
     """Recognize an exact request to recall the current session's first message."""
     return _normalized_message(message) in _FIRST_MESSAGE_RECALL
+
+
+class ConversationalClassification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: Literal[
+        "assistant_identity",
+        "conversation_recall",
+        "capability_explanation",
+        "museum_handoff",
+        "collection_or_visitor",
+    ]
+    recall_target: Literal["previous", "first", "topic", "none"] = "none"
+    recall_topic: str | None = None
+    handoff_contact: Literal["info@metmuseum.org", "store.support@metmuseum.org"] = (
+        "info@metmuseum.org"
+    )
+    handoff_reason: str | None = None
+
+
+def classify_conversational_fallback(
+    message: str,
+    intent: "Intent",
+) -> ConversationalClassification:
+    """Route ambiguous or classifier-evaluated requests through explicit typed outcomes."""
+    # 1. Check if user is asking to recall past conversation questions
+    if recall := recall_intent(message):
+        _, target, _, topic = recall
+        return ConversationalClassification(
+            outcome="conversation_recall",
+            recall_target=target,
+            recall_topic=topic,
+        )
+
+    # 2. Check if user is asking about assistant model or identity
+    if identity_intent(message):
+        return ConversationalClassification(outcome="assistant_identity")
+
+    # 3. Handle out_of_scope classification from the model
+    if intent.category == "out_of_scope":
+        # General visitor queries (ticket price, hours, admission) belong to visitor_info, not staff
+        is_visitor_info = bool(
+            re.search(
+                (
+                    r"\b(?:ticket|tickets|admission|hours|opening|fee|cost|how\s+much|"
+                    r"directions|parking|cafe|dining|bag\s+check|coat\s+check)\b"
+                ),
+                message,
+                re.IGNORECASE,
+            )
+        )
+        is_account_or_refund = bool(
+            re.search(
+                r"\b(?:refund|cancel|receipt|membership\s+account|login|password)\b",
+                message,
+                re.IGNORECASE,
+            )
+        )
+        if is_visitor_info and not is_account_or_refund:
+            return ConversationalClassification(outcome="collection_or_visitor")
+
+        is_retail = intent.handoff_contact == "store.support@metmuseum.org" or bool(
+            re.search(
+                r"\b(?:order|shipping|delivery|merchandise|store|purchase)\b",
+                message,
+                re.IGNORECASE,
+            )
+        )
+        is_museum_ops = bool(
+            re.search(
+                (
+                    r"\b(?:refund|cancel\s+my|membership\s+account|login|password|"
+                    r"donat|venue\s+rental|facility\s+rental|lost\s+and\s+found|appraisal)\b"
+                ),
+                message,
+                re.IGNORECASE,
+            )
+        )
+        if is_retail:
+            return ConversationalClassification(
+                outcome="museum_handoff",
+                handoff_contact="store.support@metmuseum.org",
+                handoff_reason="This request concerns museum store purchases, shipping, or orders.",
+            )
+        if is_museum_ops:
+            return ConversationalClassification(
+                outcome="museum_handoff",
+                handoff_contact="info@metmuseum.org",
+                handoff_reason="This request concerns account, ticketing refund, or operations.",
+            )
+        # General conversational or external query: explain capability without staff handoff
+        return ConversationalClassification(outcome="capability_explanation")
+
+    return ConversationalClassification(outcome="collection_or_visitor")
 
 
 class Intent(BaseModel):

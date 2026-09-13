@@ -47,6 +47,8 @@ class AuditStore(Protocol):
 
     def first_user_message(self, session: UUID) -> str | None: ...
 
+    def user_messages(self, session: UUID, *, exclude_turn: UUID | None = None) -> list[str]: ...
+
     def get_session_context(self, session: UUID) -> SessionContext | None: ...
 
     def save_session_context(self, session: UUID, turn: UUID, context: SessionContext) -> None: ...
@@ -200,6 +202,20 @@ class EventStore(RedactingStore):
                 (str(session),),
             ).fetchone()
         return str(json.loads(row[0])["message"]) if row else None
+
+    def user_messages(self, session: UUID, *, exclude_turn: UUID | None = None) -> list[str]:
+        """Return all user messages in chronological order, optionally excluding a turn."""
+        query = (
+            "SELECT turn_id, data FROM events WHERE session_id=? AND kind='user_message' "
+            "ORDER BY sequence ASC"
+        )
+        with self._connect() as connection:
+            rows = connection.execute(query, (str(session),)).fetchall()
+        return [
+            str(json.loads(row[1])["message"])
+            for row in rows
+            if exclude_turn is None or UUID(row[0]) != exclude_turn
+        ]
 
     def get_session_context(self, session: UUID) -> SessionContext | None:
         with self._connect() as connection:
@@ -427,6 +443,18 @@ class PostgresEventStore(RedactingStore):
                 (session,),
             ).fetchone()
         return str(row[0]["message"]) if row else None
+
+    def user_messages(self, session: UUID, *, exclude_turn: UUID | None = None) -> list[str]:
+        """Return all user messages in chronological order, optionally excluding a turn."""
+        query = (
+            "SELECT turn_id, data FROM met_agent_events WHERE session_id=%s "
+            "AND kind='user_message' ORDER BY sequence ASC"
+        )
+        with self.pool.connection() as connection:
+            rows = connection.execute(query, (session,)).fetchall()
+        return [
+            str(row[1]["message"]) for row in rows if exclude_turn is None or row[0] != exclude_turn
+        ]
 
     def get_session_context(self, session: UUID) -> SessionContext | None:
         with self.pool.connection() as connection:

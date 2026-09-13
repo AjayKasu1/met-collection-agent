@@ -42,6 +42,7 @@ class SessionContext(BaseModel):
     language: Language = "en"
     last_social_response_id: str | None = Field(default=None, max_length=100)
     consecutive_social_turns: int = Field(default=0, ge=0)
+    turn_count: int = Field(default=0, ge=0)
     last_failure_reason: str | None = Field(default=None, max_length=200)
 
     @property
@@ -61,6 +62,7 @@ class SessionContext(BaseModel):
         failure_reason: str | None = None,
         pending_clarification: PendingClarification | None = None,
     ) -> "SessionContext":
+        self.turn_count += 1
         if not self.first_user_message:
             self.first_user_message = user_message[:500]
         if language:
