@@ -26,6 +26,7 @@ from met_agent.agent.models import (
     Route,
     VerificationStatus,
 )
+from met_agent.agent.social_policy import resolve_social_response
 from met_agent.guardrails.grounding import (
     GroundingCheck,
     valid_citations,
@@ -148,14 +149,83 @@ class Agent:
             self.events.get_session_context, session
         ) or SessionContext(language=request.language or "en")
         try:
-            if social := social_intent(request.message):
+            # 1. Handle clarification responses before social fast path
+            if session_ctx.pending_clarification is not None and (
+                matched_ref := session_ctx.match_clarification_answer(request.message)
+            ):
+                audit(
+                    "route_policy",
+                    {
+                        "policy": "clarification_resolved",
+                        "selected_object_id": matched_ref.object_id,
+                        "selected_title": matched_ref.title,
+                        "route": "lite",
+                    },
+                )
+                obj_res = await self.tools.execute(
+                    "get_object", json.dumps({"object_id": matched_ref.object_id})
+                )
+                audit(
+                    "tool_call",
+                    {"name": "get_object", "arguments": {"object_id": matched_ref.object_id}},
+                )
+                audit("tool_result", obj_res.model_dump(mode="json"))
+                live_obj = obj_res.output if isinstance(obj_res.output, LiveObject) else None
+                if live_obj:
+                    session_ctx.record_turn(
+                        turn_id=turn,
+                        user_message=request.message,
+                        answer_kind="factual",
+                        verified_object=matched_ref,
+                        gallery_number=live_obj.gallery_number,
+                        language=request.language or "en",
+                    )
+                    await asyncio.to_thread(
+                        self.events.save_session_context, session, turn, session_ctx
+                    )
+                    overview = (
+                        f"{live_obj.title} by {live_obj.artist or 'Unknown artist'} "
+                        f"({live_obj.object_date or 'undated'})."
+                    )
+                    if live_obj.is_on_view and live_obj.gallery_number:
+                        overview += (
+                            f" It is currently on view in Gallery {live_obj.gallery_number}."
+                        )
+                    citations = [
+                        Citation(
+                            object_id=matched_ref.object_id,
+                            quote=live_obj.title,
+                        )
+                    ]
+                    return self._answer(
+                        session,
+                        turn,
+                        started,
+                        request.language or "en",
+                        "lite",
+                        context,
+                        overview,
+                        citations,
+                        1.0,
+                        answer_kind="factual",
+                        verification_status="verified",
+                    )
+
+            # 2. Context-aware deterministic social fast path
+            if social := social_intent(
+                request.message,
+                last_answer_kind=session_ctx.last_answer_kind,
+                last_failure_reason=session_ctx.last_failure_reason,
+            ):
                 kind, language = social
+                reply_text, response_id = resolve_social_response(kind, session_ctx, language)
                 audit(
                     "route_policy",
                     {
                         "policy": "deterministic_social_turn",
                         "kind": kind,
                         "language": language,
+                        "response_id": response_id,
                         "route": "lite",
                     },
                 )
@@ -164,6 +234,7 @@ class Agent:
                     user_message=request.message,
                     answer_kind="social",
                     language=language,
+                    social_response_id=response_id,
                 )
                 await asyncio.to_thread(
                     self.events.save_session_context, session, turn, session_ctx
@@ -175,7 +246,7 @@ class Agent:
                     language,
                     "lite",
                     context,
-                    SOCIAL_RESPONSES[kind][language],
+                    reply_text,
                     [],
                     None,
                     answer_kind="social",
@@ -220,19 +291,23 @@ class Agent:
                     verification_status="verified",
                 )
             has_pronoun = bool(re.search(r"\b(?:it|that|this)\b", request.message, re.IGNORECASE))
-            if has_pronoun and session_ctx.verified_objects:
-                ref, clarify_prompt = session_ctx.resolve_referent()
-                if clarify_prompt is not None:
+            if has_pronoun:
+                ref, pending_clarify = session_ctx.resolve_referent(
+                    original_question=request.message
+                )
+                if pending_clarify is not None:
                     audit("route_policy", {"policy": "referent_clarification", "route": "lite"})
                     session_ctx.record_turn(
                         turn_id=turn,
                         user_message=request.message,
                         answer_kind="clarification",
                         language=request.language or "en",
+                        pending_clarification=pending_clarify,
                     )
                     await asyncio.to_thread(
                         self.events.save_session_context, session, turn, session_ctx
                     )
+                    clarify_text = session_ctx.render_clarification(request.language or "en")
                     return self._answer(
                         session,
                         turn,
@@ -240,7 +315,7 @@ class Agent:
                         request.language or "en",
                         "lite",
                         context,
-                        clarify_prompt,
+                        clarify_text,
                         [],
                         None,
                         answer_kind="clarification",
@@ -491,6 +566,11 @@ class Agent:
                             title=intent.search_query.strip() or f"Object {cit.object_id}",
                         )
                         break
+            failure_reason = None
+            if answer.answer_kind == "unavailable":
+                failure_reason = "object_not_found"
+            elif answer.answer_kind == "policy_refusal":
+                failure_reason = "policy_refusal"
             session_ctx.record_turn(
                 turn_id=turn,
                 user_message=request.message,
@@ -498,6 +578,7 @@ class Agent:
                 verified_object=verified_obj,
                 gallery_number=intent.gallery_number,
                 language=answer.language,
+                failure_reason=failure_reason,
             )
             await asyncio.to_thread(self.events.save_session_context, session, turn, session_ctx)
             return answer

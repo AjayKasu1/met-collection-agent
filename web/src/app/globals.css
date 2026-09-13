@@ -527,6 +527,12 @@ summary:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
+.provenance.provenance-subtle {
+  margin-top: 6px;
+  border-top: none;
+  border-bottom: none;
+}
+
 .provenance summary {
   display: flex;
   align-items: center;
@@ -536,6 +542,24 @@ summary:focus-visible {
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
+}
+
+.provenance.provenance-subtle summary {
+  display: inline-flex;
+  padding: 4px 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.provenance.provenance-subtle summary:hover {
+  opacity: 1;
+}
+
+.provenance.provenance-subtle .subtle-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .summary-stats {

@@ -16,6 +16,34 @@ export function ProvenancePanel({ provenance }: { provenance: AnswerProvenance }
   const isSocial = answer.answer_kind === "social";
   const displayKind = answer.answer_kind ? label(answer.answer_kind) : label(answer.route);
 
+  if (isSocial) {
+    return (
+      <details className="provenance provenance-subtle">
+        <summary>
+          <span className="subtle-link">Details</span>
+        </summary>
+        <div className="provenance-grid">
+          <div>
+            <span className="metric-label">Type</span>
+            <strong>Social</strong>
+          </div>
+          <div>
+            <span className="metric-label">Verification</span>
+            <strong>Not applicable</strong>
+          </div>
+          <div>
+            <span className="metric-label">Latency</span>
+            <strong>{(answer.latency_ms / 1000).toFixed(2)} s</strong>
+          </div>
+          <div>
+            <span className="metric-label">Estimated cost</span>
+            <strong>$0.00</strong>
+          </div>
+        </div>
+      </details>
+    );
+  }
+
   return (
     <details className="provenance">
       <summary>
@@ -48,23 +76,21 @@ export function ProvenancePanel({ provenance }: { provenance: AnswerProvenance }
           <strong>{cost(answer.cost_usd)}</strong>
         </div>
       </div>
-      {!isSocial && (
-        <div className="tool-ledger">
-          <p className="metric-label">Evidence path</p>
-          {tools.length ? (
-            <ol>
-              {tools.map((tool, index) => (
-                <li key={`${tool.name}-${index}`}>
-                  <span>{label(tool.name)}</span>
-                  <span>{tool.latency_ms === null ? "Recorded" : `${tool.latency_ms.toFixed(0)} ms`}</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="muted-copy">No collection tool was needed for this answer.</p>
-          )}
-        </div>
-      )}
+      <div className="tool-ledger">
+        <p className="metric-label">Evidence path</p>
+        {tools.length ? (
+          <ol>
+            {tools.map((tool, index) => (
+              <li key={`${tool.name}-${index}`}>
+                <span>{label(tool.name)}</span>
+                <span>{tool.latency_ms === null ? "Recorded" : `${tool.latency_ms.toFixed(0)} ms`}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="muted-copy">No collection tool was needed for this answer.</p>
+        )}
+      </div>
       {answer.model_calls.length > 0 && (
         <p className="model-note">
           {answer.model_calls.length} model {answer.model_calls.length === 1 ? "call" : "calls"} ·{" "}

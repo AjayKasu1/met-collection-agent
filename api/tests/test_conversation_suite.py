@@ -362,3 +362,202 @@ def test_rejection_never_100_percent_grounded(tmp_path: Path) -> None:
     assert answer.answer_kind == "unavailable"
     assert answer.verification_status == "unverified"
     assert answer.grounding_score is None
+
+
+def test_consecutive_social_repetition_variation(tmp_path: Path) -> None:
+    """Verify progressive restraint across consecutive social turns with zero model calls."""
+    store = EventStore(tmp_path / "consecutive_social.sqlite3")
+    session_id = uuid4()
+
+    replies = []
+    # 3 consecutive lols followed by cool
+    inputs = ["lol", "lol", "lol", "cool"]
+    for msg in inputs:
+        model = ScriptedModel([])
+        agent = Agent(model, ToolRegistry(), store)
+        ans = asyncio.run(agent.run(ChatRequest(message=msg, session_id=session_id)))
+        assert ans.answer_kind == "social"
+        assert ans.verification_status == "not_applicable"
+        assert ans.cost_usd == 0
+        assert len(model.calls) == 0
+        replies.append(ans.text)
+
+    # All 4 responses must be non-identical
+    assert replies[0] == "😄 What would you like to explore?"
+    assert replies[1] == "I'm here whenever you're ready."
+    assert replies[2] == "Still here if you need anything."
+    assert replies[3] == "Sounds good."
+    assert len(set(replies)) == 4
+
+
+def test_factual_followed_by_acknowledgement(tmp_path: Path) -> None:
+    """Verify that acknowledgements after a factual answer offer topic continuation."""
+    store = EventStore(tmp_path / "ack_with_topic.sqlite3")
+    session_id = uuid4()
+
+    # Pre-populate session context with a verified object
+    initial_ctx = SessionContext(language="en").record_turn(
+        turn_id=uuid4(),
+        user_message="Tell me about the Temple of Dendur",
+        answer_kind="factual",
+        verified_object=VerifiedObjectRef(object_id=547802, title="The Temple of Dendur"),
+    )
+    store.save_session_context(session_id, uuid4(), initial_ctx)
+
+    # Turn 2: cool
+    model2 = ScriptedModel([])
+    agent2 = Agent(model2, ToolRegistry(), store)
+    ans2 = asyncio.run(agent2.run(ChatRequest(message="cool", session_id=session_id)))
+    assert ans2.answer_kind == "social"
+    assert "The Temple of Dendur" in ans2.text
+    assert "explore something else" in ans2.text
+    assert len(model2.calls) == 0
+
+    # Turn 3: thanks
+    model3 = ScriptedModel([])
+    agent3 = Agent(model3, ToolRegistry(), store)
+    ans3 = asyncio.run(agent3.run(ChatRequest(message="thanks", session_id=session_id)))
+    assert ans3.answer_kind == "social"
+    assert "The Temple of Dendur" in ans3.text
+    assert len(model3.calls) == 0
+
+
+def test_clarification_answering_resolves_object(tmp_path: Path) -> None:
+    """Verify that 'the first one' answers a pending which_object clarification."""
+    from met_agent.agent.context import PendingClarification
+
+    store = EventStore(tmp_path / "clarify_answer.sqlite3")
+    session_id = uuid4()
+
+    # Pre-populate session context with pending which_object clarification
+    cands = [
+        VerifiedObjectRef(object_id=547802, title="The Temple of Dendur"),
+        VerifiedObjectRef(object_id=547803, title="Model of the Temple of Dendur"),
+    ]
+    initial_ctx = SessionContext(language="en").record_turn(
+        turn_id=uuid4(),
+        user_message="Is that upstairs?",
+        answer_kind="clarification",
+        pending_clarification=PendingClarification(
+            clarification_type="which_object",
+            candidates=cands,
+            original_question="Is that upstairs?",
+        ),
+    )
+    store.save_session_context(session_id, uuid4(), initial_ctx)
+
+    executed_calls: list[int] = []
+    tools = registry_with_calls(executed_calls)
+
+    model = ScriptedModel([])
+    agent = Agent(model, tools, store)
+
+    # User answers: "the first one"
+    ans = asyncio.run(agent.run(ChatRequest(message="the first one", session_id=session_id)))
+    assert ans.answer_kind == "factual"
+    assert ans.verification_status == "verified"
+    assert "Temple of Dendur" in ans.text
+    assert "Gallery 131" in ans.text
+    assert ans.grounding_score == 1.0
+
+    # Verify context cleared pending clarification
+    updated_ctx = store.get_session_context(session_id)
+    assert updated_ctx is not None
+    assert updated_ctx.pending_clarification is None
+    assert updated_ctx.active_topic == "The Temple of Dendur"
+
+
+def test_pending_clarification_retained_across_social_turn(tmp_path: Path) -> None:
+    """Verify that a social reaction while clarification is pending retains the pending question."""
+    from met_agent.agent.context import PendingClarification
+
+    store = EventStore(tmp_path / "clarify_retain.sqlite3")
+    session_id = uuid4()
+
+    initial_ctx = SessionContext(language="en").record_turn(
+        turn_id=uuid4(),
+        user_message="Is it upstairs?",
+        answer_kind="clarification",
+        pending_clarification=PendingClarification(
+            clarification_type="missing_referent",
+            candidates=[],
+            original_question="Is it upstairs?",
+        ),
+    )
+    store.save_session_context(session_id, uuid4(), initial_ctx)
+
+    model = ScriptedModel([])
+    agent = Agent(model, ToolRegistry(), store)
+
+    ans = asyncio.run(agent.run(ChatRequest(message="lol", session_id=session_id)))
+    assert ans.answer_kind == "social"
+    assert "😄 Which artwork or gallery are you asking about?" in ans.text
+    assert len(model.calls) == 0
+
+    # Context still has pending clarification
+    updated_ctx = store.get_session_context(session_id)
+    assert updated_ctx is not None
+    assert updated_ctx.pending_clarification is not None
+
+
+def test_dissatisfaction_specific_recovery(tmp_path: Path) -> None:
+    """Verify that dissatisfaction recovers specifically using the previous failure reason."""
+    store = EventStore(tmp_path / "dissatisfaction_recovery.sqlite3")
+    session_id = uuid4()
+
+    # Pre-populate with failed object search
+    initial_ctx = SessionContext(language="en").record_turn(
+        turn_id=uuid4(),
+        user_message="Tell me about nonexistent painting XYZ",
+        answer_kind="unavailable",
+        failure_reason="object_not_found",
+    )
+    store.save_session_context(session_id, uuid4(), initial_ctx)
+
+    model = ScriptedModel([])
+    agent = Agent(model, ToolRegistry(), store)
+
+    ans = asyncio.run(agent.run(ChatRequest(message="that didn't help", session_id=session_id)))
+    assert ans.answer_kind == "social"
+    assert "I couldn't find a record for that artwork" in ans.text
+    assert "artist's name or an alternate title" in ans.text
+    assert len(model.calls) == 0
+
+
+def test_substantive_boundary_does_not_enter_social() -> None:
+    """Verify that substantive phrases and questions do not match the social fast path."""
+    assert social_intent("cool paintings") is None
+    assert social_intent("okay, but why?") is None
+    assert social_intent("lol, can I bring wine?") is None
+    assert social_intent("thanks for the info, what time do you close?") is None
+    assert social_intent("great paintings to see") is None
+
+    # But sarcasm after failure DOES match dissatisfaction
+    res = social_intent("great", last_failure_reason="object_not_found")
+    assert res == ("dissatisfaction", "en")
+    assert social_intent("thanks for nothing") == ("dissatisfaction", "en")
+
+
+def test_independent_sessions_isolation(tmp_path: Path) -> None:
+    """Verify that active topic in Session A does not leak into fresh Session B."""
+    store = EventStore(tmp_path / "isolation.sqlite3")
+    session_a = uuid4()
+    session_b = uuid4()
+
+    ctx_a = SessionContext(language="en").record_turn(
+        turn_id=uuid4(),
+        user_message="Tell me about Dendur",
+        answer_kind="factual",
+        verified_object=VerifiedObjectRef(object_id=547802, title="The Temple of Dendur"),
+    )
+    store.save_session_context(session_a, uuid4(), ctx_a)
+
+    model = ScriptedModel([])
+    agent = Agent(model, ToolRegistry(), store)
+
+    # In Session B (fresh): "cool"
+    ans_b = asyncio.run(agent.run(ChatRequest(message="cool", session_id=session_b)))
+    assert ans_b.answer_kind == "social"
+    # Must NOT mention Dendur!
+    assert "Dendur" not in ans_b.text
+    assert ans_b.text == "Sounds good. What would you like to explore?"

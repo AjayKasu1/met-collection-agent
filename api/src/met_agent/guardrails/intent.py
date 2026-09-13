@@ -54,28 +54,45 @@ _FAREWELL_LANGUAGES: dict[str, Language] = {
     "adiós": "es",
     "再见": "zh",
 }
-_REACTION_LANGUAGES: dict[str, Language] = {
+_LAUGHTER_LANGUAGES: dict[str, Language] = {
     "lol": "en",
     "haha": "en",
     "hahaha": "en",
     "lmao": "en",
     "rofl": "en",
-    "cool": "en",
-    "nice": "en",
-    "awesome": "en",
-    "great": "en",
+    "😂": "en",
+    "😆": "en",
+    "😹": "en",
     "mdr": "fr",
     "ptdr": "fr",
-    "super": "fr",
-    "chouette": "fr",
     "jaja": "es",
     "jajaja": "es",
-    "genial": "es",
-    "guay": "es",
     "哈哈": "zh",
     "哈哈哈": "zh",
+}
+_ACKNOWLEDGEMENT_LANGUAGES: dict[str, Language] = {
+    "cool": "en",
+    "nice": "en",
+    "great": "en",
+    "awesome": "en",
+    "sounds good": "en",
+    "ok": "en",
+    "okay": "en",
+    "got it": "en",
+    "perfect": "en",
+    "super": "fr",
+    "chouette": "fr",
+    "daccord": "fr",
+    "parfait": "fr",
+    "genial": "es",
+    "guay": "es",
+    "vale": "es",
+    "perfecto": "es",
     "真棒": "zh",
     "太棒了": "zh",
+    "好的": "zh",
+    "行": "zh",
+    "明白": "zh",
 }
 _DISSATISFACTION_LANGUAGES: dict[str, Language] = {
     "that didnt help": "en",
@@ -88,15 +105,21 @@ _DISSATISFACTION_LANGUAGES: dict[str, Language] = {
     "you didnt answer my question": "en",
     "that wasnt helpful": "en",
     "that was not helpful": "en",
+    "great": "en",  # Ambiguous when following a failure/refusal
+    "not helpful": "en",
+    "didnt help": "en",
     "ca na pas aide": "fr",
     "cela na pas aide": "fr",
     "vous navez pas repondu": "fr",
+    "pas utile": "fr",
     "eso no ayudo": "es",
     "no me sirvio": "es",
     "no respondiste a mi pregunta": "es",
+    "no fue util": "es",
     "这没有帮助": "zh",
     "你没有回答我的问题": "zh",
     "没用": "zh",
+    "没有帮助": "zh",
 }
 _FIRST_MESSAGE_RECALL = {
     "what did i ask first",
@@ -105,7 +128,15 @@ _FIRST_MESSAGE_RECALL = {
     "what was the first thing i asked",
     "what i asked first",
 }
-SocialIntent = Literal["greeting", "wellbeing", "thanks", "farewell", "reaction", "dissatisfaction"]
+SocialIntent = Literal[
+    "greeting",
+    "wellbeing",
+    "laughter",
+    "acknowledgement",
+    "thanks",
+    "farewell",
+    "dissatisfaction",
+]
 
 
 def _normalized_message(message: str) -> str:
@@ -119,18 +150,51 @@ def greeting_language(message: str) -> Language | None:
     return _GREETING_LANGUAGES.get(_normalized_message(message))
 
 
-def social_intent(message: str) -> tuple[SocialIntent, Language] | None:
-    """Return a bounded social turn only when the whole message matches."""
+def social_intent(
+    message: str,
+    *,
+    last_answer_kind: str | None = None,
+    last_failure_reason: str | None = None,
+) -> tuple[SocialIntent, Language] | None:
+    """Return a bounded social turn only when the whole message matches exact canonical phrases."""
     normalized = _normalized_message(message)
+    raw_stripped = message.strip()
+
+    # Exact match for laughter emojis if not folded away
+    if raw_stripped in {"😂", "😆", "😹"}:
+        return "laughter", "en"
+
+    # Wellbeing allows question marks (e.g., "how are you?")
+    if language := _WELLBEING_LANGUAGES.get(normalized):
+        return "wellbeing", language
+
+    # For other categories, question marks or conjunctions indicate substantive follow-ups
+    if (
+        "?" in message
+        or " but " in message.lower()
+        or " mais " in message.lower()
+        or " pero " in message.lower()
+    ):
+        return None
+
+    # Handle sarcastic/dissatisfied "great..." after failure
+    is_failure = (
+        last_answer_kind in {"unavailable", "policy_refusal"} or last_failure_reason is not None
+    )
+    if normalized == "great" and is_failure:
+        return "dissatisfaction", "en"
+
     groups: tuple[tuple[SocialIntent, dict[str, Language]], ...] = (
         ("greeting", _GREETING_LANGUAGES),
-        ("wellbeing", _WELLBEING_LANGUAGES),
+        ("laughter", _LAUGHTER_LANGUAGES),
+        ("acknowledgement", _ACKNOWLEDGEMENT_LANGUAGES),
         ("thanks", _THANKS_LANGUAGES),
         ("farewell", _FAREWELL_LANGUAGES),
-        ("reaction", _REACTION_LANGUAGES),
         ("dissatisfaction", _DISSATISFACTION_LANGUAGES),
     )
     for kind, phrases in groups:
+        if kind == "dissatisfaction" and normalized == "great":
+            continue  # Handled above only conditionally
         if language := phrases.get(normalized):
             return kind, language
     return None
