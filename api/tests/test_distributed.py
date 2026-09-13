@@ -180,7 +180,7 @@ def test_real_postgres_session_lock_concurrency_and_cancellation() -> None:
                 await task1_release.wait()
 
         t1 = asyncio.create_task(worker1())
-        await task1_acquired.wait()
+        await asyncio.wait_for(task1_acquired.wait(), timeout=5.0)
 
         # Concurrent attempt on held session lock must fail with TimeoutError
         with pytest.raises(TimeoutError):
@@ -189,7 +189,7 @@ def test_real_postgres_session_lock_concurrency_and_cancellation() -> None:
 
         # Release first worker
         task1_release.set()
-        await t1
+        await asyncio.wait_for(t1, timeout=5.0)
 
         # Verify lock can now be reacquired
         lock3 = PostgresSessionLock(store.pool, session_id, timeout=1.0)
@@ -199,14 +199,15 @@ def test_real_postgres_session_lock_concurrency_and_cancellation() -> None:
         # Verify cancellation while waiting cleans up connection pool
         hold_release = asyncio.Event()
         held_event = asyncio.Event()
+        lock_holder = PostgresSessionLock(store.pool, session_id, timeout=2.0)
 
         async def holder() -> None:
-            async with lock1:
+            async with lock_holder:
                 held_event.set()
                 await hold_release.wait()
 
         t_holder = asyncio.create_task(holder())
-        await held_event.wait()
+        await asyncio.wait_for(held_event.wait(), timeout=5.0)
 
         async def cancel_worker() -> None:
             lock4 = PostgresSessionLock(store.pool, session_id, timeout=5.0)
@@ -217,10 +218,10 @@ def test_real_postgres_session_lock_concurrency_and_cancellation() -> None:
         await asyncio.sleep(0.05)
         t_cancel.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await t_cancel
+            await asyncio.wait_for(t_cancel, timeout=5.0)
 
         hold_release.set()
-        await t_holder
+        await asyncio.wait_for(t_holder, timeout=5.0)
 
         # Pool must still have all connections available (not exhausted/leaked)
         lock5 = PostgresSessionLock(store.pool, session_id, timeout=1.0)

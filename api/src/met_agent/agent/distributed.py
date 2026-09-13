@@ -86,6 +86,8 @@ class PostgresSessionLock:
                 self.pool.putconn(conn)
 
     async def __aenter__(self) -> PostgresSessionLock:
+        with self._state_lock:
+            self._cancelled = False
         deadline = time.monotonic() + self.timeout
         try:
             while True:
