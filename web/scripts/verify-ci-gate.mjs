@@ -44,16 +44,21 @@ export async function verifyCheckRuns(commitSha) {
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
+      const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
       const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/${commitSha}/check-runs`, {
         headers: {
           Accept: "application/vnd.github+json",
           "User-Agent": "met-agent-worker-ci-gate",
-          ...(process.env.GH_TOKEN ? { Authorization: `Bearer ${process.env.GH_TOKEN}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
 
       if (!res.ok) {
-        console.warn(`[CI-GATE] GitHub API returned HTTP ${res.status}. Retrying in ${POLL_INTERVAL_MS / 1000}s...`);
+        const remaining = res.headers.get("x-ratelimit-remaining");
+        const resetTime = res.headers.get("x-ratelimit-reset");
+        console.warn(
+          `[CI-GATE] GitHub API returned HTTP ${res.status} (remaining: ${remaining}, reset: ${resetTime}). Retrying in ${POLL_INTERVAL_MS / 1000}s...`,
+        );
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         continue;
       }
