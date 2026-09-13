@@ -103,14 +103,105 @@ def test_postgres_session_lock_cancellation_while_getconn_pending() -> None:
         t = asyncio.create_task(acquire_task())
         await asyncio.to_thread(getconn_started.wait, 1.0)
         t.cancel()
+        release_getconn.set()
         with pytest.raises(asyncio.CancelledError):
             await t
 
-        release_getconn.set()
-        await asyncio.sleep(0.05)
+    asyncio.run(run())
+    assert mock_pool.putconn.call_count == 1
+    mock_pool.putconn.assert_called_with(mock_conn)
+
+
+def test_postgres_session_lock_cancellation_while_query_pending() -> None:
+    session_id = uuid4()
+    mock_pool = MagicMock()
+    mock_conn = MagicMock()
+
+    query_started = threading.Event()
+    release_query = threading.Event()
+
+    def slow_execute(query: str, *args: Any, **kwargs: Any) -> Any:
+        if "pg_try_advisory_lock" in query:
+            query_started.set()
+            release_query.wait(timeout=2.0)
+            mock_res = MagicMock()
+            mock_res.fetchone.return_value = (True,)
+            return mock_res
+        return MagicMock()
+
+    mock_conn.execute.side_effect = slow_execute
+    mock_pool.getconn.return_value = mock_conn
+
+    lock = PostgresSessionLock(mock_pool, session_id, timeout=5.0)
+
+    async def run() -> None:
+        async def acquire_task() -> None:
+            async with lock:
+                pass
+
+        t = asyncio.create_task(acquire_task())
+        await asyncio.to_thread(query_started.wait, 1.0)
+
+        # Cancel while the query is actively in flight in the background thread
+        t.cancel()
+        # Verify connection has NOT been returned to the pool before query completes
+        assert mock_pool.putconn.call_count == 0
+
+        # Release background query to complete
+        release_query.set()
+        with pytest.raises(asyncio.CancelledError):
+            await t
 
     asyncio.run(run())
+
+    # Verify exactly one putconn call and that advisory unlock was executed
+    assert mock_pool.putconn.call_count == 1
     mock_pool.putconn.assert_called_with(mock_conn)
+    mock_conn.execute.assert_any_call("SELECT pg_advisory_unlock(%s)", (lock.lock_id,))
+
+
+def test_postgres_session_lock_cancellation_while_query_pending_unacquired() -> None:
+    session_id = uuid4()
+    mock_pool = MagicMock()
+    mock_conn = MagicMock()
+
+    query_started = threading.Event()
+    release_query = threading.Event()
+
+    def slow_execute(query: str, *args: Any, **kwargs: Any) -> Any:
+        if "pg_try_advisory_lock" in query:
+            query_started.set()
+            release_query.wait(timeout=2.0)
+            mock_res = MagicMock()
+            mock_res.fetchone.return_value = (False,)
+            return mock_res
+        return MagicMock()
+
+    mock_conn.execute.side_effect = slow_execute
+    mock_pool.getconn.return_value = mock_conn
+
+    lock = PostgresSessionLock(mock_pool, session_id, timeout=5.0)
+
+    async def run() -> None:
+        async def acquire_task() -> None:
+            async with lock:
+                pass
+
+        t = asyncio.create_task(acquire_task())
+        await asyncio.to_thread(query_started.wait, 1.0)
+
+        t.cancel()
+        assert mock_pool.putconn.call_count == 0
+
+        release_query.set()
+        with pytest.raises(asyncio.CancelledError):
+            await t
+
+    asyncio.run(run())
+
+    assert mock_pool.putconn.call_count == 1
+    mock_pool.putconn.assert_called_with(mock_conn)
+    assert not any("pg_advisory_unlock" in str(call) for call in mock_conn.execute.call_args_list)
 
 
 def test_distributed_token_pacer_local_fallback(settings: Settings) -> None:

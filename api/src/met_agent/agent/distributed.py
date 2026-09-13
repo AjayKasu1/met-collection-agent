@@ -35,59 +35,79 @@ class PostgresSessionLock:
         self._acquired = False
         self._cancelled = False
         self._state_lock = threading.Lock()
+        self._acquire_lock = threading.Lock()
 
     def _try_acquire(self) -> bool:
-        with self._state_lock:
-            if self._cancelled:
-                return False
-            existing_conn = self.conn
-
-        if existing_conn is None:
-            conn = self.pool.getconn(timeout=self.timeout)
+        with self._acquire_lock:
             with self._state_lock:
                 if self._cancelled:
-                    self.pool.putconn(conn)
                     return False
-                self.conn = conn
-                existing_conn = conn
+                existing_conn = self.conn
 
-        row = existing_conn.execute("SELECT pg_try_advisory_lock(%s)", (self.lock_id,)).fetchone()
-        acquired = bool(row and row[0])
+            if existing_conn is None:
+                conn = self.pool.getconn(timeout=self.timeout)
+                with self._state_lock:
+                    if self._cancelled:
+                        self.pool.putconn(conn)
+                        return False
+                    self.conn = conn
+                    existing_conn = conn
 
-        with self._state_lock:
-            if self._cancelled:
-                try:
-                    if acquired:
-                        with suppress(Exception):
-                            existing_conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
-                finally:
-                    self.conn = None
-                    self._acquired = False
-                    self.pool.putconn(existing_conn)
-                return False
+            try:
+                row = existing_conn.execute(
+                    "SELECT pg_try_advisory_lock(%s)", (self.lock_id,)
+                ).fetchone()
+                acquired = bool(row and row[0])
+            except Exception:
+                with self._state_lock:
+                    if self._cancelled:
+                        self.conn = None
+                        self._acquired = False
+                        self.pool.putconn(existing_conn)
+                        return False
+                raise
 
-            self._acquired = acquired
-            return acquired
+            with self._state_lock:
+                if self._cancelled:
+                    try:
+                        if acquired:
+                            with suppress(Exception):
+                                existing_conn.execute(
+                                    "SELECT pg_advisory_unlock(%s)", (self.lock_id,)
+                                )
+                    finally:
+                        self.conn = None
+                        self._acquired = False
+                        self.pool.putconn(existing_conn)
+                    return False
+
+                self._acquired = acquired
+                return acquired
 
     def _cleanup(self) -> None:
         with self._state_lock:
             self._cancelled = True
-            conn = self.conn
-            acquired = self._acquired
-            self.conn = None
-            self._acquired = False
 
-        if conn is not None:
-            try:
-                if acquired:
-                    with suppress(Exception):
-                        conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
-            finally:
-                self.pool.putconn(conn)
+        with self._acquire_lock:
+            with self._state_lock:
+                conn = self.conn
+                acquired = self._acquired
+                self.conn = None
+                self._acquired = False
+
+            if conn is not None:
+                try:
+                    if acquired:
+                        with suppress(Exception):
+                            conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
+                finally:
+                    self.pool.putconn(conn)
 
     async def __aenter__(self) -> PostgresSessionLock:
         with self._state_lock:
             self._cancelled = False
+            self.conn = None
+            self._acquired = False
         deadline = time.monotonic() + self.timeout
         try:
             while True:
