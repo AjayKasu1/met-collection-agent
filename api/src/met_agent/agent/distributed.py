@@ -31,38 +31,42 @@ class PostgresSessionLock:
         self.lock_id = session_id.int & 0x7FFFFFFFFFFFFFFF
         self.timeout = timeout
         self.conn: Any = None
+        self._acquired = False
 
-    def _acquire(self) -> None:
-        self.conn = self.pool.getconn(timeout=self.timeout)
-        try:
-            self.conn.execute("SET lock_timeout = %s", (f"{int(self.timeout * 1000)}ms",))
-            self.conn.execute("SELECT pg_advisory_lock(%s)", (self.lock_id,))
-        except Exception:
-            if self.conn is not None:
-                self.pool.putconn(self.conn)
-                self.conn = None
-            raise
+    def _try_acquire(self) -> bool:
+        if self.conn is None:
+            self.conn = self.pool.getconn(timeout=self.timeout)
+        row = self.conn.execute("SELECT pg_try_advisory_lock(%s)", (self.lock_id,)).fetchone()
+        return bool(row and row[0])
 
-    def _release(self) -> None:
+    def _cleanup(self) -> None:
         if self.conn is not None:
+            conn = self.conn
+            self.conn = None
             try:
-                with suppress(Exception):
-                    self.conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
+                if self._acquired:
+                    with suppress(Exception):
+                        conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
             finally:
-                self.pool.putconn(self.conn)
-                self.conn = None
+                self._acquired = False
+                self.pool.putconn(conn)
 
     async def __aenter__(self) -> PostgresSessionLock:
+        deadline = time.monotonic() + self.timeout
         try:
-            await asyncio.to_thread(self._acquire)
+            while True:
+                self._acquired = await asyncio.to_thread(self._try_acquire)
+                if self._acquired:
+                    return self
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Session lock timeout ({self.timeout}s): {self.session_id}")
+                await asyncio.sleep(min(0.05, max(0.01, deadline - time.monotonic())))
         except BaseException:
-            if self.conn is not None:
-                await asyncio.to_thread(self._release)
+            await asyncio.to_thread(self._cleanup)
             raise
-        return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        await asyncio.to_thread(self._release)
+        await asyncio.to_thread(self._cleanup)
 
 
 class LocalNullLock:

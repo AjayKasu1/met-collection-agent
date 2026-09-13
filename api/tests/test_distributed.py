@@ -5,7 +5,6 @@ import os
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-import psycopg
 import pytest
 
 from met_agent.agent.distributed import (
@@ -37,6 +36,7 @@ def test_postgres_session_lock_lifecycle() -> None:
     session_id = uuid4()
     mock_pool = MagicMock()
     mock_conn = MagicMock()
+    mock_conn.execute.return_value.fetchone.return_value = (True,)
     mock_pool.getconn.return_value = mock_conn
 
     lock = PostgresSessionLock(mock_pool, session_id, timeout=10.0)
@@ -44,11 +44,10 @@ def test_postgres_session_lock_lifecycle() -> None:
     async def run() -> None:
         async with lock:
             assert mock_pool.getconn.called
-            # Verify lock timeout was set
-            mock_conn.execute.assert_any_call("SET lock_timeout = %s", ("10000ms",))
-            # Verify advisory lock was acquired with 63-bit integer hash
             expected_lock_id = session_id.int & 0x7FFFFFFFFFFFFFFF
-            mock_conn.execute.assert_any_call("SELECT pg_advisory_lock(%s)", (expected_lock_id,))
+            mock_conn.execute.assert_any_call(
+                "SELECT pg_try_advisory_lock(%s)", (expected_lock_id,)
+            )
 
     asyncio.run(run())
 
@@ -136,40 +135,59 @@ def test_real_postgres_session_lock_concurrency_and_cancellation() -> None:
 
         task1_acquired = asyncio.Event()
         task1_release = asyncio.Event()
-        task2_failed = asyncio.Event()
 
         async def worker1() -> None:
             async with lock1:
                 task1_acquired.set()
                 await task1_release.wait()
 
-        async def worker2() -> None:
-            await task1_acquired.wait()
-            try:
-                async with lock2:
-                    pass
-            except (psycopg.errors.QueryCanceled, psycopg.errors.LockNotAvailable):
-                task2_failed.set()
-
         t1 = asyncio.create_task(worker1())
-        t2 = asyncio.create_task(worker2())
+        await task1_acquired.wait()
 
-        await task2_failed.wait()
-        task1_release.set()
-        await t1
-        await t2
-
-        # Verify cancellation cleans up without pool exhaustion
-        async def cancel_worker() -> None:
-            lock3 = PostgresSessionLock(store.pool, session_id, timeout=5.0)
-            async with lock3:
+        # Concurrent attempt on held session lock must fail with TimeoutError
+        with pytest.raises(TimeoutError):
+            async with lock2:
                 pass
 
-        task3 = asyncio.create_task(cancel_worker())
-        await asyncio.sleep(0.01)
-        task3.cancel()
+        # Release first worker
+        task1_release.set()
+        await t1
+
+        # Verify lock can now be reacquired
+        lock3 = PostgresSessionLock(store.pool, session_id, timeout=1.0)
+        async with lock3:
+            pass
+
+        # Verify cancellation while waiting cleans up connection pool
+        hold_release = asyncio.Event()
+        held_event = asyncio.Event()
+
+        async def holder() -> None:
+            async with lock1:
+                held_event.set()
+                await hold_release.wait()
+
+        t_holder = asyncio.create_task(holder())
+        await held_event.wait()
+
+        async def cancel_worker() -> None:
+            lock4 = PostgresSessionLock(store.pool, session_id, timeout=5.0)
+            async with lock4:
+                pass
+
+        t_cancel = asyncio.create_task(cancel_worker())
+        await asyncio.sleep(0.05)
+        t_cancel.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task3
+            await t_cancel
+
+        hold_release.set()
+        await t_holder
+
+        # Pool must still have all connections available (not exhausted/leaked)
+        lock5 = PostgresSessionLock(store.pool, session_id, timeout=1.0)
+        async with lock5:
+            pass
 
     try:
         asyncio.run(exercise())
