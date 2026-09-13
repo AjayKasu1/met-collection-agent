@@ -7,6 +7,7 @@ from contextlib import suppress
 from typing import Annotated, cast
 from uuid import UUID, uuid4
 
+import structlog
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 
@@ -17,6 +18,7 @@ from met_agent.runtime import Runtime
 from met_agent.tools.get_object import ObjectNotFound
 from met_agent.tools.models import GetObjectArguments, LiveObject
 
+logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
@@ -49,8 +51,14 @@ async def chat(request: Request, body: ChatRequest) -> StreamingResponse:
                 yield event("token", {"text": answer.text[offset : offset + 48]})
             yield event("answer", answer.model_dump(mode="json"))
         except ModelError as error:
+            logger.warning(
+                "chat_model_error",
+                error_code=error.code,
+                error_type=type(error).__name__,
+            )
             yield event("error", {"code": error.code, "message": str(error)})
-        except Exception:
+        except Exception as error:
+            logger.exception("chat_stream_failed", error_type=type(error).__name__)
             yield event(
                 "error", {"code": "service_unavailable", "message": "Chat service unavailable"}
             )
@@ -79,6 +87,7 @@ async def get_object(request: Request, object_id: Annotated[int, Path(gt=0)]) ->
     except ObjectNotFound:
         raise HTTPException(404, "Object not found") from None
     except Exception:
+        logger.exception("get_object_failed", object_id=object_id)
         raise HTTPException(503, "Met object service unavailable") from None
 
 

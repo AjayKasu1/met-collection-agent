@@ -5,6 +5,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from met_agent.agent.models import AgentDraft
 from met_agent.tools.models import Evidence, WayfindingResult
 
+MIN_QUOTE_LENGTH = 20
+"""Minimum characters for a citation quote to be non-trivial."""
+
+_SUBSTANTIVE_LENGTH = 80
+"""Drafts longer than this must produce at least one verifiable claim."""
+
 
 class ClaimCheck(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,9 +24,11 @@ class GroundingCheck(BaseModel):
     fully_supported: bool
     claims: list[ClaimCheck]
 
-    def score(self, evidence: list[Evidence]) -> float:
+    def score(self, evidence: list[Evidence], *, draft_text: str = "") -> float:
         keys = {item.key for item in evidence}
         if not self.claims:
+            if len(draft_text.strip()) > _SUBSTANTIVE_LENGTH:
+                return 0.0
             return 1.0 if self.fully_supported else 0.0
         return sum(
             claim.supported and bool(claim.evidence_keys) and set(claim.evidence_keys) <= keys
@@ -30,15 +38,16 @@ class GroundingCheck(BaseModel):
 
 def valid_citations(draft: AgentDraft, evidence: list[Evidence]) -> bool:
     for citation in draft.citations:
+        normalized_quote = " ".join(citation.quote.split())
+        if len(normalized_quote) < MIN_QUOTE_LENGTH:
+            return False
         matches = [
             item
             for item in evidence
             if (citation.object_id is not None and item.object_id == citation.object_id)
             or (citation.source_url is not None and item.source_url == citation.source_url)
         ]
-        if not any(
-            " ".join(citation.quote.split()) in " ".join(item.text.split()) for item in matches
-        ):
+        if not any(normalized_quote in " ".join(item.text.split()) for item in matches):
             return False
     return True
 

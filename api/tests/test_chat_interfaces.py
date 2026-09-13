@@ -76,7 +76,7 @@ class Service:
                     page_title="Plan Your Visit",
                     section_heading="Hours",
                     fetched_at="2026-09-04T00:00:00Z",
-                    text="Temple",
+                    text="The Met Fifth Avenue is open seven days a week",
                     scores=ScoreBreakdown(dense=1, sparse=1, rrf=1, rerank=1),
                 )
             ]
@@ -230,12 +230,12 @@ def test_demo_prints_required_fields_and_returns_failure(
             judgment(),
             intent(category="visitor_info"),
             {
-                "text": "Temple",
+                "text": "The Met Fifth Avenue is open seven days a week.",
                 "language": "en",
                 "citations": [
                     {
                         "source_url": "https://www.metmuseum.org/plan-your-visit",
-                        "quote": "Temple",
+                        "quote": "The Met Fifth Avenue is open seven days a week",
                     }
                 ],
             },
@@ -243,7 +243,7 @@ def test_demo_prints_required_fields_and_returns_failure(
                 "fully_supported": True,
                 "claims": [
                     {
-                        "text": "Temple",
+                        "text": "The Met Fifth Avenue is open seven days a week",
                         "supported": True,
                         "evidence_keys": ["page:fixture"],
                     }

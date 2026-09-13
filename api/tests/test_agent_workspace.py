@@ -98,19 +98,29 @@ def calls(*names: str, arguments: str | dict[str, int] = '{"object_id":1}') -> d
 
 def draft(language: Language = "en", object_id: int = 1) -> dict[str, Any]:
     return {
-        "text": "Temple",
+        "text": "Temple of Dendur, circa 15 B.C.",
         "language": language,
-        "citations": [{"object_id": object_id, "quote": "Temple"}],
+        "citations": [{"object_id": object_id, "quote": "Temple of Dendur, circa 15 B.C."}],
     }
 
 
 def judgment(supported: bool = True) -> dict[str, Any]:
     return {
         "fully_supported": supported,
-        "claims": [{"text": "Temple", "supported": True, "evidence_keys": ["object:1"]}]
+        "claims": [
+            {
+                "text": "Temple of Dendur dates to circa 15 B.C.",
+                "supported": True,
+                "evidence_keys": ["object:1"],
+            }
+        ]
         if supported
         else [
-            {"text": "Temple", "supported": True, "evidence_keys": ["object:1"]},
+            {
+                "text": "Temple of Dendur dates to circa 15 B.C.",
+                "supported": True,
+                "evidence_keys": ["object:1"],
+            },
             {"text": "Unsupported date", "supported": False, "evidence_keys": []},
         ],
     }
@@ -685,9 +695,9 @@ def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
             objects=[
                 RetrievedObject(
                     object_id=1,
-                    title="Temple",
+                    title="Temple of Dendur, circa 15 B.C.",
                     source_url="https://www.metmuseum.org/art/collection/search/1",
-                    text="Temple\ngallery_number: 131",
+                    text="Temple of Dendur, circa 15 B.C.\ngallery_number: 131",
                     record={"gallery_number": "131"},
                     scores=ScoreBreakdown(rrf=1 / 61, rerank=1.0),
                 )
@@ -707,7 +717,11 @@ def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
         Agent(model, registry, store).run(ChatRequest(message="What can I see in Gallery 131?"))
     )
     assert answer.route == "lite" and answer.grounding_score == 1
-    assert answer.text == "The live Met record currently lists Temple as on view in Gallery 131."
+    expected = (
+        "The live Met record currently lists Temple of Dendur, circa 15 B.C."
+        " as on view in Gallery 131."
+    )
+    assert answer.text == expected
     assert answer.citations[0].object_id == 1 and executed == [1]
     assert [call[0] for call in model.calls] == ["lite"] * 2
     policy_events = [
@@ -734,12 +748,12 @@ def test_direct_gallery_policy_is_audited_and_used(tmp_path: Path) -> None:
 def live_object(object_id: int = 1) -> LiveObject:
     return LiveObject(
         object_id=object_id,
-        title="Temple",
+        title="Temple of Dendur, circa 15 B.C.",
         artist="",
-        culture="",
-        medium="Stone",
-        object_date="",
-        department="",
+        culture="Egyptian",
+        medium="Aeolian sandstone",
+        object_date="circa 15 B.C.",
+        department="Egyptian Art",
         gallery_number="131",
         is_on_view=True,
         is_public_domain=True,
@@ -747,7 +761,9 @@ def live_object(object_id: int = 1) -> LiveObject:
         primary_image_small="",
         source_url=f"https://www.metmuseum.org/art/collection/search/{object_id}",
         fetched_at="2026-09-04T00:00:00Z",
-        text="Temple\nStone\ngallery_number: 131",
+        text=(
+            "Temple of Dendur, circa 15 B.C.\nAeolian sandstone\nEgyptian Art\ngallery_number: 131"
+        ),
     )
 
 
@@ -822,10 +838,23 @@ def test_unsupported_claim_rewritten_and_scored(tmp_path: Path) -> None:
         if isinstance(event.data, dict) and "score" in event.data
     ]
     assert scores == [0.5, 1.0]
-    evidence = [Evidence(key="object:1", object_id=1, text="Temple", kind="collection")]
+    evidence = [
+        Evidence(
+            key="object:1",
+            object_id=1,
+            text="Temple of Dendur, circa 15 B.C.",
+            kind="collection",
+        )
+    ]
     assert GroundingCheck.model_validate(judgment(False)).score(evidence) == 0.5
     assert GroundingCheck.model_validate(judgment()).score([]) == 0
     assert GroundingCheck(fully_supported=False, claims=[]).score([]) == 0
+    assert (
+        GroundingCheck(fully_supported=True, claims=[]).score(evidence, draft_text="Short") == 1.0
+    )
+    assert (
+        GroundingCheck(fully_supported=True, claims=[]).score(evidence, draft_text="A" * 85) == 0.0
+    )
 
 
 @pytest.mark.parametrize("invalid", [True, False])
@@ -989,20 +1018,50 @@ def test_quote_identity_and_append_only_redacted_audit(tmp_path: Path) -> None:
         Evidence(
             key="page:1",
             source_url="https://www.metmuseum.org/plan-your-visit",
-            text="Open\n daily",
+            text="Open seven\n days a week, year-round",
             kind="visitor_info",
         )
     ]
     assert valid_citations(
         AgentDraft(
-            text="Open",
+            text="The Met is open every day",
             language="en",
-            citations=[Citation(source_url=evidence[0].source_url, quote="Open daily")],
+            citations=[
+                Citation(
+                    source_url=evidence[0].source_url,
+                    quote="Open seven days a week, year-round",
+                )
+            ],
         ),
         evidence,
     )
     assert not valid_citations(
-        AgentDraft(text="Temple", language="en", citations=[Citation(object_id=1, quote="wrong")]),
+        AgentDraft(
+            text="Temple of Dendur",
+            language="en",
+            citations=[
+                Citation(
+                    object_id=1,
+                    quote="this quote does not match any evidence",
+                )
+            ],
+        ),
+        evidence,
+    )
+    assert not valid_citations(
+        AgentDraft(
+            text="Open",
+            language="en",
+            citations=[Citation(source_url=evidence[0].source_url, quote="the")],
+        ),
+        evidence,
+    )
+    assert not valid_citations(
+        AgentDraft(
+            text="Open",
+            language="en",
+            citations=[Citation(source_url=evidence[0].source_url, quote="in")],
+        ),
         evidence,
     )
     store = EventStore(tmp_path / "audit.sqlite3", secrets=["private-value"])

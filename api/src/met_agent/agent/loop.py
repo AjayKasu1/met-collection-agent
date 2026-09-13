@@ -436,7 +436,7 @@ class Agent:
             },
             GroundingCheck,
         )
-        score = check.score(evidence)
+        score = check.score(evidence, draft_text=draft.text)
         audit(
             "guardrail",
             {
@@ -699,7 +699,7 @@ class Agent:
             },
             GroundingCheck,
         )
-        score = check.score(evidence)
+        score = check.score(evidence, draft_text=draft.text)
         audit(
             "guardrail",
             {
@@ -909,7 +909,7 @@ class Agent:
                     },
                     GroundingCheck,
                 )
-                score = check.score(evidence)
+                score = check.score(evidence, draft_text=draft.text)
                 audit(
                     "guardrail",
                     {
