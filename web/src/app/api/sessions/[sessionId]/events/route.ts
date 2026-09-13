@@ -16,7 +16,6 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
 
   const queryParams = new URLSearchParams({ limit });
   if (after) queryParams.set("after", after);
-  if (token) queryParams.set("token", token);
 
   try {
     const upstream = await fetch(

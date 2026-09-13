@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -32,23 +33,56 @@ class PostgresSessionLock:
         self.timeout = timeout
         self.conn: Any = None
         self._acquired = False
+        self._cancelled = False
+        self._state_lock = threading.Lock()
 
     def _try_acquire(self) -> bool:
-        if self.conn is None:
-            self.conn = self.pool.getconn(timeout=self.timeout)
-        row = self.conn.execute("SELECT pg_try_advisory_lock(%s)", (self.lock_id,)).fetchone()
-        return bool(row and row[0])
+        with self._state_lock:
+            if self._cancelled:
+                return False
+            existing_conn = self.conn
+
+        if existing_conn is None:
+            conn = self.pool.getconn(timeout=self.timeout)
+            with self._state_lock:
+                if self._cancelled:
+                    self.pool.putconn(conn)
+                    return False
+                self.conn = conn
+                existing_conn = conn
+
+        row = existing_conn.execute("SELECT pg_try_advisory_lock(%s)", (self.lock_id,)).fetchone()
+        acquired = bool(row and row[0])
+
+        with self._state_lock:
+            if self._cancelled:
+                try:
+                    if acquired:
+                        with suppress(Exception):
+                            existing_conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
+                finally:
+                    self.conn = None
+                    self._acquired = False
+                    self.pool.putconn(existing_conn)
+                return False
+
+            self._acquired = acquired
+            return acquired
 
     def _cleanup(self) -> None:
-        if self.conn is not None:
+        with self._state_lock:
+            self._cancelled = True
             conn = self.conn
+            acquired = self._acquired
             self.conn = None
+            self._acquired = False
+
+        if conn is not None:
             try:
-                if self._acquired:
+                if acquired:
                     with suppress(Exception):
                         conn.execute("SELECT pg_advisory_unlock(%s)", (self.lock_id,))
             finally:
-                self._acquired = False
                 self.pool.putconn(conn)
 
     async def __aenter__(self) -> PostgresSessionLock:

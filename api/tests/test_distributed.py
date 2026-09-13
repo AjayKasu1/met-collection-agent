@@ -2,6 +2,8 @@
 
 import asyncio
 import os
+import threading
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -73,6 +75,42 @@ def test_postgres_session_lock_failure_cleans_up() -> None:
 
     asyncio.run(run())
     mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_postgres_session_lock_cancellation_while_getconn_pending() -> None:
+    session_id = uuid4()
+    mock_pool = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.fetchone.return_value = (True,)
+
+    getconn_started = threading.Event()
+    release_getconn = threading.Event()
+
+    def slow_getconn(*args: Any, **kwargs: Any) -> Any:
+        getconn_started.set()
+        release_getconn.wait(timeout=2.0)
+        return mock_conn
+
+    mock_pool.getconn.side_effect = slow_getconn
+
+    lock = PostgresSessionLock(mock_pool, session_id, timeout=5.0)
+
+    async def run() -> None:
+        async def acquire_task() -> None:
+            async with lock:
+                pass
+
+        t = asyncio.create_task(acquire_task())
+        await asyncio.to_thread(getconn_started.wait, 1.0)
+        t.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await t
+
+        release_getconn.set()
+        await asyncio.sleep(0.05)
+
+    asyncio.run(run())
+    mock_pool.putconn.assert_called_with(mock_conn)
 
 
 def test_distributed_token_pacer_local_fallback(settings: Settings) -> None:

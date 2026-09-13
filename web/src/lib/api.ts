@@ -116,9 +116,8 @@ export async function fetchToolTrace(
   sessionToken?: string | null,
 ): Promise<ToolTrace[]> {
   try {
-    const query = sessionToken ? `?limit=200&token=${encodeURIComponent(sessionToken)}` : "?limit=200";
     const authHeaders: Record<string, string> = sessionToken ? { "X-Session-Token": sessionToken } : {};
-    const response = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events${query}`, {
+    const response = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/events?limit=200`, {
       headers: { Accept: "application/json", ...headers, ...authHeaders },
       cache: "no-store",
       signal,
