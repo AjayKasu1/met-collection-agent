@@ -32,7 +32,7 @@ describe("session events proxy route", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const request = new Request(`http://localhost/api/sessions/${validSessionId}/events?limit=50&token=secret-token`, {
+    const request = new Request(`http://localhost/api/sessions/${validSessionId}/events?limit=50`, {
       headers: { "x-session-token": "secret-token" },
     });
     const response = await GET(request, { params: Promise.resolve({ sessionId: validSessionId }) });
@@ -50,6 +50,22 @@ describe("session events proxy route", () => {
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
     expect(headers["X-Session-Token"]).toBe("secret-token");
     expect(headers["X-Origin-Auth"]).toBe("unit-test-origin-token");
+  });
+
+  it("ignores token in query string if not provided in header", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.test");
+    const fetchMock = vi.fn().mockResolvedValue(new Response("Unauthorized", { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new Request(`http://localhost/api/sessions/${validSessionId}/events?limit=50&token=secret-token`);
+    const response = await GET(request, { params: Promise.resolve({ sessionId: validSessionId }) });
+
+    expect(response.status).toBe(401);
+    const upstreamUrl = fetchMock.mock.calls[0]?.[0] as string;
+    expect(upstreamUrl).not.toContain("token=");
+
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers["X-Session-Token"]).toBeUndefined();
   });
 
   it("propagates 401 unauthorized and 404 not found cleanly", async () => {

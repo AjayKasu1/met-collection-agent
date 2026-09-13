@@ -10,7 +10,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   }
 
   const url = new URL(request.url);
-  const token = request.headers.get("x-session-token") ?? url.searchParams.get("token") ?? "";
+  const token = request.headers.get("x-session-token") ?? "";
   const limit = url.searchParams.get("limit") ?? "200";
   const after = url.searchParams.get("after");
 
